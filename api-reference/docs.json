@@ -1,0 +1,144 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "palm",
+  "name": "Aarokya",
+  "colors": {
+    "primary": "#16a34a",
+    "light": "#4ade80",
+    "dark": "#15803d"
+  },
+  "favicon": "/logo/aarokya-light.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Docs",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "overview"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/system-overview",
+              "architecture/codegen-pipeline",
+              "architecture/data-model"
+            ]
+          },
+          {
+            "group": "Decisions",
+            "pages": [
+              "decisions/overview",
+              "decisions/adr-001-smithy",
+              "decisions/adr-002-rust-stack",
+              "decisions/adr-003-auth-design"
+            ]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "modules/overview",
+              "modules/auth",
+              "modules/user",
+              "modules/wallet",
+              "modules/insurance",
+              "modules/call-doctor"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API Reference",
+            "pages": [
+              "api/overview",
+              "api/authentication",
+              "api/errors"
+            ]
+          },
+          {
+            "group": "Endpoint Guides",
+            "pages": [
+              "api/auth",
+              "api/user-guide",
+              "api/wallet",
+              "api/insurance"
+            ]
+          },
+          {
+            "group": "Try It Out",
+            "pages": [
+              {
+                "group": "Auth",
+                "pages": [
+                  "api/endpoints/auth/otp-trigger",
+                  "api/endpoints/auth/otp-verify",
+                  "api/endpoints/auth/token-refresh",
+                  "api/endpoints/auth/logout"
+                ]
+              },
+              {
+                "group": "User",
+                "pages": [
+                  "api/endpoints/user/get-profile",
+                  "api/endpoints/user/update-profile"
+                ]
+              },
+              {
+                "group": "Wallet",
+                "pages": [
+                  "api/endpoints/wallet/get-wallet",
+                  "api/endpoints/wallet/create-wallet",
+                  "api/endpoints/wallet/get-balance",
+                  "api/endpoints/wallet/get-status",
+                  "api/endpoints/wallet/transaction-history"
+                ]
+              },
+              {
+                "group": "Insurance",
+                "pages": [
+                  "api/endpoints/insurance/get-plan",
+                  "api/endpoints/insurance/purchase-policy",
+                  "api/endpoints/insurance/get-policy",
+                  "api/endpoints/insurance/raise-claim",
+                  "api/endpoints/insurance/get-claim-status"
+                ]
+              },
+              {
+                "group": "Health",
+                "pages": [
+                  "api/endpoints/health/health-check"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/aarokya-light.svg",
+    "dark": "/logo/aarokya-dark.svg"
+  },
+  "api": {
+    "openapi": "openapi.json",
+    "playground": {
+      "display": "interactive"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/juspay"
+    }
+  },
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/overview"
+    }
+  ]
+}

@@ -1,0 +1,1240 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Aarokya API",
+    "description": "API for Aarokya healthcare application",
+    "contact": {
+      "name": "Aarokya Team"
+    },
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.nh.staging.mum.juspay.net/service2",
+      "description": "Staging (NH)"
+    },
+    {
+      "url": "http://localhost:8080",
+      "description": "Local"
+    },
+    {
+      "url": "https://sandbox.api.aarokya.in",
+      "description": "Sandbox"
+    },
+    {
+      "url": "https://api.aarokya.in",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": "Logged out successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/auth/otp/trigger": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "otp_trigger",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OTP sent successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtpTriggerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/auth/otp/verify": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "otp_verify",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OTP verified, tokens issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtpVerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid OTP or request"
+          },
+          "401": {
+            "description": "OTP expired or too many attempts"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/auth/token/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "token_refresh",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Tokens refreshed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenRefreshResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired refresh token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "operationId": "get_health",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/profile": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "get_profile",
+        "responses": {
+          "200": {
+            "description": "Current user's profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetUserProfileResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "update_profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated user profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateUserProfileResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error — invalid gender or dob format"
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/wallet": {
+      "get": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "get_wallet",
+        "responses": {
+          "200": {
+            "description": "Wallet summary for the authenticated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletSummaryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "No wallet found for this user"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "create_wallet",
+        "responses": {
+          "200": {
+            "description": "Wallet already existed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateWalletResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Wallet created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateWalletResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/wallet/{wallet_id}/balance": {
+      "get": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "get_wallet_balance",
+        "parameters": [
+          {
+            "name": "wallet_id",
+            "in": "path",
+            "description": "Transcorp wallet id (`transcorp_wallet_id` from GET /wallet)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Balance from DB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetWalletBalanceOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "No data available"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/wallet/{wallet_id}/status": {
+      "get": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "get_wallet_status",
+        "parameters": [
+          {
+            "name": "wallet_id",
+            "in": "path",
+            "description": "Transcorp wallet id (`transcorp_wallet_id` from GET /wallet)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status from DB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetWalletStatusOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "No data available"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/wallet/{wallet_id}/transactions/history/{number_of_days}": {
+      "get": {
+        "tags": [
+          "Wallet"
+        ],
+        "operationId": "get_wallet_transaction_history",
+        "parameters": [
+          {
+            "name": "wallet_id",
+            "in": "path",
+            "description": "Transcorp wallet id (`transcorp_wallet_id` from GET /wallet)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number_of_days",
+            "in": "path",
+            "description": "Filter window in days (0 = all history, 1–365)",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Local ledger (max 10 entries)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetWalletTransactionHistoryOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "number_of_days out of range"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "No data available"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/insurance/plan": {
+      "get": {
+        "tags": ["Insurance"],
+        "operationId": "get_insurance_plan",
+        "security": [{"Bearer": []}],
+        "responses": {
+          "200": {
+            "description": "Insurance plan details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetInsurancePlanOutput"
+                }
+              }
+            }
+          },
+          "401": {"description": "Unauthorized"},
+          "404": {"description": "No active insurance plan found"},
+          "500": {"description": "Internal server error"}
+        }
+      }
+    },
+    "/insurance/policies": {
+      "post": {
+        "tags": ["Insurance Policy"],
+        "operationId": "purchase_policy",
+        "security": [{"Bearer": []}],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchasePolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Policy purchased successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchasePolicyResponse"
+                }
+              }
+            }
+          },
+          "400": {"description": "Validation error"},
+          "401": {"description": "Unauthorized"},
+          "404": {"description": "Insurance plan not found"},
+          "500": {"description": "Internal server error"}
+        }
+      }
+    },
+    "/insurance/policies/{policyId}": {
+      "get": {
+        "tags": ["Insurance Policy"],
+        "operationId": "get_insurance_policy",
+        "security": [{"Bearer": []}],
+        "parameters": [
+          {
+            "name": "policyId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Policy details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetInsurancePolicyResponse"
+                }
+              }
+            }
+          },
+          "401": {"description": "Unauthorized"},
+          "404": {"description": "Policy not found"},
+          "500": {"description": "Internal server error"}
+        }
+      }
+    },
+    "/insurance/claims": {
+      "post": {
+        "tags": ["Insurance Claims"],
+        "operationId": "raise_claim",
+        "security": [{"Bearer": []}],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RaiseClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Claim raised and approved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RaiseClaimResponse"
+                }
+              }
+            }
+          },
+          "400": {"description": "Validation error"},
+          "401": {"description": "Unauthorized"},
+          "404": {"description": "Policy not found"},
+          "500": {"description": "Internal server error"}
+        }
+      }
+    },
+    "/insurance/claims/{claimId}/status": {
+      "get": {
+        "tags": ["Insurance Claims"],
+        "operationId": "get_claim_status",
+        "security": [{"Bearer": []}],
+        "parameters": [
+          {
+            "name": "claimId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Claim status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetClaimStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {"description": "Unauthorized"},
+          "404": {"description": "Claim not found"},
+          "500": {"description": "Internal server error"}
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateWalletResponse": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "transcorp_wallet_id",
+          "balance",
+          "wallet_status",
+          "wallet_status_transcorp",
+          "created"
+        ],
+        "properties": {
+          "balance": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Balance in minor units (paise for INR)."
+          },
+          "created": {
+            "type": "boolean",
+            "description": "`true` if a new row was inserted; `false` if the wallet already existed."
+          },
+          "transcorp_wallet_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "wallet_status": {
+            "$ref": "#/components/schemas/WalletStatus"
+          },
+          "wallet_status_transcorp": {
+            "$ref": "#/components/schemas/WalletStatusTranscorp"
+          }
+        }
+      },
+      "GetUserProfileResponse": {
+        "type": "object",
+        "description": "Response body for GET /user/profile.",
+        "required": [
+          "user_id",
+          "phone",
+          "profile_complete"
+        ],
+        "properties": {
+          "aadhaar_last4": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Aadhaar last-4 masked as \"XXXXXXXX{last4}\", e.g. \"XXXXXXXX1234\"."
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dob": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Date of birth as \"YYYY-MM-DD\" string, if set."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "employer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One of: \"male\", \"female\", \"other\".",
+            "example": "male"
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occupation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One of: \"salaried\", \"self_employed\", \"professional\", \"student\", \"homemaker\", \"retired\", \"other\".",
+            "example": "salaried"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "profile_complete": {
+            "type": "boolean",
+            "description": "`true` when both `first_name` and `last_name` are present."
+          },
+          "user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "GetWalletBalanceOutput": {
+        "type": "object",
+        "required": [
+          "wallet_id",
+          "current_balance",
+          "currency"
+        ],
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "current_balance": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_refreshed": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              }
+            ]
+          },
+          "linked": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "wallet_id": {
+            "type": "string"
+          }
+        }
+      },
+      "GetWalletStatusOutput": {
+        "type": "object",
+        "required": [
+          "wallet_id",
+          "wallet_status"
+        ],
+        "properties": {
+          "wallet_id": {
+            "type": "string"
+          },
+          "wallet_status": {
+            "$ref": "#/components/schemas/WalletStatus"
+          }
+        }
+      },
+      "GetWalletTransactionHistoryOutput": {
+        "type": "object",
+        "required": [
+          "wallet_id",
+          "transactions"
+        ],
+        "properties": {
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WalletTransaction"
+            }
+          },
+          "wallet_id": {
+            "type": "string"
+          }
+        }
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OtpTriggerRequest": {
+        "type": "object",
+        "required": [
+          "phone"
+        ],
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        }
+      },
+      "OtpTriggerResponse": {
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "properties": {
+          "otp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "In UAT: OTP returned for testing; remove in production"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OtpVerifyRequest": {
+        "type": "object",
+        "required": [
+          "phone",
+          "otp"
+        ],
+        "properties": {
+          "device_info": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "otp": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        }
+      },
+      "OtpVerifyResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "message",
+          "user_id",
+          "is_new_user",
+          "access_token",
+          "refresh_token",
+          "access_token_expires_at",
+          "refresh_token_expires_at"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "access_token_expires_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "is_new_user": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          },
+          "refresh_token_expires_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "Timestamp": {
+        "type": "object",
+        "required": [
+          "seconds"
+        ],
+        "properties": {
+          "seconds": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "TokenRefreshRequest": {
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "properties": {
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "TokenRefreshResponse": {
+        "type": "object",
+        "required": [
+          "success",
+          "access_token",
+          "refresh_token",
+          "access_token_expires_at",
+          "refresh_token_expires_at"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "access_token_expires_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "refresh_token": {
+            "type": "string"
+          },
+          "refresh_token_expires_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TransactionStatus": {
+        "type": "string",
+        "enum": [
+          "SUCCESS",
+          "FAILED",
+          "PENDING"
+        ]
+      },
+      "UpdateUserProfileRequest": {
+        "type": "object",
+        "description": "Request body for PATCH /user/profile.\n\nAll fields are optional — only provided fields are updated.\n`dob` must be in \"YYYY-MM-DD\" format.\n`phone` and `aadhaar_last4` cannot be updated via this endpoint.",
+        "properties": {
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dob": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Date of birth in \"YYYY-MM-DD\" format."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "employer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One of: \"male\", \"female\", \"other\".",
+            "example": "male"
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occupation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One of: \"salaried\", \"self_employed\", \"professional\", \"student\", \"homemaker\", \"retired\", \"other\".",
+            "example": "salaried"
+          }
+        }
+      },
+      "UpdateUserProfileResponse": {
+        "type": "object",
+        "description": "Response body for PATCH /user/profile.",
+        "required": [
+          "user_id",
+          "phone",
+          "profile_complete"
+        ],
+        "properties": {
+          "aadhaar_last4": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Aadhaar last-4 masked as \"XXXXXXXX{last4}\", e.g. \"XXXXXXXX1234\"."
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dob": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Date of birth as \"YYYY-MM-DD\" string, if set."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "employer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One of: \"male\", \"female\", \"other\".",
+            "example": "male"
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occupation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One of: \"salaried\", \"self_employed\", \"professional\", \"student\", \"homemaker\", \"retired\", \"other\".",
+            "example": "salaried"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "profile_complete": {
+            "type": "boolean",
+            "description": "`true` when both `first_name` and `last_name` are present."
+          },
+          "user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "WalletStatus": {
+        "type": "string",
+        "enum": [
+          "CREATED",
+          "PENDING",
+          "IN_PROGRESS",
+          "COMPLETED",
+          "RETRYING",
+          "FAILED"
+        ]
+      },
+      "WalletStatusTranscorp": {
+        "type": "string",
+        "description": "Transcorp-reported wallet state (when integrated).\n`Unknown` is returned when the Transcorp status has not been provisioned yet.",
+        "enum": [
+          "ACTIVE",
+          "BLOCKED",
+          "UNKNOWN"
+        ]
+      },
+      "WalletSummaryResponse": {
+        "type": "object",
+        "description": "Returned by `GET /wallet/me` — use this in tests to read `transcorp_wallet_id` after login.",
+        "required": [
+          "user_id",
+          "transcorp_wallet_id",
+          "balance",
+          "wallet_status",
+          "wallet_status_transcorp"
+        ],
+        "properties": {
+          "balance": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "transcorp_wallet_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "wallet_status": {
+            "$ref": "#/components/schemas/WalletStatus"
+          },
+          "wallet_status_transcorp": {
+            "$ref": "#/components/schemas/WalletStatusTranscorp"
+          }
+        }
+      },
+      "WalletTransaction": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "transaction_status",
+          "amount",
+          "currency",
+          "occurred_at"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "transaction_id": {
+            "type": "string"
+          },
+          "transaction_status": {
+            "$ref": "#/components/schemas/TransactionStatus"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "api-key"
+      },
+      "Bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT access token. Obtain from /auth/otp/verify endpoint."
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Health check endpoints"
+    },
+    {
+      "name": "Auth",
+      "description": "Authentication operations"
+    },
+    {
+      "name": "User",
+      "description": "User profile operations"
+    },
+    {
+      "name": "Wallet",
+      "description": "Customer wallet (stub Transcorp)"
+    }
+  ]
+}

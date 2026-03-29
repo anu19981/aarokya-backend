@@ -1,0 +1,344 @@
+---
+title: "Error Reference"
+description: "All error codes returned by the Aarokya API, grouped by HTTP status. Includes a debugging guide and retry strategy."
+---
+
+## Error Envelope
+
+All error responses use this consistent shape:
+
+```json
+{
+  "error": "ERROR_CODE",
+  "message": "Human-readable description",
+  "status_code": 401
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `error` | string | Machine-readable error code — use this in app logic (`switch` on this field) |
+| `message` | string | Human-readable description — safe to show developers; may be too technical for end users |
+| `status_code` | integer | Mirrors the HTTP status code |
+
+<Note>
+  Always use the `error` field in your `switch` statement, not the `message` field. Messages may be updated for clarity; error codes are stable API contracts.
+</Note>
+
+---
+
+## 400 — Bad Request
+
+Client sent a malformed or invalid request body.
+
+| Code | Cause | Resolution |
+|------|-------|------------|
+| `VALIDATION_ERROR` | Request body failed validation (missing required field, wrong type) | Check the `message` field — it names the specific field and constraint |
+| `INVALID_DATE_FORMAT` | `dob` is not in `YYYY-MM-DD` format or is a future date | Send date as `"1990-05-15"` |
+| `NUMBER_OF_DAYS_OUT_OF_RANGE` | `number_of_days` is < 0 or > 365 | Use `0` for all history or `1–365` for a specific window |
+| `INVALID_PHONE` | Phone number format not recognised | Send 10-digit Indian mobile number (with or without `+91` prefix) |
+| `IMMUTABLE_FIELD` | Attempted to update `phone` or `aadhaar` via the profile endpoint | Use the dedicated KYC endpoints for identity field changes |
+| `MISSING_REQUIRED_FIELD` | A required field is absent from the request body | Add the missing field |
+
+**Example:**
+```json
+{
+  "error": "VALIDATION_ERROR",
+  "message": "email: must be a valid email address",
+  "status_code": 400
+}
+```
+
+---
+
+## 401 — Unauthorized
+
+Authentication failed or token is invalid.
+
+| Code | Cause | Resolution |
+|------|-------|------------|
+| `INVALID_OTP` | OTP is wrong, already used, or the session doesn't exist | Let user retry; trigger a new OTP if attempts are exhausted |
+| `OTP_EXPIRED` | OTP session is older than 10 minutes | Trigger a new OTP |
+| `TOO_MANY_OTP_ATTEMPTS` | 5 failed OTP attempts on one session | Trigger a new OTP (previous session is permanently invalidated) |
+| `INVALID_TOKEN` | JWT is missing, malformed, expired, or revoked | Attempt token refresh via `/auth/token/refresh`; redirect to login if refresh fails |
+| `MISSING_TOKEN` | `Authorization` header is absent on a protected endpoint | Add `Authorization: Bearer <access_token>` header |
+
+**Example:**
+```json
+{
+  "error": "INVALID_TOKEN",
+  "message": "Access token has expired",
+  "status_code": 401
+}
+```
+
+---
+
+## 403 — Forbidden
+
+Authenticated but not authorized to access this resource.
+
+| Code | Cause | Resolution |
+|------|-------|------------|
+| `FORBIDDEN` | User does not have permission for this action (e.g. accessing another user's data) | Verify the resource belongs to the authenticated user |
+
+---
+
+## 404 — Not Found
+
+Resource does not exist or is not accessible to the authenticated user.
+
+| Code | Cause | Resolution |
+|------|-------|------------|
+| `RESOURCE_NOT_FOUND` | The ID in the path does not exist, or belongs to a different user | Verify the ID; the API never reveals whether a resource exists for privacy reasons |
+| `INVALID_REQUEST_URL` | The path does not match any registered route | Check the path and HTTP method against the API reference |
+| `SUMMARY_NOT_READY` | The Nama Agent has not yet generated a clinical summary for this session | Poll again after a few seconds |
+
+---
+
+## 405 — Method Not Allowed
+
+Wrong HTTP verb used.
+
+| Code | Cause | Resolution |
+|------|-------|------------|
+| `INVALID_HTTP_METHOD` | HTTP method not supported for this path (e.g. `GET` on a `POST`-only endpoint) | Check the API reference for the correct HTTP method |
+
+---
+
+## 409 — Conflict
+
+Request conflicts with the current state of the resource.
+
+| Code | Cause | Resolution |
+|------|-------|------------|
+| `RESOURCE_CONFLICT` | Unique constraint violation (e.g. duplicate record) | The resource already exists — fetch it instead of creating |
+| `SESSION_ALREADY_LOCKED` | Attempted to submit a doctor session that is already locked | The session is complete; no further actions are possible |
+
+---
+
+## 422 — Unprocessable Entity
+
+Request was well-formed but semantically invalid.
+
+| Code | Cause | Resolution |
+|------|-------|------------|
+| `VALIDATION_ERROR` | Semantic validation failed (e.g. future DOB, invalid occupation enum value) | Fix the field value per the `message` |
+
+---
+
+## 429 — Too Many Requests
+
+Rate limit hit.
+
+| Code | Cause | Resolution |
+|------|-------|------------|
+| `TOO_MANY_OTP_ATTEMPTS` | OTP brute-force protection triggered (5 failures) | Trigger a new OTP; implement exponential back-off |
+| `RATE_LIMIT_EXCEEDED` | General API rate limit exceeded | Wait for the rate limit window to reset; check `Retry-After` header |
+
+**Response includes retry guidance:**
+```json
+{
+  "error": "RATE_LIMIT_EXCEEDED",
+  "message": "Too many requests. Please try again in 47 seconds.",
+  "status_code": 429,
+  "retry_after": 47
+}
+```
+
+---
+
+## 500 — Internal Server Error
+
+Unexpected backend error.
+
+| Code | Cause | Resolution |
+|------|-------|------------|
+| `INTERNAL_SERVER_ERROR` | Unexpected backend error — likely a bug or infrastructure issue | Retry with exponential back-off; report if persistent with the `X-Request-ID` from your request |
+
+<Note>
+  `500` errors are logged with full context on the server side (including stack traces). They **never** expose internal details in the response body. If you encounter a persistent 500, share the `X-Request-ID` header value with the Aarokya team for log correlation.
+</Note>
+
+---
+
+## When to Retry vs When to Show the User
+
+Use this table to decide how to handle each error in your app:
+
+| Error | Retry automatically? | Show user-facing error? | Action |
+|-------|---------------------|------------------------|--------|
+| `INVALID_TOKEN` | Yes — attempt token refresh first | No (unless refresh fails) | Refresh tokens silently; show login only if refresh fails |
+| `OTP_EXPIRED` | No | Yes | "OTP has expired. Tap to get a new one." |
+| `INVALID_OTP` | No (let user re-enter) | Yes | "Incorrect OTP. X attempts remaining." |
+| `TOO_MANY_OTP_ATTEMPTS` | No | Yes | "Too many attempts. Please request a new OTP." |
+| `RATE_LIMIT_EXCEEDED` | Yes — after `retry_after` seconds | No (unless persists) | Wait and retry silently |
+| `VALIDATION_ERROR` | No | Developer message only | Fix the request; show generic "something went wrong" to user |
+| `RESOURCE_NOT_FOUND` | No | Depends on context | Show "not found" screen or navigate back |
+| `INTERNAL_SERVER_ERROR` | Yes — up to 3 times with back-off | After max retries | "Something went wrong. Please try again." |
+| `MISSING_TOKEN` | No — code bug | No | Fix the client code; always attach the token |
+
+---
+
+## Debugging Guide
+
+### Step 1: Check the `error` code
+
+The `error` field is your primary signal. Match it against the tables above before looking at `message`.
+
+### Step 2: Use `X-Request-ID` for log correlation
+
+Every request you send should include an `X-Request-ID` header with a UUID you generate:
+
+```bash
+curl https://api.aarokya.in/user/profile \
+  -H 'Authorization: Bearer <token>' \
+  -H 'X-Request-ID: 550e8400-e29b-41d4-a716-446655440000'
+```
+
+The server echoes this in the response header and logs it. When you contact support, provide the `X-Request-ID` — it pinpoints the exact request in server logs.
+
+### Step 3: Check the `status_code`
+
+If you get an unexpected response shape (e.g. HTML instead of JSON), the `status_code` in the error envelope still tells you what happened. The API always returns JSON for expected error conditions — HTML usually means a load balancer or proxy rejected the request before it reached the backend.
+
+### Step 4: Common misconfigurations
+
+| Symptom | Likely Cause |
+|---------|-------------|
+| 401 on every request | Expired access token — implement refresh logic |
+| 400 on OTP verify | Phone number format — try `9876543210` without `+91` |
+| 404 on wallet endpoints | Wallet not yet provisioned — check `wallet_status` first |
+| 500 on login | Database connection issue — check DB is running locally |
+
+---
+
+## Client-Side Error Handling
+
+<CodeGroup>
+```typescript TypeScript
+interface AarokyaError {
+  error: string;
+  message: string;
+  status_code: number;
+  retry_after?: number;
+}
+
+async function apiFetch(url: string, options: RequestInit): Promise<any> {
+  const res = await fetch(url, options);
+
+  if (!res.ok) {
+    const err: AarokyaError = await res.json();
+
+    switch (err.error) {
+      case "INVALID_TOKEN":
+      case "MISSING_TOKEN":
+        // Attempt token refresh, then retry
+        const refreshed = await attemptTokenRefresh();
+        if (refreshed) return apiFetch(url, options);
+        navigateTo("/login");
+        return;
+
+      case "OTP_EXPIRED":
+        navigateTo("/auth/otp", { forceNew: true });
+        return;
+
+      case "TOO_MANY_OTP_ATTEMPTS":
+        navigateTo("/auth/otp", { forceNew: true, showWarning: true });
+        return;
+
+      case "RATE_LIMIT_EXCEEDED":
+        const retryAfter = err.retry_after ?? 30;
+        await sleep(retryAfter * 1000);
+        return apiFetch(url, options);
+
+      case "INTERNAL_SERVER_ERROR":
+        // Retry up to 3 times with exponential back-off
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          await sleep(Math.pow(2, attempt) * 1000);
+          try {
+            return await apiFetch(url, options);
+          } catch {}
+        }
+        throw new Error("Service temporarily unavailable");
+
+      case "RESOURCE_NOT_FOUND":
+        navigateTo("/not-found");
+        return;
+
+      default:
+        throw new Error(err.message);
+    }
+  }
+
+  return res.json();
+}
+```
+
+```kotlin Kotlin (Android)
+sealed class AarokyaResult<out T> {
+    data class Success<T>(val data: T) : AarokyaResult<T>()
+    data class Error(val code: String, val message: String) : AarokyaResult<Nothing>()
+}
+
+suspend fun <T> handleApiResponse(
+    response: Response<T>,
+    onTokenExpired: suspend () -> Boolean,
+    onNavigate: (String) -> Unit
+): AarokyaResult<T> {
+    if (response.isSuccessful) {
+        return AarokyaResult.Success(response.body()!!)
+    }
+
+    val errorBody = gson.fromJson(response.errorBody()?.string(), ApiError::class.java)
+
+    return when (errorBody.error) {
+        "INVALID_TOKEN" -> {
+            if (onTokenExpired()) {
+                // Retry with refreshed token — caller handles this
+                AarokyaResult.Error("RETRY", "Token refreshed")
+            } else {
+                onNavigate("login")
+                AarokyaResult.Error(errorBody.error, errorBody.message)
+            }
+        }
+        "TOO_MANY_OTP_ATTEMPTS",
+        "OTP_EXPIRED" -> {
+            onNavigate("otp?forceNew=true")
+            AarokyaResult.Error(errorBody.error, errorBody.message)
+        }
+        else -> AarokyaResult.Error(errorBody.error, errorBody.message)
+    }
+}
+```
+
+```swift Swift (iOS)
+enum AarokyaAPIError: Error {
+    case tokenExpired
+    case otpExpired
+    case tooManyAttempts
+    case notFound
+    case serverError(String)
+    case unknown(String, Int)
+}
+
+func handleAPIError(_ data: Data, statusCode: Int) throws -> Never {
+    let error = try JSONDecoder().decode(APIErrorResponse.self, from: data)
+
+    switch error.errorCode {
+    case "INVALID_TOKEN":
+        throw AarokyaAPIError.tokenExpired
+    case "OTP_EXPIRED":
+        throw AarokyaAPIError.otpExpired
+    case "TOO_MANY_OTP_ATTEMPTS":
+        throw AarokyaAPIError.tooManyAttempts
+    case "RESOURCE_NOT_FOUND":
+        throw AarokyaAPIError.notFound
+    case "INTERNAL_SERVER_ERROR":
+        throw AarokyaAPIError.serverError(error.message)
+    default:
+        throw AarokyaAPIError.unknown(error.errorCode, statusCode)
+    }
+}
+```
+</CodeGroup>

@@ -1,0 +1,214 @@
+---
+title: "System Architecture"
+description: "End-to-end system design — how the mobile app, Rust backend, and external partners work together."
+---
+
+## High-Level Architecture
+
+```mermaid
+flowchart LR
+    subgraph Client["📱 Client Layer"]
+        direction TB
+        APP["Expo App\nReact Native"]
+        SDK["Juspay SDK\nPayments"]
+    end
+
+    subgraph Backend["⚙️ Aarokya Backend — Rust/Actix-web"]
+        direction TB
+        subgraph API["API Modules"]
+            direction LR
+            AUTH["🔐 Auth"]
+            USER["👤 User"]
+            WALLET["💰 Wallet"]
+            INS["🛡️ Insurance"]
+            DOC["🩺 Call Doctor"]
+        end
+        BG["🔄 Retry Worker"]
+        DB[("🗄️ PostgreSQL")]
+    end
+
+    subgraph Partners["🔌 External Partners"]
+        direction TB
+        JP["💳 Juspay\nPayments"]
+        NH["🏥 Narayana Health\nInsurance"]
+        NAMA["🤖 Nama Agent\nAI/LLM"]
+        AATHMA["👨‍⚕️ Aathma\nDoctor Platform"]
+        SMS["📱 ValueFirst\nSMS"]
+    end
+
+    APP -->|"REST + JWT"| API
+    SDK -.->|"checkout"| JP
+
+    AUTH -->|"OTP"| SMS
+    WALLET -->|"wallet ops"| JP
+    INS -->|"policy"| NH
+    DOC -->|"triage"| NAMA
+    DOC -->|"referral"| AATHMA
+    BG -->|"retry"| JP
+
+    API --> DB
+    BG --> DB
+```
+
+---
+
+## Domain Breakdown
+
+<CardGroup cols={2}>
+  <Card title="Auth" icon="lock" color="#f59e0b">
+    **Tables:** `users`, `otp_sessions`, `user_sessions`
+
+    Phone OTP → JWT pair. Stateless access token (24h) + rotation-based refresh token (30d). Sessions hashed — never plaintext in DB.
+
+  </Card>
+  <Card title="User Profile" icon="user" color="#3b82f6">
+    **Tables:** `users` (shared with Auth)
+
+    Reads/writes profile fields. `phone` and `aadhaar` are immutable via this module. Aadhaar returned masked: `XXXX-XXXX-1234`.
+
+  </Card>
+  <Card title="Wallet" icon="wallet" color="#16a34a">
+    **Tables:** `customer_wallets`
+
+    Auto-created async on first login. Tracks Juspay customer ID + wallet ID. Retry worker handles failures (5 attempts, exponential backoff).
+
+  </Card>
+  <Card title="Insurance" icon="shield-heart" color="#ec4899">
+    **Tables:** `insurance_plans`, `insurance_policies`, `policy_dependants`
+
+    Local plan catalog + purchased policy references. All purchase/claims delegated to Narayana Health APIs.
+
+  </Card>
+  <Card title="Payments" icon="credit-card" color="#06b6d4">
+    **Tables:** `payment_orders`
+
+    Single endpoint for wallet top-up and insurance purchase. Juspay Session API → app opens SDK → poll order status.
+
+  </Card>
+  <Card title="Call Doctor" icon="stethoscope" color="#8b5cf6">
+    **Tables:** `chat_sessions`, `chat_messages`
+
+    Nama Agent conversation → clinical summary → Aathma assignment. Session locked after submission.
+
+  </Card>
+</CardGroup>
+
+---
+
+## User Journey — Full Flow
+
+```mermaid
+sequenceDiagram
+    actor U as Gig Worker
+    participant App as Expo App
+    participant API as Rust Backend
+    participant JP as Juspay
+    participant NH as Narayana Health
+
+    rect rgba(59, 130, 246, 0.15)
+        Note over U,API: 1. Onboarding
+        U->>App: Enter phone number
+        App->>API: POST /auth/otp/trigger
+        API-->>App: OTP sent
+        U->>App: Enter OTP (123456 UAT)
+        App->>API: POST /auth/otp/verify
+        API-->>App: JWT access + refresh tokens
+        API-)API: async: create Juspay customer
+        API-)JP: POST /customers
+        API-)JP: POST /customers/{ref}/wallets
+    end
+
+    rect rgba(34, 197, 94, 0.15)
+        Note over U,App: 2. Profile Setup
+        U->>App: Fill in name, DOB, etc.
+        App->>API: PATCH /user/profile
+        API-->>App: Updated profile
+    end
+
+    rect rgba(245, 158, 11, 0.15)
+        Note over U,JP: 3. Add Money to Wallet
+        U->>App: Tap "Add Money" → ₹500
+        App->>API: POST /nh/payment/session (WALLET_TOPUP)
+        API->>JP: Create session (with payment_rules)
+        JP-->>API: sdk_payload
+        API-->>App: sdk_payload
+        App->>JP: HyperCheckout.initiate(sdk_payload)
+        JP-->>App: Payment complete
+        App->>API: GET /nh/payment/order-status?order_id=...
+        API->>JP: GET /orders/{id}
+        JP-->>API: wallet.topup.status = SUCCESS
+        API-->>App: Balance updated
+    end
+
+    rect rgba(244, 63, 94, 0.15)
+        Note over U,NH: 4. Buy Insurance
+        U->>App: Browse plans → Select Family Plan
+        App->>API: POST /insurance/calculate-premium
+        API-->>App: 9,145 (base + GST)
+        App->>API: POST /nh/payment/session (INSURANCE)
+        API->>JP: Create session (no payment_rules)
+        JP-->>API: sdk_payload
+        App->>JP: HyperCheckout.initiate(sdk_payload)
+        JP-->>App: CHARGED
+        App->>API: GET /nh/payment/order-status
+        API-->>App: SUCCESS
+        App->>API: POST /insurance/purchase
+        API->>NH: Purchase policy API
+        NH-->>API: Policy details
+        API-->>App: Policy issued
+    end
+```
+
+---
+
+## Background Retry Worker
+
+The wallet provisioning worker runs on startup and polls every **10 seconds** for stalled wallet creation jobs.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PENDING : User logs in (first time)
+    PENDING --> IN_PROGRESS : Worker picks up job
+    IN_PROGRESS --> COMPLETED : Juspay API success
+    IN_PROGRESS --> RETRYING : Juspay API failure
+    RETRYING --> IN_PROGRESS : next_retry_at elapsed
+    RETRYING --> FAILED : attempt > 5
+    COMPLETED --> [*]
+    FAILED --> [*]
+
+    note right of RETRYING
+        Backoff: 5s × 3^attempt
+        Capped at 300s
+        Max 5 retries
+    end note
+```
+
+---
+
+## Security Model
+
+<CardGroup cols={2}>
+  <Card title="JWT Access Token" icon="key" color="#7c3aed">
+    24-hour expiry. Claims: `user_id`, `phone`. Validated on every protected
+    endpoint via middleware.
+  </Card>
+  <Card title="Refresh Token Rotation" icon="arrows-rotate" color="#dc2626">
+    30-day opaque token. Stored as **SHA-256 hash** only — never plaintext. Old
+    session revoked atomically before new pair issued.
+  </Card>
+  <Card title="OTP Security" icon="shield-check" color="#0891b2">
+    OTP hash stored (never plaintext). Single-use via `verified_at`. Attempt
+    counter prevents brute force.
+  </Card>
+  <Card title="PII Protection" icon="eye-slash" color="#059669">
+    Aadhaar stored as last 4 digits only. All PII fields encrypted at rest
+    (application-level). Masked in all API responses.
+  </Card>
+</CardGroup>
+
+<Warning>
+  **UAT Note:** In UAT/sandbox mode, the OTP is hardcoded as `123456` — no SMS
+  is sent. In production, ValueFirst (or equivalent) SMS provider sends the real
+  OTP.
+</Warning>

@@ -1,0 +1,385 @@
+---
+title: "Auth"
+description: "Phone OTP authentication. Issues JWT access + refresh tokens. All sessions tracked per device."
+---
+
+<Info>
+  **Authentication:** Auth endpoints are **public** (no JWT required) except `POST /auth/logout`.
+
+  **UAT:** OTP is hardcoded as `123456` — no SMS is sent in the sandbox environment.
+</Info>
+
+## Flow Overview
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant App
+    participant API as Rust Backend
+    participant SMS as ValueFirst SMS
+
+    U->>App: Enter phone number
+    App->>API: POST /auth/otp/trigger
+    API->>API: Generate 6-digit OTP
+    API->>API: Store bcrypt(OTP) in otp_sessions
+    API->>SMS: Send OTP via ValueFirst (prod only)
+    SMS-->>U: SMS with OTP
+    API-->>App: 200 OK
+    U->>App: Enter OTP
+    App->>API: POST /auth/otp/verify
+    API->>API: Verify OTP against bcrypt hash
+    API->>API: Create/fetch user row
+    API->>API: Create user_session, generate JWT pair
+    API-->>App: access_token + refresh_token + is_new_user
+    Note over API: Async: provision Juspay customer + wallet
+```
+
+---
+
+## POST /auth/otp/trigger
+
+Sends a 6-digit OTP to the provided phone number via SMS (production) or returns it in the response body (UAT/dev).
+
+### What happens server-side
+
+1. Validates phone number format (10-digit Indian mobile)
+2. Generates a cryptographically random 6-digit OTP
+3. Hashes it with bcrypt (cost 12) — the plaintext is never stored
+4. Creates an `otp_sessions` row: `phone`, `otp_hash`, `expires_at = now() + 10 min`, `attempts = 0`
+5. In production: forwards the plaintext OTP to ValueFirst SMS API
+6. Returns `200 OK`
+
+<Note>
+  In UAT and local development, the plaintext OTP (`"123456"`) is included in the response body for developer convenience. This field is **not present in production responses**.
+</Note>
+
+<ParamField header="Content-Type" type="string" required>
+  `application/json`
+</ParamField>
+
+<ParamField body="phone" type="string" required>
+  10-digit Indian mobile number. Accepted formats: `9876543210`, `+919876543210`, `91-9876543210`. Normalized to `+91` format internally.
+</ParamField>
+
+<CodeGroup>
+```bash Request
+curl -X POST http://localhost:8080/auth/otp/trigger \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "phone": "9876543210"
+  }'
+```
+
+```json Response 200 — UAT/dev
+{
+  "success": true,
+  "message": "OTP sent successfully",
+  "otp": "123456"
+}
+```
+
+```json Response 200 — Production
+{
+  "success": true,
+  "message": "OTP sent successfully"
+}
+```
+
+```json Response 400 — Invalid phone
+{
+  "error": "VALIDATION_ERROR",
+  "message": "phone: must be a valid 10-digit Indian mobile number",
+  "status_code": 400
+}
+```
+
+```json Response 429 — Rate limited
+{
+  "error": "RATE_LIMIT_EXCEEDED",
+  "message": "Too many OTP requests for this number. Please wait 60 seconds.",
+  "status_code": 429,
+  "retry_after": 47
+}
+```
+</CodeGroup>
+
+### Edge Cases
+
+| Scenario | Behaviour |
+|----------|-----------|
+| Phone not yet registered | Creates a new `otp_sessions` row — a new `users` row is created on successful verify |
+| Phone already registered | Same flow — OTP trigger does not differentiate new from existing users |
+| OTP triggered multiple times in window | Each trigger creates a new session; only the latest is valid for verify |
+| Rate limit hit (5 triggers/minute) | Returns `429` with `retry_after` seconds |
+
+---
+
+## POST /auth/otp/verify
+
+Verifies the OTP and returns a JWT token pair. Creates the user account if it doesn't exist. Triggers wallet provisioning asynchronously.
+
+### What happens server-side
+
+1. Looks up the latest `otp_sessions` row for the phone number
+2. Checks: `expires_at > now()` — if not, returns `OTP_EXPIRED`
+3. Checks: `verified_at IS NULL` — if not, returns `INVALID_OTP` (already used)
+4. Checks: `attempts < 5` — if not, returns `TOO_MANY_OTP_ATTEMPTS`
+5. Verifies OTP against `otp_hash` using bcrypt constant-time comparison
+6. If wrong: increments `attempts`, returns `INVALID_OTP`
+7. If correct: sets `verified_at = NOW()`
+8. Creates or fetches the `users` row for this phone number
+9. Generates access token (JWT, 24h) and refresh token (256-bit random hex, 30d)
+10. Creates `user_sessions` row with `SHA-256(refresh_token)` as hash
+11. Returns token pair with `is_new_user` flag
+12. **Async:** triggers `wallet::ensure_customer_wallet(user_id)` — does not block the response
+
+<ParamField body="phone" type="string" required>
+  Same phone number used in the trigger call.
+</ParamField>
+
+<ParamField body="otp" type="string" required>
+  6-digit OTP received via SMS. In UAT, always `"123456"`.
+</ParamField>
+
+<CodeGroup>
+```bash Request
+curl -X POST http://localhost:8080/auth/otp/verify \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "phone": "9876543210",
+    "otp": "123456"
+  }'
+```
+
+```json Response 200 — Success (new user)
+{
+  "success": true,
+  "message": "OTP verified successfully",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "is_new_user": true,
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9...",
+  "access_token_expires_at": 1750086400,
+  "refresh_token_expires_at": 1752678400
+}
+```
+
+```json Response 200 — Success (returning user)
+{
+  "success": true,
+  "message": "OTP verified successfully",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "is_new_user": false,
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9...",
+  "access_token_expires_at": 1750086400,
+  "refresh_token_expires_at": 1752678400
+}
+```
+
+```json Response 401 — Wrong OTP
+{
+  "error": "INVALID_OTP",
+  "message": "OTP is incorrect or has expired",
+  "status_code": 401
+}
+```
+
+```json Response 401 — OTP expired
+{
+  "error": "OTP_EXPIRED",
+  "message": "OTP session has expired. Please request a new OTP.",
+  "status_code": 401
+}
+```
+
+```json Response 429 — Too many attempts
+{
+  "error": "TOO_MANY_OTP_ATTEMPTS",
+  "message": "Too many incorrect OTP attempts. This session is now invalid. Please request a new OTP.",
+  "status_code": 429
+}
+```
+</CodeGroup>
+
+<ResponseField name="user_id" type="string (UUID)" required>
+  Permanent unique identifier for the user. Never changes.
+</ResponseField>
+
+<ResponseField name="access_token" type="string (JWT)" required>
+  JWT access token, HS256-signed. Valid for **24 hours**. Claims: `{ "user_id": "...", "exp": 1750086400 }`.
+</ResponseField>
+
+<ResponseField name="refresh_token" type="string (opaque)" required>
+  256-bit random hex string. Valid for **30 days**. Single-use — rotated on each refresh call.
+</ResponseField>
+
+<ResponseField name="is_new_user" type="boolean" required>
+  `true` on the user's very first login. The app should show the onboarding / profile-fill screen when `true`.
+</ResponseField>
+
+<ResponseField name="access_token_expires_at" type="integer (Unix timestamp)">
+  When the access token expires. Refresh before this time to avoid interrupting the user.
+</ResponseField>
+
+<ResponseField name="refresh_token_expires_at" type="integer (Unix timestamp)">
+  When the refresh token expires. After this point, the user must log in again via OTP.
+</ResponseField>
+
+<Warning>
+  After a successful verify, the backend **asynchronously** provisions the Juspay customer and wallet. The wallet may be in `CREATED` or `PENDING` status for a few seconds to minutes depending on Juspay API latency. Always check wallet status before initiating payments.
+</Warning>
+
+### Timing Constraints
+
+| Parameter | Value |
+|-----------|-------|
+| OTP valid for | 10 minutes from trigger |
+| Max wrong attempts | 5 (then session permanently invalidated) |
+| Access token lifetime | 24 hours |
+| Refresh token lifetime | 30 days |
+
+---
+
+## POST /auth/token/refresh
+
+Exchanges a valid refresh token for a new access token + refresh token pair. The submitted refresh token is immediately revoked (single-use rotation).
+
+### What happens server-side
+
+1. Computes `SHA-256(refresh_token)` → lookup hash
+2. Queries `user_sessions WHERE refresh_token_hash = lookup_hash AND NOT is_revoked AND expires_at > NOW()`
+3. If no match: returns `401 INVALID_TOKEN`
+4. **Atomically:** marks old session as `is_revoked = true`
+5. Generates new access token + refresh token pair
+6. Creates new `user_sessions` row with new hash
+7. Returns new token pair
+
+<ParamField body="refresh_token" type="string" required>
+  The opaque refresh token from a previous verify or refresh call.
+</ParamField>
+
+<CodeGroup>
+```bash Request
+curl -X POST http://localhost:8080/auth/token/refresh \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "refresh_token": "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9..."
+  }'
+```
+
+```json Response 200
+{
+  "success": true,
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6...",
+  "access_token_expires_at": 1750172800,
+  "refresh_token_expires_at": 1752764800
+}
+```
+
+```json Response 401 — token already used or expired
+{
+  "error": "INVALID_TOKEN",
+  "message": "Refresh token is invalid, revoked, or expired",
+  "status_code": 401
+}
+```
+</CodeGroup>
+
+<Note>
+  **Token Rotation:** The old refresh token is **revoked** when this endpoint is called. The response contains a new refresh token — replace the stored one **immediately and atomically**. If the same refresh token is used twice (race condition), the second call returns `401`. Use a mutex in your refresh logic to prevent concurrent calls.
+</Note>
+
+### Edge Cases
+
+| Scenario | Behaviour |
+|----------|-----------|
+| Refresh token used twice concurrently | Second call returns `401 INVALID_TOKEN` |
+| Refresh token expired (> 30 days) | Returns `401 INVALID_TOKEN` — user must log in again |
+| User logged out on another device | Old refresh token revoked; returns `401 INVALID_TOKEN` |
+
+---
+
+## POST /auth/logout
+
+Revokes the current device session. The access token used in the `Authorization` header determines which session is revoked. Other active sessions (other devices) are not affected.
+
+### What happens server-side
+
+1. Validates the JWT in the `Authorization` header
+2. Extracts `user_id` from JWT claims
+3. Looks up `user_sessions` matching the `user_id` and `refresh_token_hash`
+4. Sets `is_revoked = true` on that session
+5. Returns `200 OK`
+
+<Note>
+  Logout operates on the **session level** — it revokes the refresh token associated with the current access token. The access token itself is short-lived (24h) and stateless, so it cannot be individually invalidated. Clients should clear the access token from memory on logout.
+</Note>
+
+<ParamField header="Authorization" type="string" required>
+  `Bearer <access_token>`
+</ParamField>
+
+<CodeGroup>
+```bash Request
+curl -X POST http://localhost:8080/auth/logout \
+  -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \
+  -H 'Content-Type: application/json'
+```
+
+```json Response 200
+{
+  "success": true,
+  "message": "Logged out successfully"
+}
+```
+
+```json Response 401 — missing or invalid token
+{
+  "error": "INVALID_TOKEN",
+  "message": "Access token is invalid or has expired",
+  "status_code": 401
+}
+```
+</CodeGroup>
+
+---
+
+## Data Owned
+
+```mermaid
+erDiagram
+    users {
+        uuid id PK
+        string phone UK
+        string first_name
+        string last_name
+        string email
+        timestamp created_at
+    }
+    otp_sessions {
+        uuid id PK
+        string phone
+        string otp_hash
+        timestamp expires_at
+        timestamp verified_at
+        int attempts
+        timestamp created_at
+    }
+    user_sessions {
+        uuid id PK
+        uuid user_id FK
+        string refresh_token_hash
+        string device_info
+        bool is_revoked
+        timestamp expires_at
+        timestamp last_used_at
+        timestamp created_at
+    }
+    users ||--o{ user_sessions : "has many"
+```
+
+<Tip>
+  OTP and refresh tokens are **never** stored in plaintext. `otp_hash` uses bcrypt; `refresh_token_hash` uses SHA-256. The raw values exist only in transit.
+</Tip>

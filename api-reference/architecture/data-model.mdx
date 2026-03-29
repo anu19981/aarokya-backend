@@ -1,0 +1,224 @@
+---
+title: "Data Model"
+description: "Entity relationships, table ownership by domain, and PII storage policy."
+---
+
+## Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    users {
+        uuid id PK
+        string phone UK
+        string first_name
+        string last_name
+        string email
+        date dob
+        string gender
+        string aadhaar_last4
+        string address
+        string occupation
+        string employer
+        timestamp created_at
+        timestamp last_modified_at
+    }
+
+    otp_sessions {
+        uuid id PK
+        string phone
+        string otp_hash
+        timestamp expires_at
+        timestamp verified_at
+        int attempts
+        timestamp created_at
+    }
+
+    user_sessions {
+        uuid id PK
+        uuid user_id FK
+        string refresh_token_hash
+        string device_info
+        string ip_address
+        bool is_revoked
+        timestamp expires_at
+        timestamp last_used_at
+        timestamp created_at
+    }
+
+    customer_wallets {
+        uuid id PK
+        uuid user_id FK
+        string juspay_customer_id
+        string object_reference_id
+        string wallet_id
+        string wallet_status
+        decimal balance
+        string wallet_token
+        string payment_method
+        string creation_status
+        int retry_count
+        timestamp next_retry_at
+        string last_error
+        jsonb raw_responses
+    }
+
+    payment_orders {
+        uuid id PK
+        uuid user_id FK
+        uuid wallet_id FK
+        string juspay_order_id
+        decimal amount
+        string currency
+        string transaction_type
+        string status
+        jsonb sdk_payload
+        jsonb order_response
+        timestamp created_at
+    }
+
+    insurance_plans {
+        uuid id PK
+        string plan_code UK
+        string plan_name
+        string plan_type
+        decimal sum_insured
+        decimal base_premium
+        string coverage_type
+        int max_dependants
+        int min_age
+        int max_age
+        jsonb features
+        jsonb exclusions
+        bool is_active
+    }
+
+    insurance_policies {
+        uuid id PK
+        uuid user_id FK
+        uuid plan_id FK
+        string policy_number UK
+        string status
+        date start_date
+        date expiry_date
+        decimal premium_amount
+        string document_url
+        timestamp created_at
+    }
+
+    policy_dependants {
+        uuid id PK
+        uuid policy_id FK
+        string name
+        string relationship
+        date dob
+        string gender
+        string aadhaar_last4
+        bool is_active
+    }
+
+    users ||--o{ user_sessions : "has"
+    users ||--|| customer_wallets : "owns"
+    users ||--o{ payment_orders : "creates"
+    users ||--o{ insurance_policies : "purchases"
+    customer_wallets ||--o{ payment_orders : "funds"
+    insurance_plans ||--o{ insurance_policies : "template"
+    insurance_policies ||--o{ policy_dependants : "covers"
+```
+
+---
+
+## Domain Ownership
+
+<CardGroup cols={2}>
+  <Card title="Auth owns" icon="lock" color="#f59e0b">
+    - `users` — creates row on first login
+    - `otp_sessions` — created on trigger, invalidated on verify
+    - `user_sessions` — one per device login, revoked on logout
+  </Card>
+  <Card title="User Profile reads/writes" icon="user" color="#3b82f6">
+    - `users` — profile fields only (`first_name`, `last_name`, `email`, `dob`, `gender`, `address`, `occupation`, `employer`)
+    - **Cannot write:** `phone`, `aadhaar` (identity fields owned by Auth)
+  </Card>
+  <Card title="Wallet owns" icon="wallet" color="#16a34a">
+    - `customer_wallets` — one per user, creation status tracked here
+    - `payment_orders` — co-owned with Insurance for the payment session
+  </Card>
+  <Card title="Insurance owns" icon="file-medical" color="#ec4899">
+    - `insurance_plans` — seeded catalog from Narayana Health
+    - `insurance_policies` — purchased policies
+    - `policy_dependants` — family members under a policy
+  </Card>
+</CardGroup>
+
+---
+
+## PII Storage Policy
+
+<Warning>
+  These rules are **non-negotiable** and enforced at the application layer.
+</Warning>
+
+| Field | Storage Rule | API Response |
+|-------|-------------|-------------|
+| `phone` | Stored as `+91XXXXXXXXXX` | Returned as-is |
+| `aadhaar` | **Last 4 digits only** stored in DB | Returned as `XXXX-XXXX-1234` |
+| `refresh_token` | **SHA-256 hash** stored — never plaintext | Never returned |
+| `otp` | **Hash** stored — never plaintext | Never returned |
+| `email` | Plaintext, optional | Returned if set |
+| Wallet responses | Full Juspay JSON stored as **JSONB blob** for debugging | Internal only |
+
+---
+
+## Wallet Creation State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING : Row created (login event)
+
+    PENDING --> IN_PROGRESS : Worker picks up
+
+    state IN_PROGRESS {
+        [*] --> CreateCustomer
+        CreateCustomer --> CreateWallet : 200 OK
+        CreateWallet --> [*] : 200 OK
+    }
+
+    IN_PROGRESS --> COMPLETED : Both calls succeeded
+    IN_PROGRESS --> RETRYING : Any Juspay call failed
+
+    RETRYING --> IN_PROGRESS : next_retry_at elapsed
+    RETRYING --> FAILED : attempts > 5
+
+    note right of RETRYING
+        Delay = 5s × 3^attempt
+        Max = 300s
+        attempt 1 → 15s
+        attempt 2 → 45s
+        attempt 3 → 135s
+        attempt 4 → 300s (capped)
+        attempt 5 → FAILED
+    end note
+```
+
+---
+
+## Payment Order Lifecycle
+
+```mermaid
+flowchart LR
+    A[CREATED] --> B[SESSION_CREATED]
+    B --> C[PENDING]
+    C --> D[SUCCESS]
+    C --> E[FAILED]
+    C --> F[CANCELLED 🚫]
+
+```
+
+| Status | Triggered By |
+|--------|-------------|
+| `CREATED` | App calls `/nh/payment/session` |
+| `SESSION_CREATED` | Backend gets `sdk_payload` from Juspay |
+| `PENDING` | App polling, Juspay not yet terminal |
+| `SUCCESS` | Juspay returns `CHARGED` (insurance) or `wallet.topup.status = SUCCESS` |
+| `FAILED` | Juspay returns `FAILED` |
+| `CANCELLED` | User cancels in SDK |

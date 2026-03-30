@@ -128,7 +128,8 @@
   "openapi": "openapi.json",
   "baseUrl": "https://api.nh.staging.mum.juspay.net/service2",
   "playground": {
-    "display": "interactive"
+    "display": "interactive",
+    "proxy": false
   }
 },
   "footer": {

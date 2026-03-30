@@ -124,12 +124,13 @@
     "light": "/logo/aarokya-light.svg",
     "dark": "/logo/aarokya-dark.svg"
   },
-  "api": {
-    "openapi": "openapi.json",
-    "playground": {
-      "display": "interactive"
-    }
-  },
+ "api": {
+  "openapi": "openapi.json",
+  "baseUrl": "https://api.nh.staging.mum.juspay.net/service2",
+  "playground": {
+    "display": "interactive"
+  }
+},
   "footer": {
     "socials": {
       "github": "https://github.com/juspay"

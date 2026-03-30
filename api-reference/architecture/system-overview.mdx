@@ -8,33 +8,33 @@ description: "End-to-end system design — how the mobile app, Rust backend, and
 ```mermaid
 flowchart LR
     subgraph Source["🚗 Entry Point"]
-        NY["Namma Yatri\nSDK Integration"]
+        NY["Namma Yatri SDK"]
     end
 
     subgraph Backend["⚙️ Aarokya Backend — Rust/Actix-web"]
         direction TB
         subgraph API["API Modules"]
             direction LR
-            USER["👤 User\nProfile"]
+            USER["👤 User Profile"]
             WALLET["💰 Wallet"]
             INS["🛡️ Insurance"]
             AUTOPAY["🔁 Autopay"]
             DOC["🩺 Call Doctor"]
         end
-        BG["🔄 Retry Worker\n+ Autopay Scheduler"]
+        BG["🔄 Retry Worker + Autopay Scheduler"]
         DB[("🗄️ PostgreSQL")]
     end
 
     subgraph Partners["🔌 External Partners"]
         direction TB
-        TC["💳 Transcorp\nWallet (PPI)"]
-        JP["💳 Juspay\nPayment Orchestration"]
-        NHCT["🏥 NHCT\nNarayana Health\nCharitable Trust"]
-        NAMA["🤖 Nama Agent\nAI/LLM"]
-        AATHMA["👨‍⚕️ Aathma\nDoctor Platform"]
+        TC["💳 Transcorp Wallet (PPI)"]
+        JP["💳 Juspay Payment Orchestration"]
+        NHCT["🏥 NHCT (Narayana Health Charitable Trust)"]
+        NAMA["🤖 Nama Agent AI/LLM"]
+        AATHMA["👨‍⚕️ Aathma Doctor Platform"]
     end
 
-    NY -->|"Aadhaar + profile data\n(if available)"| API
+    NY -->|"Aadhaar + profile data (if available)"| API
     NY -.->|"direct credit (TBC)"| NHCT
 
     WALLET -->|"wallet ops"| TC

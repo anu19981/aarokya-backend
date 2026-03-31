@@ -7,43 +7,44 @@ description: "End-to-end system design — how the mobile app, Rust backend, and
 
 ```mermaid
 flowchart LR
-    subgraph Source["🚗 Entry Point"]
-        NY["Namma Yatri SDK"]
+    subgraph Client["📱 Client Layer"]
+        direction TB
+        APP["Expo App\nReact Native"]
+        SDK["Juspay SDK\nPayments"]
     end
 
     subgraph Backend["⚙️ Aarokya Backend — Rust/Actix-web"]
         direction TB
         subgraph API["API Modules"]
             direction LR
-            USER["👤 User Profile"]
+            AUTH["🔐 Auth"]
+            USER["👤 User"]
             WALLET["💰 Wallet"]
             INS["🛡️ Insurance"]
-            AUTOPAY["🔁 Autopay"]
             DOC["🩺 Call Doctor"]
         end
-        BG["🔄 Retry Worker + Autopay Scheduler"]
+        BG["🔄 Retry Worker"]
         DB[("🗄️ PostgreSQL")]
     end
 
     subgraph Partners["🔌 External Partners"]
         direction TB
-        TC["💳 Transcorp Wallet (PPI)"]
-        JP["💳 Juspay Payment Orchestration"]
-        NHCT["🏥 NHCT (Narayana Health Charitable Trust)"]
-        NAMA["🤖 Nama Agent AI/LLM"]
-        AATHMA["👨‍⚕️ Aathma Doctor Platform"]
+        JP["💳 Juspay\nPayments"]
+        NH["🏥 Narayana Health\nInsurance"]
+        NAMA["🤖 Nama Agent\nAI/LLM"]
+        AATHMA["👨‍⚕️ Aathma\nDoctor Platform"]
+        SMS["📱 ValueFirst\nSMS"]
     end
 
-    NY -->|"Aadhaar + profile data (if available)"| API
-    NY -.->|"direct credit (TBC)"| NHCT
+    APP -->|"REST + JWT"| API
+    SDK -.->|"checkout"| JP
 
-    WALLET -->|"wallet ops"| TC
-    TC -.->|"via"| JP
-    INS -->|"policy + claims"| NHCT
-    AUTOPAY -->|"daily debit ₹4/₹10"| WALLET
+    AUTH -->|"OTP"| SMS
+    WALLET -->|"wallet ops"| JP
+    INS -->|"policy"| NH
     DOC -->|"triage"| NAMA
     DOC -->|"referral"| AATHMA
-    BG -->|"retry + autopay"| TC
+    BG -->|"retry"| JP
 
     API --> DB
     BG --> DB
@@ -54,28 +55,34 @@ flowchart LR
 ## Domain Breakdown
 
 <CardGroup cols={2}>
-  <Card title="User Profile" icon="user" color="#3b82f6">
-    **Tables:** `users`
+  <Card title="Auth" icon="lock" color="#f59e0b">
+    **Tables:** `users`, `otp_sessions`, `user_sessions`
 
-    Aadhaar from Namma Yatri auto-populates profile and skips to wallet/insurance. If no Aadhaar, driver fills input form (first name, last name, DOB, pincode, gender). No separate phone OTP auth — identity comes from NY SDK.
+    Phone OTP → JWT pair. Stateless access token (24h) + rotation-based refresh token (30d). Sessions hashed — never plaintext in DB.
+
+  </Card>
+  <Card title="User Profile" icon="user" color="#3b82f6">
+    **Tables:** `users` (shared with Auth)
+
+    Reads/writes profile fields. `phone` and `aadhaar` are immutable via this module. Aadhaar returned masked: `XXXX-XXXX-1234`.
 
   </Card>
   <Card title="Wallet" icon="wallet" color="#16a34a">
     **Tables:** `customer_wallets`
 
-    Transcorp wallet created with OTP consent. NY loads ₹2,000 initial balance. Supports self-contribution and autopay deductions for insurance.
+    Auto-created async on first login. Tracks Juspay customer ID + wallet ID. Retry worker handles failures (5 attempts, exponential backoff).
 
   </Card>
   <Card title="Insurance" icon="shield-heart" color="#ec4899">
-    **Tables:** `insurance_plans`, `insurance_policies`, `policy_dependants`, `autopay_schedules`
+    **Tables:** `insurance_plans`, `insurance_policies`, `policy_dependants`
 
-    Micropayment model: ₹4/day (Year 1), ₹10/day (Year 2+). Dependants added via Aadhaar OTP. Claims forwarded to NHCT.
+    Local plan catalog + purchased policy references. All purchase/claims delegated to Narayana Health APIs.
 
   </Card>
-  <Card title="Autopay" icon="arrows-rotate" color="#06b6d4">
-    **Tables:** `autopay_schedules`, `autopay_transactions`
+  <Card title="Payments" icon="credit-card" color="#06b6d4">
+    **Tables:** `payment_orders`
 
-    Daily debit from wallet for insurance premium. Grace period until 10th of month. Notification on missed payments with wallet balance prompt.
+    Single endpoint for wallet top-up and insurance purchase. Juspay Session API → app opens SDK → poll order status.
 
   </Card>
   <Card title="Call Doctor" icon="stethoscope" color="#8b5cf6">
@@ -88,172 +95,86 @@ flowchart LR
 
 ---
 
-## User Journey — Full Flow (Namma Yatri Entry)
+## User Journey — Full Flow
 
 ```mermaid
 sequenceDiagram
-    actor U as Gig Worker (Driver)
-    participant NY as Namma Yatri SDK
-    participant App as Aarokya App
+    actor U as Gig Worker
+    participant App as Expo App
     participant API as Rust Backend
-    participant TC as Transcorp/Juspay
-    participant NHCT as NHCT
-
-    rect rgba(139, 92, 246, 0.15)
-        Note over U,API: 1. Entry from Namma Yatri
-        U->>NY: Tap "Health Benefits"
-        NY->>App: Launch with driver data
-    end
+    participant JP as Juspay
+    participant NH as Narayana Health
 
     rect rgba(59, 130, 246, 0.15)
-        Note over U,API: 2. Profile Resolution
-        alt Aadhaar available from NY
-            NY->>API: Pass Aadhaar + profile (name, DOB, address, gender)
-            API-->>App: Profile auto-created — skip to wallet/insurance
-        else No Aadhaar from NY
-            App->>U: Show input form (first name, last name, DOB, pincode, gender)
-            U->>App: Submit profile
-            App->>API: POST /user/profile
-            API-->>App: Profile saved — proceed to wallet/insurance
-        end
+        Note over U,API: 1. Onboarding
+        U->>App: Enter phone number
+        App->>API: POST /auth/otp/trigger
+        API-->>App: OTP sent
+        U->>App: Enter OTP (123456 UAT)
+        App->>API: POST /auth/otp/verify
+        API-->>App: JWT access + refresh tokens
+        API-)API: async: create Juspay customer
+        API-)JP: POST /customers
+        API-)JP: POST /customers/{ref}/wallets
     end
 
     rect rgba(34, 197, 94, 0.15)
-        Note over U,TC: 3. Wallet Decision
-        alt Wallet NEEDED
-            App->>U: Show consent for wallet creation
-            U->>App: Accept consent
-            App->>API: POST /wallet/create (with OTP verification)
-            API->>TC: Provision Transcorp wallet
-            TC-->>API: Wallet created
-            API-->>App: Wallet ready
-            Note over App: NY loads ₹2,000 into wallet
-            NY->>TC: Credit ₹2,000 to driver wallet
-            TC-->>App: Balance = ₹2,000
-        else Wallet NOT NEEDED
-            Note over App: Proceed without wallet — NY credits NHCT directly (TBC)
-        end
-    end
-
-    rect rgba(244, 63, 94, 0.15)
-        Note over U,NHCT: 4. Insurance Setup
-        App->>U: "Pay ₹4/day for health insurance"
-        U->>App: Setup autopay (₹4/day Year 1, ₹10/day Year 2+)
-        App->>API: POST /insurance/enroll
-        API->>NHCT: Register policy with NHCT
-        NHCT-->>API: Policy active
-        API-->>App: Insurance active — show policy card
+        Note over U,App: 2. Profile Setup
+        U->>App: Fill in name, DOB, etc.
+        App->>API: PATCH /user/profile
+        API-->>App: Updated profile
     end
 
     rect rgba(245, 158, 11, 0.15)
-        Note over U,NHCT: 5. Ongoing — Daily Autopay
-        loop Every day
-            API->>TC: Debit ₹4 from wallet (autopay)
-            TC-->>API: Debit success
-            API->>NHCT: Forward premium to NHCT
-        end
-        alt Missed payment (after 10th of month)
-            API-->>App: "You have ₹X left — use wallet balance?"
-            U->>App: Confirm use wallet balance
-            App->>API: POST /insurance/catch-up-payment
-            API->>TC: Debit pending amount
-        end
+        Note over U,JP: 3. Add Money to Wallet
+        U->>App: Tap "Add Money" → ₹500
+        App->>API: POST /nh/payment/session (WALLET_TOPUP)
+        API->>JP: Create session (with payment_rules)
+        JP-->>API: sdk_payload
+        API-->>App: sdk_payload
+        App->>JP: HyperCheckout.initiate(sdk_payload)
+        JP-->>App: Payment complete
+        App->>API: GET /nh/payment/order-status?order_id=...
+        API->>JP: GET /orders/{id}
+        JP-->>API: wallet.topup.status = SUCCESS
+        API-->>App: Balance updated
+    end
+
+    rect rgba(244, 63, 94, 0.15)
+        Note over U,NH: 4. Buy Insurance
+        U->>App: Browse plans → Select Family Plan
+        App->>API: POST /insurance/calculate-premium
+        API-->>App: 9,145 (base + GST)
+        App->>API: POST /nh/payment/session (INSURANCE)
+        API->>JP: Create session (no payment_rules)
+        JP-->>API: sdk_payload
+        App->>JP: HyperCheckout.initiate(sdk_payload)
+        JP-->>App: CHARGED
+        App->>API: GET /nh/payment/order-status
+        API-->>App: SUCCESS
+        App->>API: POST /insurance/purchase
+        API->>NH: Purchase policy API
+        NH-->>API: Policy details
+        API-->>App: Policy issued
     end
 ```
 
 ---
 
-## Onboarding Decision Flow
+## Background Retry Worker
 
-```mermaid
-flowchart TD
-    START["Driver taps 'Health Benefits'\nin Namma Yatri"] --> NY_CHECK{NY SDK provides\nAadhaar data?}
-
-    NY_CHECK -->|"Yes — Aadhaar present"| AUTO["Profile auto-created\n(name, DOB, address, gender)\nSkip input forms"]
-    NY_CHECK -->|"No — Aadhaar absent"| FORM["Show input form\nFirst name, Last name,\nDOB, Pincode, Gender"]
-
-    AUTO --> WALLET_CHECK{"Is wallet needed?"}
-    FORM --> WALLET_CHECK
-
-    WALLET_CHECK -->|"WALLET NEEDED"| CONSENT["Show consent screen"]
-    WALLET_CHECK -->|"WALLET NOT NEEDED"| NO_WALLET["NY credits NHCT directly\n(TBC)"]
-
-    CONSENT --> WALLET_OTP["Wallet creation OTP"]
-    WALLET_OTP --> WALLET_CREATE["Transcorp wallet provisioned"]
-    WALLET_CREATE --> LOAD["NY loads ₹2,000\ninto wallet"]
-    LOAD --> INSURANCE_SETUP["Setup autopay\n₹4/day (Year 1)\n₹10/day (Year 2+)"]
-
-    NO_WALLET --> INSURANCE_DIRECT["Pay ₹4/day directly\nfor insurance"]
-
-    INSURANCE_SETUP --> ACTIVE["Insurance Active\nPolicy card shown"]
-    INSURANCE_DIRECT --> ACTIVE
-```
-
----
-
-## Wallet + Insurance Lifecycle
-
-```mermaid
-flowchart TD
-    subgraph Wallet["💰 Wallet (Transcorp)"]
-        W_LOAD["NY loads ₹2,000"] --> W_BAL["Balance: ₹2,000"]
-        W_BAL --> W_AUTOPAY["Autopay: ₹4/day\ndeducted for insurance"]
-        W_BAL --> W_SELF["Self contribution\n(any amount, if NY supports)"]
-        W_SELF --> W_BAL
-    end
-
-    subgraph Insurance["🛡️ Insurance (NHCT)"]
-        I_ENROLL["Enroll in plan"] --> I_ACTIVE["Policy ACTIVE"]
-        I_ACTIVE --> I_DAILY["Daily premium collected\n₹4/day Year 1\n₹10/day Year 2+"]
-        I_DAILY --> I_CHECK{Payment received\nby 10th of month?}
-        I_CHECK -->|"Yes"| I_ACTIVE
-        I_CHECK -->|"No — grace period"| I_WARN["Notify driver:\n'₹X left in wallet —\nuse balance?'"]
-        I_WARN -->|"Driver confirms"| I_CATCHUP["Deduct pending\nfrom wallet"]
-        I_CATCHUP --> I_ACTIVE
-        I_WARN -->|"No action"| I_LAPSED["Policy LAPSED"]
-    end
-
-    subgraph Dependants["👨‍👩‍👧‍👦 Add Dependants"]
-        D_ADD["Add family member"] --> D_AADHAAR["Verify via\nAadhaar OTP"]
-        D_AADHAAR --> D_COVERED["Dependant covered\nunder policy"]
-    end
-
-    W_AUTOPAY --> I_DAILY
-    I_ACTIVE --> D_ADD
-
-    subgraph Claims["📋 Claims"]
-        CL_RAISE["Raise claim"] --> CL_CONSENT["Consent screen"]
-        CL_CONSENT --> CL_SUBMIT["Submit to NHCT"]
-        CL_SUBMIT --> CL_STATUS{Claim status}
-        CL_STATUS --> CL_APPROVED["APPROVED\n₹300 deducted from\nwallet? (TBC)"]
-        CL_STATUS --> CL_REJECTED["REJECTED"]
-    end
-
-    I_ACTIVE --> CL_RAISE
-```
-
----
-
-## Background Workers
-
-Two background workers run on startup:
-
-1. **Wallet Provisioning Worker** — polls every 10 seconds for stalled wallet creation jobs
-2. **Autopay Scheduler** — runs daily, debits ₹4 (Year 1) or ₹10 (Year 2+) from each active wallet for insurance premium
-
-### Wallet Provisioning State Machine
+The wallet provisioning worker runs on startup and polls every **10 seconds** for stalled wallet creation jobs.
 
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> PENDING : User onboards via NY
+    [*] --> PENDING : User logs in (first time)
     PENDING --> IN_PROGRESS : Worker picks up job
-    IN_PROGRESS --> COMPLETED : Transcorp API success
-    IN_PROGRESS --> RETRYING : Transcorp API failure
+    IN_PROGRESS --> COMPLETED : Juspay API success
+    IN_PROGRESS --> RETRYING : Juspay API failure
     RETRYING --> IN_PROGRESS : next_retry_at elapsed
     RETRYING --> FAILED : attempt > 5
-    COMPLETED --> LOADED : NY credits ₹2,000
-    LOADED --> [*]
+    COMPLETED --> [*]
     FAILED --> [*]
 
     note right of RETRYING
@@ -263,44 +184,31 @@ stateDiagram-v2
     end note
 ```
 
-### Autopay + Grace Period Flow
-
-```mermaid
-stateDiagram-v2
-    direction LR
-    [*] --> SCHEDULED : Autopay setup on enrollment
-    SCHEDULED --> DEBITED : Daily debit success (₹4 or ₹10)
-    DEBITED --> SCHEDULED : Next day
-    SCHEDULED --> MISSED : Insufficient balance / debit failed
-    MISSED --> GRACE_PERIOD : Grace period (until 10th of month)
-    GRACE_PERIOD --> NOTIFIED : "You have ₹X — use wallet?"
-    NOTIFIED --> DEBITED : Driver confirms catch-up
-    NOTIFIED --> LAPSED : No action after grace period
-    LAPSED --> [*]
-
-    note right of GRACE_PERIOD
-        After 10th of month
-        with no payment,
-        policy at risk
-    end note
-```
-
 ---
 
 ## Security Model
 
 <CardGroup cols={2}>
-  <Card title="NY SDK Identity" icon="id-card" color="#7c3aed">
-    Driver identity is established by Namma Yatri SDK. Aadhaar data (when present) is passed securely from NY — no separate phone OTP auth required.
+  <Card title="JWT Access Token" icon="key" color="#7c3aed">
+    24-hour expiry. Claims: `user_id`, `phone`. Validated on every protected
+    endpoint via middleware.
+  </Card>
+  <Card title="Refresh Token Rotation" icon="arrows-rotate" color="#dc2626">
+    30-day opaque token. Stored as **SHA-256 hash** only — never plaintext. Old
+    session revoked atomically before new pair issued.
+  </Card>
+  <Card title="OTP Security" icon="shield-check" color="#0891b2">
+    OTP hash stored (never plaintext). Single-use via `verified_at`. Attempt
+    counter prevents brute force.
   </Card>
   <Card title="PII Protection" icon="eye-slash" color="#059669">
     Aadhaar stored as last 4 digits only. All PII fields encrypted at rest
     (application-level). Masked in all API responses.
   </Card>
-  <Card title="Wallet OTP" icon="shield-check" color="#0891b2">
-    Wallet creation requires a separate OTP consent flow via Transcorp. This is the only OTP in the system — used for wallet provisioning, not login.
-  </Card>
-  <Card title="Aadhaar OTP (Dependants)" icon="users" color="#dc2626">
-    Adding dependants to insurance requires Aadhaar OTP verification for each family member. Ensures only verified individuals are covered.
-  </Card>
 </CardGroup>
+
+<Warning>
+  **UAT Note:** In UAT/sandbox mode, the OTP is hardcoded as `123456` — no SMS
+  is sent. In production, ValueFirst (or equivalent) SMS provider sends the real
+  OTP.
+</Warning>

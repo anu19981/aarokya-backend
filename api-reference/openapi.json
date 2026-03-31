@@ -10,8 +10,8 @@
   },
   "servers": [
     {
-      "url": "https://api.nh.staging.mum.juspay.net/service2",
-      "description": "Staging (NH)"
+      "url": "https://4d3f-2401-4900-1cbc-dfe1-4c84-26fc-fed9-a7a3.ngrok-free.app",
+      "description": "Local (ngrok)"
     },
     {
       "url": "http://localhost:8080",

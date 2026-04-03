@@ -1,0 +1,11 @@
+{
+  "name": "aarokya-docs",
+  "private": true,
+  "scripts": {
+    "dev": "mintlify dev",
+    "build": "mintlify export && unzip -o export.zip"
+  },
+  "dependencies": {
+    "mintlify": "latest"
+  }
+}

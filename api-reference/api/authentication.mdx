@@ -5,7 +5,24 @@ description: "How to obtain, use, refresh, and revoke JWT tokens for the Aarokya
 
 ## Overview
 
-Aarokya uses **phone OTP → JWT** authentication. There are no passwords. Every session starts with a 6-digit OTP sent to the user's mobile number and verified within 10 minutes.
+Aarokya supports two authentication channels:
+
+<CardGroup cols={2}>
+  <Card title="Direct OTP Login" icon="phone" color="#16a34a" href="/api/authentication#channel-1-direct-otp-login">
+    For standalone app use. Phone OTP -> JWT tokens. No passwords.
+  </Card>
+  <Card title="Partner SDK Token" icon="link" color="#3b82f6" href="/api/sdk-authentication">
+    For embedded SDK use (NammaYatri). Partner backend requests token via API key. **This is the primary flow for drivers.**
+  </Card>
+</CardGroup>
+
+Both channels issue the same JWT access tokens. Once a token is obtained (via either channel), all subsequent API calls use `Authorization: Bearer <token>`.
+
+---
+
+## Channel 1: Direct OTP Login
+
+Aarokya uses **phone OTP -> JWT** authentication. There are no passwords. Every session starts with a 6-digit OTP sent to the user's mobile number and verified within 10 minutes.
 
 <Steps>
   <Step title="Trigger OTP">
@@ -206,11 +223,11 @@ sequenceDiagram
     participant App
     participant API
 
-    App->>API: POST /auth/token/refresh\n{refresh_token: "abc..."}
-    Note over API: SELECT session WHERE hash = SHA256("abc...") AND NOT revoked
+    App->>API: POST /auth/token/refresh
+    Note over API: SELECT session WHERE hash matches AND NOT revoked
     Note over API: UPDATE session SET is_revoked = true
     Note over API: INSERT new session row with new tokens
-    API-->>App: {access_token: "new...", refresh_token: "xyz..."}
+    API-->>App: new access_token + refresh_token
     Note over App: Replace BOTH stored tokens immediately
 ```
 

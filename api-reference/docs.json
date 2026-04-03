@@ -24,6 +24,7 @@
             "pages": [
               "architecture/system-overview",
               "architecture/codegen-pipeline",
+              "architecture/smithy-codegen-guide",
               "architecture/data-model"
             ]
           },
@@ -57,6 +58,7 @@
             "pages": [
               "api/overview",
               "api/authentication",
+              "api/sdk-authentication",
               "api/errors"
             ]
           },

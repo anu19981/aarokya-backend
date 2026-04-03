@@ -234,6 +234,86 @@ The `transcorp_wallet_id` returned in this call (e.g. `wlm_jUT7wpiZAkpFFvaT`) is
 
 ---
 
+## Autopay Wallet Top-Up (Habit Forming)
+
+In addition to manual top-ups via Juspay Hyper Checkout, Aarokya supports **automated daily wallet top-ups** via UPI autopay mandates through Namma Yatri. This is the primary funding mechanism for drivers — small, frictionless daily contributions to their health savings.
+
+<Info>
+  **Aarokya is an SDK embedded inside the Namma Yatri app.** The user gives consent within the Aarokya UI (inside Namma Yatri), while the actual UPI mandate execution happens through Namma Yatri's payment infrastructure.
+</Info>
+
+### Mandate Context
+
+Namma Yatri drivers already have a UPI autopay mandate (up to **₹35 per execution**) used for ₹25/day regular platform usage. The same mandate is executed a **second time each day** for ₹20 toward health savings — no new mandate is created.
+
+| Execution | Purpose | Amount | Within ₹35 ceiling? |
+|-----------|---------|--------|----------------------|
+| 1st (existing) | Regular Namma Yatri usage | ₹25 | Yes |
+| 2nd (new) | Aarokya health savings | ₹20 | Yes |
+
+The mandate ceiling is a **per-execution limit**, so both executions are valid independently.
+
+### Phase 1: Enable Autopay (One-time Consent)
+
+```mermaid
+sequenceDiagram
+    actor U as Driver
+    participant AK as Aarokya
+    participant NY as Namma Yatri
+
+    rect rgba(34, 197, 94, 0.15)
+        Note over U,NY: One-time Setup
+        U->>AK: Consent for ₹20/day autopay<br/>(for health savings)
+        AK->>NY: Link consent to existing<br/>UPI mandate (₹35 ceiling)
+        NY-->>AK: Consent registered
+        AK-->>U: Autopay enabled ✓
+    end
+
+    Note over AK,NY: No new mandate created.<br/>Existing mandate reused for 2nd daily execution.
+```
+
+### Phase 2: Daily Execution (CRON)
+
+```mermaid
+sequenceDiagram
+    participant CRON as Aarokya CRON
+    participant AK as Aarokya
+    participant NY as Namma Yatri
+    participant BANK as UPI / Bank
+    participant W as Wallet
+    participant NHCT as NHCT A/c<br/>(at Transcorp)
+
+    rect rgba(59, 130, 246, 0.15)
+        Note over CRON,BANK: Clearing
+        CRON->>AK: Daily trigger
+        AK->>NY: Execute autopay ₹20<br/>(against existing mandate)
+        NY->>BANK: Debit ₹20 from driver's bank
+        BANK-->>NY: Debit success
+        NY-->>AK: Response (SUCCESS)
+    end
+
+    rect rgba(34, 197, 94, 0.15)
+        Note over AK,W: Wallet Top-Up
+        AK->>W: Top up ₹20 to health wallet
+        W-->>AK: Top-up confirmed
+    end
+
+    rect rgba(245, 158, 11, 0.15)
+        Note over NY,NHCT: Settlement
+        NY->>NHCT: Settle money to NHCT account
+    end
+```
+
+### Funding Sources Summary
+
+| Method | Trigger | Amount | Frequency |
+|--------|---------|--------|-----------|
+| **UPI Autopay** (Namma Yatri mandate) | Daily CRON | ₹20 | Daily |
+| **Manual top-up** (Juspay Hyper Checkout) | User-initiated | Variable | On-demand |
+| **Employer contribution** | Platform-initiated | Variable | Monthly |
+
+---
+
 ## Payment Sessions
 
 The wallet is funded and used via Juspay payment sessions. There are two payment types, each with different Juspay session configuration:

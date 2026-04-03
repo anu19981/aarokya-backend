@@ -148,8 +148,13 @@ Routing every call directly to a doctor would require a large pool of on-call ph
 |-------|---------|-------------------|
 | First login | `POST /auth/otp/verify` | Wallet auto-provisioned (async background job) |
 | Profile update | `PATCH /user/profile` | KYC fields updated; insurance eligibility recalculated |
-| Wallet top-up | Payment `SUCCESS` (WALLET_TOPUP type) | Balance updated in `customer_wallets` |
-| Insurance purchase | Payment `SUCCESS` + `POST /insurance/purchase` | Policy row created; NH policy issued via Narayana Health API |
+| **Autopay consent** | User consents in Aarokya | Linked to Namma Yatri UPI mandate for daily ₹20 execution |
+| **Daily wallet top-up** | Aarokya CRON → Namma Yatri mandate | ₹20 debited from driver's bank → wallet balance updated |
+| Wallet top-up (manual) | Payment `SUCCESS` (WALLET_TOPUP type) | Balance updated in `customer_wallets` |
+| **Auto insurance purchase** | Aarokya CRON (after wallet funded) | Policy queued → NHIL creates policy → driver notified |
+| Insurance purchase (manual) | Payment `SUCCESS` + `POST /insurance/purchase` | Policy row created; NH policy issued via Narayana Health API |
+| **Settlement (wallet)** | Namma Yatri → NHCT | Funds settled to Aarokya fund at Transcorp |
+| **Settlement (insurance)** | NHCT → NHIL | Premium transferred to Narayana Health Insurance (periodic, manual) |
 | Doctor session submit | `POST /doctor/submit/{sessionId}` | Clinical summary forwarded to Aathma; session permanently locked |
 | Logout | `POST /auth/logout` | Current device session revoked; other sessions unaffected |
 
@@ -160,8 +165,10 @@ Routing every call directly to a doctor would require a large pool of on-call ph
 ```mermaid
 flowchart LR
     subgraph External["External Services"]
+        NY["Namma Yatri\nHost App + UPI Mandate"]
         JP["Juspay\nPayment Gateway"]
-        NH["Narayana Health\nInsurance + Doctors"]
+        NHIL["NHIL\nNarayana Health Insurance"]
+        NHCT["NHCT\nAarokya Fund (Transcorp)"]
         NA["Nama Agent\nInternal LLM"]
         VF["ValueFirst\nSMS Gateway"]
     end
@@ -173,11 +180,14 @@ flowchart LR
         PAY --> WALLET
     end
     AUTH --> VF
-    WALLET --> JP
+    WALLET -->|"autopay execute"| NY
+    WALLET -->|"manual top-up"| JP
+    NY -->|"settle"| NHCT
     PAY --> JP
-    INS --> NH
+    INS -->|"policy"| NHIL
+    NHCT -->|"premium"| NHIL
     DOC["Call Doctor"] --> NA
-    DOC --> NH
+    DOC --> NHIL
 
 ```
 

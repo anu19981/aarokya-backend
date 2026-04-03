@@ -119,6 +119,76 @@ flowchart TD
 
 ---
 
+## Automated Insurance Purchase (via Autopay)
+
+When a driver consents to the ₹20/day autopay (see [Wallet Autopay Top-Up](/modules/wallet#autopay-wallet-top-up-habit-forming)), Aarokya automatically purchases insurance once sufficient balance has accumulated. This is the **habit-forming** flow — the driver doesn't need to manually browse plans or initiate payment.
+
+### 1st Time Purchase
+
+```mermaid
+sequenceDiagram
+    actor U as Driver
+    participant AK as Aarokya
+    participant W as Wallet
+    participant NHIL as NHIL<br/>(Narayana Health Insurance)
+    participant NHCT as NHCT<br/>(Aarokya Fund, at Transcorp)
+
+    rect rgba(34, 197, 94, 0.15)
+        Note over U,AK: One-time Consent (same as Wallet Top-Up)
+        U->>AK: Consent for ₹20/day autopay
+        AK-->>U: Consent registered
+    end
+
+    rect rgba(59, 130, 246, 0.15)
+        Note over AK,NHIL: Queued Policy Creation (5 min – 6 hours)
+        AK->>AK: Queue user for insurance purchase<br/>(batch processing)
+        AK-->>U: Policy issuance initiated
+        AK->>NHIL: Automated / Manual<br/>creation of policy
+        NHIL-->>AK: Response: Policy Issued
+    end
+
+    rect rgba(168, 85, 247, 0.15)
+        Note over AK,U: Notification
+        AK-->>U: 🔔 Notification: Policy Issued
+    end
+
+    rect rgba(245, 158, 11, 0.15)
+        Note over NHCT,NHIL: Settlement (periodic, manual)
+        NHCT->>NHIL: Transfer premium amount<br/>(at intervals)
+    end
+```
+
+<Note>
+  **Processing time:** The insurance purchase queue can take anywhere from **5 minutes to 5-6 hours** depending on whether the policy creation at NHIL is automated or requires manual processing. The driver receives a push notification when the policy is issued.
+</Note>
+
+### Renewal (Exclusion Handling)
+
+For policy renewals, a separate CRON process handles exclusions — identifying users who already have active policies or don't meet renewal criteria:
+
+```mermaid
+flowchart TD
+    A["CRON: Renewal trigger"] --> B["Queue eligible users<br/>(5 min batch)"]
+    B --> C{User has active policy?}
+    C -->|"Yes, not expiring"| D["Exclude from queue"]
+    C -->|"Expiring soon"| E["Queue for renewal"]
+    C -->|"No active policy"| F["Queue for 1st time purchase"]
+    E --> G["Follow purchase flow<br/>(steps ②–⑥)"]
+    F --> G
+```
+
+### Purchase Methods Comparison
+
+| | Manual Purchase | Automated (Autopay) |
+|--|----------------|---------------------|
+| **Trigger** | User browses plans in app | CRON after autopay consent |
+| **Payment** | Juspay Hyper Checkout SDK | Wallet balance (funded by autopay) |
+| **Plan selection** | User chooses | Pre-selected based on eligibility |
+| **Processing** | Real-time | Batched (5 min – 6 hours) |
+| **Notification** | Immediate in-app | Push notification on completion |
+
+---
+
 ## Claims Flow
 
 Claims are submitted to Aarokya's API, which forwards them to Narayana Health's claims system. Aarokya does not adjudicate — it provides the submission interface and tracks status.

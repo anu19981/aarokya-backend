@@ -1,10 +1,13 @@
 ---
 title: "Auth Module"
-description: "Phone OTP authentication. Issues JWT access + refresh tokens. All sessions tracked per device."
+description: "Two auth channels: direct OTP login and partner SDK token generation. JWT access + refresh tokens for all sessions."
 ---
 
 <Info>
-  **Auth endpoints are public** (no JWT required) except `POST /auth/logout`.
+  Aarokya supports **two authentication channels**:
+
+  1. **Direct OTP login** -- for standalone use (phone OTP -> JWT). Auth endpoints are public except `POST /auth/logout`.
+  2. **Partner SDK token** -- for embedded SDK use (NammaYatri backend requests token via API key). See [SDK Authentication](/api/sdk-authentication).
 
   **UAT:** OTP is hardcoded as `123456` — no SMS is sent in the sandbox environment.
 </Info>

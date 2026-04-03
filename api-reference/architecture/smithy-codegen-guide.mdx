@@ -1,0 +1,497 @@
+---
+title: "Smithy & Codegen Guide"
+description: "Complete guide to how Smithy models generate type-safe Rust and TypeScript code — the full pipeline, architecture, developer workflow, testing, and CI."
+---
+
+## What is Smithy?
+
+Smithy is an **Interface Definition Language (IDL)** created by AWS. You write your API contract once in `.smithy` files, and tools generate code for multiple languages from that single definition.
+
+In this project, Smithy is the **single source of truth** for:
+- Rust backend DTOs (request/response types)
+- Shared enums used across the backend (Gender, Currency, WalletStatus, etc.)
+- TypeScript interfaces for the frontend
+- Zod runtime validation schemas (optional)
+
+```mermaid
+flowchart TD
+    subgraph SOURCE["Source of Truth"]
+        S["smithy/model/*.smithy<br/>9 files defining the full API"]
+    end
+
+    subgraph BUILD["Build Step"]
+        SB["smithy build<br/>(compiles .smithy → model.json)"]
+    end
+
+    subgraph CODEGEN["smithy-dto-gen (custom Rust tool)"]
+        CE["common_enums_emitter"]
+        RE["rust_emitter"]
+        TE["ts_emitter"]
+    end
+
+    subgraph OUTPUT["Generated Code"]
+        O1["common_enums/src/<br/>generated_enums.rs<br/>diesel_exports.rs"]
+        O2["api_models/src/<br/>auth.rs, user.rs,<br/>customer_wallet.rs,<br/>insurance_*.rs, lib.rs"]
+        O3["dto-ts/<br/>api.ts"]
+    end
+
+    S --> SB
+    SB --> CODEGEN
+    CE --> O1
+    RE --> O2
+    TE --> O3
+```
+
+---
+
+## The Files You'll Work With
+
+### Smithy Models (you edit these)
+
+```
+smithy/model/
+├── main.smithy              # Service definition — lists all resources
+├── codegen-traits.smithy    # Custom traits that control code generation
+├── common.smithy            # Shared enums (Gender, Currency, etc.) + types
+├── auth.smithy              # Auth operations (OTP, tokens)
+├── user.smithy              # User profile operations
+├── wallet.smithy            # Wallet operations (renamed to customer_wallet namespace)
+├── insurance_plans.smithy   # Insurance plan queries
+├── insurance_policy.smithy  # Policy lifecycle (purchase, cancel, etc.)
+└── insurance_claims.smithy  # Claims submission and status
+```
+
+### Generated Code (never edit these manually)
+
+```
+backend/crates/api_models/src/
+├── auth.rs                  # ← Generated from auth.smithy
+├── user.rs                  # ← Generated from user.smithy
+├── customer_wallet.rs       # ← Generated from wallet.smithy
+├── insurance_claims.rs      # ← Generated from insurance_claims.smithy
+├── insurance_plans.rs       # ← Generated from insurance_plans.smithy
+├── insurance_policy.rs      # ← Generated from insurance_policy.smithy
+├── lib.rs                   # ← Generated module declarations
+└── errors.rs                # ← Hand-written (NOT generated)
+
+backend/crates/common_enums/src/
+├── generated_enums.rs       # ← Generated from common.smithy
+├── diesel_exports.rs        # ← Generated Diesel re-exports
+├── extensions.rs            # ← Hand-written (Status enum + Currency methods)
+└── lib.rs                   # ← Hand-written module declarations
+
+backend/smithy-api-model-generated/dto-ts/
+└── api.ts                   # ← Generated TypeScript interfaces
+```
+
+---
+
+## How the Pipeline Works
+
+### The Big Picture
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant Smithy as .smithy files
+    participant CLI as smithy build
+    participant Model as model.json
+    participant Gen as smithy-dto-gen
+    participant Rust as .rs files
+    participant TS as .ts files
+
+    Dev->>Smithy: 1. Edit .smithy model
+    Dev->>CLI: 2. Run "just gen"
+    CLI->>Model: Compiles to model.json
+    Model->>Gen: Reads shapes + traits
+    Gen->>Rust: Writes api_models/*.rs
+    Gen->>Rust: Writes common_enums/generated_enums.rs
+    Gen->>TS: Writes api.ts
+    Dev->>Dev: 3. Update business logic if needed
+    Dev->>Dev: 4. Run tests, push PR
+```
+
+### Step 1: You Write Smithy
+
+A Smithy file defines **what** your API looks like — the operations, inputs, outputs, and errors:
+
+```smithy
+// smithy/model/auth.smithy
+
+@http(method: "POST", uri: "/auth/otp/trigger")
+operation RequestOtp {
+    input: RequestOtpInput
+    output: RequestOtpOutput
+    errors: [ValidationException]
+}
+
+@rustRename(name: "OtpTriggerRequest")
+@rustDerives(["Deserialize", "ToSchema"])
+structure RequestOtpInput {
+    @required
+    @rustSecret
+    phone: String
+
+    @required
+    phoneCountryCode: String
+}
+```
+
+The `@rust*` traits are **codegen hints** — they tell our custom code generator how to produce the Rust output. They don't affect the Smithy model itself.
+
+### Step 2: `just gen` Runs the Pipeline
+
+```mermaid
+flowchart LR
+    subgraph STEP1["Step 1: smithy build"]
+        A[".smithy files"] -->|"Smithy CLI<br/>(Java)"| B["model.json<br/>(compiled model)"]
+    end
+
+    subgraph STEP2["Step 2: smithy-dto-gen generate"]
+        B --> C["model.rs<br/>Parse & classify shapes"]
+        C --> D["rust_emitter.rs<br/>Emit Rust code"]
+        C --> E["ts_emitter.rs<br/>Emit TypeScript"]
+        C --> F["common_enums_emitter.rs<br/>Emit shared enums"]
+    end
+
+    subgraph STEP3["Step 3: rustfmt"]
+        D --> G["Formatted .rs files"]
+        F --> G
+    end
+
+    subgraph STEP4["Step 4: npm install"]
+        H["TS client deps"]
+    end
+```
+
+Internally, the codegen tool:
+
+1. **Parses** `model.json` — classifies each shape as Structure, Enum, List, Map, or Skipped
+2. **Reads codegen traits** — `@rustDerives`, `@rustSecret`, `@rustRename`, `@rustCrate`, etc.
+3. **Groups by module** — shapes go into `auth.rs`, `user.rs`, etc. based on namespace
+4. **Topologically sorts** — ensures a struct is defined before another struct references it
+5. **Emits code** — generates Rust structs/enums and TypeScript interfaces
+
+### Step 3: What Gets Generated
+
+From this Smithy input:
+
+```smithy
+@rustRename(name: "OtpTriggerRequest")
+@rustDerives(["Deserialize", "ToSchema"])
+structure RequestOtpInput {
+    @required
+    @rustSecret
+    phone: String
+
+    @required
+    phoneCountryCode: String
+}
+```
+
+**Rust output** (`api_models/src/auth.rs`):
+```rust
+#[derive(Deserialize, ToSchema)]
+pub struct OtpTriggerRequest {
+    #[schema(value_type = String)]
+    pub phone: Secret<String>,
+    pub phone_country_code: String,
+}
+```
+
+**TypeScript output** (`api.ts`):
+```typescript
+export interface OtpTriggerRequest {
+  phone: string;
+  phone_country_code: string;
+}
+```
+
+Notice:
+- `@rustRename` changed the struct name
+- `@rustSecret` wrapped `phone` in `Secret<T>` (Rust only — TS has no equivalent)
+- `phoneCountryCode` became `phone_country_code` (automatic camelCase → snake_case)
+- Optional fields (without `@required`) get `Option<T>` in Rust and `?:` in TypeScript
+
+---
+
+## Codegen Traits
+
+Traits are annotations on Smithy shapes that control code generation. They're defined in `codegen-traits.smithy`.
+
+```mermaid
+flowchart TD
+    subgraph TRAITS["Codegen Traits (on Smithy shapes)"]
+        T1["@rustDerives<br/>Controls #[derive(...)]"]
+        T2["@rustSecret<br/>Wraps in Secret&lt;T&gt;"]
+        T3["@rustRename<br/>Changes struct/enum name"]
+        T4["@rustCrate<br/>Generate into different crate"]
+        T5["@rustSkip<br/>Don't generate this shape"]
+        T6["@rustStrum<br/>Add strum Display/EnumString"]
+        T7["@rustDieselEnum<br/>Add Diesel ORM support"]
+        T8["@tsSkip<br/>Skip from TypeScript only"]
+    end
+
+    subgraph RUST_OUTPUT["Rust Output"]
+        R1["#[derive(Debug, Serialize)]"]
+        R2["pub phone: Secret&lt;String&gt;"]
+        R3["pub struct OtpTriggerRequest"]
+        R4["→ common_enums crate"]
+        R5["(not generated)"]
+        R6["#[strum(serialize_all = ...)]"]
+        R7["#[aarokya_derive::diesel_enum]"]
+    end
+
+    T1 --> R1
+    T2 --> R2
+    T3 --> R3
+    T4 --> R4
+    T5 --> R5
+    T6 --> R6
+    T7 --> R7
+```
+
+### The Most Important Traits
+
+| Trait | Where | What it does | Example |
+|-------|-------|-------------|---------|
+| `@rustDerives` | Shape | Sets `#[derive(...)]` macros | `@rustDerives(["Serialize", "Deserialize", "ToSchema"])` |
+| `@rustRename` | Shape | Changes the generated name | `@rustRename(name: "OtpTriggerRequest")` |
+| `@rustSkip` | Shape | Don't generate in Rust or TS | Error types that map to `ApiErrorResponse` |
+| `@rustSecret` | Field | Wraps in `masking::Secret<T>` | Phone numbers, OTP codes, tokens |
+| `@rustType` | Field | Override the Rust type | `@rustType(value: "time::Date")` |
+| `@rustCrate` | Enum | Generate into `common_enums` crate | Shared enums like Gender, Currency |
+| `@rustStrum` | Enum | Add strum string conversion | `@rustStrum(serializeAll: "snake_case")` |
+| `@rustDieselEnum` | Enum | Add Diesel DB support | `@rustDieselEnum(storageType: "db_enum")` |
+| `@tsSkip` | Shape | Skip from TypeScript only | Rust-only internal types |
+
+---
+
+## Shared Enums: The `@rustCrate` Flow
+
+Enums like `Gender`, `Currency`, `WalletStatus` are used across many backend crates — not just `api_models`. They live in the `common_enums` crate.
+
+```mermaid
+flowchart TD
+    subgraph SMITHY["common.smithy"]
+        E["@rustCrate(name: 'common_enums')<br/>@rustStrum(serializeAll: 'snake_case')<br/>@rustDieselEnum(storageType: 'db_enum')<br/>enum Gender { Male, Female, Other }"]
+    end
+
+    subgraph GEN["smithy-dto-gen generate --common-enums-out ..."]
+        G1["For api_models:<br/>Treat as import<br/>(use common_enums::Gender)"]
+        G2["For common_enums:<br/>Generate the enum with<br/>strum + diesel + serde attrs"]
+    end
+
+    subgraph FILES["Generated Files"]
+        F1["common_enums/src/generated_enums.rs<br/>#[derive(Debug, Clone, ...)]<br/>#[strum(serialize_all = 'snake_case')]<br/>#[aarokya_derive::diesel_enum]<br/>pub enum Gender { Male, Female, Other }"]
+        F2["common_enums/src/diesel_exports.rs<br/>pub use super::DbGender as Gender;"]
+        F3["api_models/src/user.rs<br/>use common_enums::Gender;<br/>pub struct UserProfile { gender: Gender, ... }"]
+    end
+
+    SMITHY --> GEN
+    G1 --> F3
+    G2 --> F1
+    G2 --> F2
+```
+
+The key: `@rustCrate` has **dual behavior**. When generating `api_models`, it acts like "import this from another crate". When generating `common_enums` (via `--common-enums-out`), it generates the actual enum code.
+
+---
+
+## The Codegen Tool Architecture
+
+```mermaid
+flowchart TD
+    subgraph INPUT
+        MJ["model.json<br/>(from smithy build)"]
+        SS[".smithy source files<br/>(for definition order)"]
+    end
+
+    subgraph PARSE["model.rs — Parse & Resolve"]
+        P1["Classify shapes<br/>(Structure, Enum, List, Skipped)"]
+        P2["Read codegen traits<br/>(@rustDerives, @rustSecret, etc.)"]
+        P3["Resolve types<br/>(String → String, Long → i64)"]
+        P4["Group by module<br/>(namespace → auth, user, wallet)"]
+        P5["Topological sort<br/>(dependencies before dependents)"]
+    end
+
+    subgraph EMIT["Emitters"]
+        E1["rust_emitter.rs<br/>→ per-module .rs files"]
+        E2["ts_emitter.rs<br/>→ api.ts"]
+        E3["common_enums_emitter.rs<br/>→ generated_enums.rs + diesel_exports.rs"]
+    end
+
+    subgraph TYPES["types.rs — Data Model"]
+        T1["ResolvedShape<br/>(id, name, kind, derives, fields, variants)"]
+        T2["ResolvedField<br/>(name, type, required, is_secret)"]
+        T3["RustModule<br/>(name, imports, reexports, shapes)"]
+        T4["EnumVariant<br/>(name, wire_value)"]
+    end
+
+    MJ --> P1
+    SS --> P5
+    P1 --> P2 --> P3 --> P4 --> P5
+    P5 --> E1
+    P5 --> E2
+    P5 --> E3
+    TYPES -.->|"used by"| PARSE
+    TYPES -.->|"used by"| EMIT
+```
+
+### Key Source Files
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `main.rs` | CLI entry point, orchestrates the pipeline |
+| `model.rs` | Parses model.json, resolves shapes, handles `@rustCrate`/`@rustImport` |
+| `types.rs` | Data structures: `ResolvedShape`, `ResolvedField`, `RustModule` |
+| `config.rs` | Namespace→module mapping, primitive type maps |
+| `rust_emitter.rs` | Generates Rust structs, enums, imports, `lib.rs` |
+| `ts_emitter.rs` | Generates TypeScript interfaces, union types, Zod schemas |
+| `common_enums_emitter.rs` | Generates `generated_enums.rs` + `diesel_exports.rs` |
+
+---
+
+## Developer Workflow
+
+### Adding a New Field
+
+```mermaid
+sequenceDiagram
+    participant You
+    participant Smithy as .smithy file
+    participant Gen as just gen
+    participant Code as Business Logic
+    participant Test as Tests
+    participant CI as GitHub CI
+
+    You->>Smithy: Add field to structure
+    You->>Gen: Run "just gen"
+    Gen-->>Gen: Regenerates .rs + .ts files
+    You->>Code: cargo check → fix compile errors
+    You->>Code: Update business logic for new field
+    You->>Test: just codegen-test (57 tests)
+    You->>Test: just backend test
+    You->>CI: Push PR
+    CI->>CI: codegen-test (cargo nextest)
+    CI->>CI: gen-check (regenerate + git diff)
+    CI->>CI: quality (fmt + clippy)
+    CI->>CI: tests (nextest + postgres)
+    CI-->>You: ✅ All green → merge
+```
+
+### Adding a New Shared Enum
+
+```mermaid
+sequenceDiagram
+    participant You
+    participant Common as common.smithy
+    participant Gen as just gen
+    participant Output as Generated Files
+
+    You->>Common: Add enum with @rustCrate + @rustDerives + @rustStrum + @rustDieselEnum
+    You->>Gen: Run "just gen"
+    Gen->>Output: generated_enums.rs (new enum added)
+    Gen->>Output: diesel_exports.rs (new Db re-export)
+    Gen->>Output: api.ts (new TypeScript union type)
+    Note over You: Use the enum in any backend crate via "use common_enums::MyEnum"
+```
+
+### Adding a New API Domain
+
+1. Create `smithy/model/new_domain.smithy`
+2. Define resource, operations, structures with codegen traits
+3. Register resource in `main.smithy`
+4. Run `just gen`
+5. New module appears in `api_models/src/new_domain.rs`
+
+---
+
+## Testing & CI
+
+### Two Layers of Protection
+
+```mermaid
+flowchart LR
+    subgraph LAYER1["Layer 1: Snapshot Tests"]
+        direction TB
+        A["Fake test data<br/>(hardcoded in tests)"] --> B["emit_module()"]
+        B --> C["Compare output<br/>with .snap file"]
+        C -->|"Match"| D["✅ Pass"]
+        C -->|"Differ"| E["❌ Fail<br/>Shows exact diff"]
+    end
+
+    subgraph LAYER2["Layer 2: gen-check (CI)"]
+        direction TB
+        F["Run just gen<br/>(full rebuild)"] --> G["git diff<br/>generated files"]
+        G -->|"No diff"| H["✅ In sync"]
+        G -->|"Has diff"| I["❌ Out of sync<br/>Forgot to run just gen"]
+    end
+
+    LAYER1 -.->|"Protects"| J["Emitter correctness<br/>(did the code generator break?)"]
+    LAYER2 -.->|"Protects"| K["Pipeline freshness<br/>(are committed files up to date?)"]
+```
+
+**Snapshot tests** catch bugs in the emitter code itself. They use fake test data and compare emitter output against saved `.snap` files. Your Smithy model changes don't affect these tests — they only break if someone modifies the emitter functions.
+
+**gen-check** catches forgotten regeneration. It runs the full pipeline and diffs the output against what's committed. If you edited a Smithy file but forgot `just gen`, CI catches it.
+
+### CI Pipeline
+
+```mermaid
+flowchart TD
+    PR["Pull Request"] --> J1 & J2 & J3 & J4
+
+    subgraph J1["codegen-test"]
+        T1["cargo nextest run<br/>57 snapshot + unit tests"]
+        T2["cargo llvm-cov<br/>coverage report"]
+        T1 --> T2
+    end
+
+    subgraph J2["codegen-check"]
+        C1["just gen<br/>(full rebuild)"]
+        C2["git diff --exit-code<br/>(generated files)"]
+        C1 --> C2
+    end
+
+    subgraph J3["quality"]
+        Q1["cargo fmt --check"]
+        Q2["cargo clippy"]
+        Q3["cargo-deny"]
+    end
+
+    subgraph J4["tests"]
+        T3["cargo nextest run<br/>(with Postgres)"]
+    end
+
+    J1 & J2 & J3 & J4 --> MERGE["✅ Merge"]
+```
+
+---
+
+## Quick Reference
+
+### Commands
+
+| Command | Where | What it does |
+|---------|-------|-------------|
+| `just gen` | Repo root | Full pipeline: smithy build → codegen → format → npm install |
+| `just gen-quick` | Repo root | Skip smithy build (when only codegen traits changed) |
+| `just gen-check` | Repo root | Verify generated code is in sync (for CI) |
+| `just codegen-test` | Repo root | Run smithy-codegen unit tests |
+| `just test-all` | Repo root | Run codegen tests + backend tests |
+| `just backend test` | Repo root | Run backend tests only |
+
+### File Ownership
+
+| File | Owned by | Can I edit it? |
+|------|----------|----------------|
+| `smithy/model/*.smithy` | You | **Yes** — this is the source of truth |
+| `api_models/src/*.rs` | Codegen | **No** — run `just gen` instead |
+| `api_models/src/errors.rs` | You | **Yes** — hand-written |
+| `common_enums/src/generated_enums.rs` | Codegen | **No** — run `just gen` instead |
+| `common_enums/src/extensions.rs` | You | **Yes** — hand-written |
+| `common_enums/src/lib.rs` | You | **Yes** — hand-written |
+| `dto-ts/api.ts` | Codegen | **No** — run `just gen` instead |
+| `smithy-codegen/src/*.rs` | You | **Yes** — the codegen tool itself |
+| `smithy-codegen/src/snapshots/*.snap` | Codegen tests | **Review with `cargo insta review`** |

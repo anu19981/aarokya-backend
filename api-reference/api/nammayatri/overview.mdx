@@ -1,0 +1,117 @@
+---
+title: "Aarokya <> Namma Yatri Integration"
+description: "Overview of how Aarokya health insurance SDK integrates with the Namma Yatri driver app for automated premium collection"
+---
+
+## Overview
+
+Aarokya is a health insurance SDK embedded in the Namma Yatri driver app. Drivers who opt in pay a daily premium (Rs 5 / Rs 10 / Rs 15 depending on plan) that is automatically debited from their bank account.
+
+This integration reuses Namma Yatri's existing UPI mandate infrastructure. When a driver has already set up autopay for their Yatri subscription, the same mandate is used by Aarokya to collect insurance premiums. No new mandate creation or payment gateway integration is required.
+
+**Namma Yatri handles all payment operations** — fee generation, pre-debit notification, bank debit, retries, status tracking, and failure handling. Aarokya's responsibility is limited to enrollment, unenrollment, and receiving payment status via webhooks.
+
+## Authentication
+
+Aarokya and Namma Yatri share a secret key. All API calls between the two systems are authenticated using HMAC signature verification.
+
+| Direction | Auth Method |
+|-----------|------------|
+| Aarokya -> Namma Yatri (API calls) | HMAC signature in request header, signed with shared secret |
+| Namma Yatri -> Aarokya (webhooks) | BasicAuth credentials stored in Namma Yatri's `SubscriptionConfig` |
+
+## End-to-End Flow
+
+The complete lifecycle from enrollment to payment confirmation:
+
+```mermaid
+sequenceDiagram
+    participant Driver
+    participant Aarokya as Aarokya SDK
+    participant AB as Aarokya Backend
+    participant NY as Namma Yatri Backend
+    participant Juspay
+    participant Bank
+
+    Note over Driver, Bank: Step 1: Enrollment
+    Driver->>Aarokya: Selects health plan (Rs 10/day)
+    Aarokya->>AB: Enroll request
+    AB->>NY: POST /internal/aarokya/enroll<br/>{driverId, dailyAmount: 10.0}
+    NY->>NY: Validate HMAC signature
+    NY->>NY: Find existing mandate from<br/>YATRI_SUBSCRIPTION DriverPlan
+    NY->>NY: Find/create Plan (AAROKYA_HEALTH)
+    NY->>NY: Create DriverPlan record
+    NY-->>AB: {status: ENROLLED, mandateId}
+    AB-->>Aarokya: Enrollment confirmed
+
+    Note over Driver, Bank: Step 2: Daily Fee Generation (Cron)
+    NY->>NY: CalculateDriverFees cron runs daily
+    NY->>NY: Query eligible AAROKYA_HEALTH DriverPlans
+    NY->>NY: Create DriverFee (Rs 10, PAYMENT_PENDING)
+    NY->>NY: Create Invoice (AUTOPAY_INVOICE)
+
+    Note over Driver, Bank: Step 3: Pre-Debit Notification (PDN)
+    NY->>Juspay: mandateNotification API<br/>{amount: 10, mandateId}
+    Juspay->>Driver: UPI notification:<br/>"Rs 10 will be debited for Aarokya"
+
+    Note over Driver, Bank: Step 4: Mandate Execution (Bank Debit)
+    NY->>Juspay: mandateExecution API<br/>{amount: 10, mandateId, notificationId}
+    Juspay->>Bank: Debit Rs 10
+    Bank-->>Juspay: Debit successful
+
+    Note over Driver, Bank: Step 5: Payment Confirmation
+    Juspay-->>NY: Webhook: transaction CHARGED
+    NY->>NY: DriverFee.status = CLEARED
+
+    Note over Driver, Bank: Step 6: Status Webhook to Aarokya
+    NY->>AB: POST /Service/Yatri/Webhook<br/>{mandate_status, driver_id, order_id}
+    AB->>AB: Update payment status
+    AB-->>Aarokya: Reflect payment in SDK UI
+```
+
+## Architecture Overview
+
+```mermaid
+flowchart TB
+    subgraph DriverApp["Namma Yatri Driver App"]
+        SDK["Aarokya SDK"]
+    end
+
+    subgraph AarokyaBackend["Aarokya Backend"]
+        EnrollAPI["Enrollment Service"]
+        WebhookRx["Webhook Receiver"]
+    end
+
+    subgraph NammaYatri["Namma Yatri Backend"]
+        NYAPI["Aarokya Internal APIs"]
+        FeeCron["CalculateDriverFees Cron"]
+        PDNCron["SendPDNNotification Cron"]
+        ExecCron["MandateExecution Cron"]
+        StatusCron["OrderStatusUpdate Cron"]
+        WebhookTx["External Webhook System"]
+        DB[("Database<br/>DriverPlan, DriverFee,<br/>Plan, Mandate,<br/>SubscriptionConfig")]
+    end
+
+    subgraph External["External Services"]
+        Juspay["Juspay Payment Gateway"]
+        UPI["UPI / Bank"]
+    end
+
+    SDK -->|"User actions"| EnrollAPI
+    EnrollAPI -->|"HMAC auth"| NYAPI
+    NYAPI --> DB
+
+    FeeCron --> DB
+    FeeCron -->|"triggers"| PDNCron
+    PDNCron -->|"mandateNotification"| Juspay
+    PDNCron -->|"triggers"| ExecCron
+    ExecCron -->|"mandateExecution"| Juspay
+    Juspay <-->|"debit/confirm"| UPI
+
+    Juspay -->|"payment webhook"| StatusCron
+    StatusCron --> DB
+    StatusCron -->|"triggers"| WebhookTx
+    WebhookTx -->|"BasicAuth"| WebhookRx
+
+    WebhookRx --> SDK
+```

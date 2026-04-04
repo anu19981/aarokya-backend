@@ -72,6 +72,15 @@
             ]
           },
           {
+            "group": "Aarokya <> Namma Yatri",
+            "pages": [
+              "api/nammayatri/overview",
+              "api/nammayatri/enrollment",
+              "api/nammayatri/payment-lifecycle",
+              "api/nammayatri/configuration"
+            ]
+          },
+          {
             "group": "Try It Out",
             "pages": [
               {

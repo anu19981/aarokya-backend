@@ -1,0 +1,169 @@
+---
+title: "Payment Lifecycle"
+description: "Daily fee generation, pre-debit notification, mandate execution, payment confirmation, and webhook delivery"
+---
+
+## Payment Lifecycle Overview
+
+After enrollment, Namma Yatri's existing cron infrastructure handles the entire daily payment cycle automatically. No external triggers are needed.
+
+```mermaid
+flowchart LR
+    A["CalculateDriverFees<br/>(Daily Cron)"] --> B["SendPDNNotification<br/>(Pre-Debit Notice)"]
+    B --> C["MandateExecution<br/>(Bank Debit)"]
+    C --> D["Payment Confirmation<br/>(Juspay Webhook)"]
+    D --> E["Status Webhook<br/>(to Aarokya)"]
+
+    style A fill:#e0f2fe,stroke:#0284c7
+    style B fill:#fef3c7,stroke:#d97706
+    style C fill:#fce7f3,stroke:#db2777
+    style D fill:#d1fae5,stroke:#059669
+    style E fill:#ede9fe,stroke:#7c3aed
+```
+
+## Step 1: Daily Fee Generation
+
+Runs automatically every day via Namma Yatri's `CalculateDriverFees` scheduled job.
+
+```mermaid
+flowchart TD
+    Cron["CalculateDriverFees cron<br/>(runs daily at configured time)"]
+    Query["Query all DriverPlans where<br/>serviceName = AAROKYA_HEALTH<br/>enableServiceUsageCharge = true<br/>planType = AUTOPAY"]
+    Loop["For each eligible driver"]
+    ReadPlan["Read DriverPlan.planId<br/>Look up Plan -> planBaseAmount"]
+    DedupCheck{"Existing fee<br/>for today?"}
+    Skip["Skip (prevents<br/>duplicate charges)"]
+    CreateFee["Create DriverFee<br/>amount = Rs 10<br/>status = PAYMENT_PENDING<br/>feeType = RECURRING_EXECUTION_INVOICE<br/>serviceName = AAROKYA_HEALTH<br/>autopayPaymentStage = NOTIFICATION_SCHEDULED"]
+    CreateInvoice["Create Invoice<br/>paymentMode = AUTOPAY_INVOICE<br/>serviceName = AAROKYA_HEALTH"]
+    Schedule["Schedule SendPDNNotificationToDriver job"]
+
+    Cron --> Query --> Loop --> ReadPlan --> DedupCheck
+    DedupCheck -->|Yes| Skip
+    DedupCheck -->|No| CreateFee --> CreateInvoice --> Schedule
+```
+
+<Info>
+This step requires a code change in Namma Yatri — one line added to the fee calculator to handle the `AAROKYA_HEALTH` service name. All other steps use existing code with zero modifications.
+</Info>
+
+## Step 2: Pre-Debit Notification (PDN)
+
+Runs automatically after fee generation. This is **mandated by NPCI/UPI** — a notification must be sent to the driver before any auto-debit.
+
+```mermaid
+sequenceDiagram
+    participant Cron as SendPDNNotification Cron
+    participant DB as Database
+    participant Juspay
+    participant Driver
+
+    Cron->>DB: Query DriverFees where<br/>serviceName = AAROKYA_HEALTH<br/>status = PAYMENT_PENDING<br/>feeType = RECURRING_EXECUTION_INVOICE
+
+    loop For each fee
+        Cron->>DB: Look up DriverPlan(AAROKYA_HEALTH)<br/>get mandateId
+        Cron->>Juspay: mandateNotification API<br/>{amount: 10.0, mandateId, txnDate: tomorrow}
+        Juspay->>Driver: UPI notification:<br/>"Rs 10 will be debited for Aarokya health premium"
+        Cron->>DB: Create Notification record
+    end
+
+    alt Notification fails
+        Note over Cron: Retry with exponential backoff<br/>delay = 2^retryCount * retryTimeGap<br/>Max 3 retries (from SubscriptionConfig.maxRetryCount)
+        alt All retries exhausted
+            Cron->>DB: DriverFee.status = PAYMENT_OVERDUE
+            Cron->>DB: Invoice = INACTIVE
+        end
+    end
+
+    Cron->>Cron: Schedule MandateExecution job
+```
+
+## Step 3: Mandate Execution (Bank Debit)
+
+Runs automatically after PDN succeeds. This is where the actual money transfer happens.
+
+```mermaid
+sequenceDiagram
+    participant Cron as MandateExecution Cron
+    participant DB as Database
+    participant Juspay
+    participant Bank
+
+    Cron->>DB: Query DriverFees where<br/>serviceName = AAROKYA_HEALTH<br/>notification status = SUCCESS
+
+    loop For each fee
+        Cron->>DB: Get invoice.shortId, mandateId,<br/>notificationId, driverId
+        Cron->>Juspay: mandateExecution API<br/>{orderId, amount: Rs 10,<br/>mandateId, notificationId, customerId}
+        Juspay->>Bank: Debit Rs 10 from driver's account
+        Bank-->>Juspay: Debit result
+    end
+
+    alt Execution fails
+        Cron->>DB: DriverFee.status = PAYMENT_OVERDUE<br/>Store bankErrorCode, bankErrorMessage
+        Cron->>DB: Invoice = INACTIVE
+    end
+```
+
+## Step 4: Payment Confirmation
+
+Juspay confirms whether the bank debit succeeded or failed. There are two paths:
+
+```mermaid
+flowchart TD
+    subgraph PathA["Path A: Juspay Webhook (Primary)"]
+        JW["Juspay sends webhook<br/>to Namma Yatri"]
+        JWH["juspayWebhookHandler<br/>processes callback"]
+        JW --> JWH
+        JWH -->|"CHARGED"| Success["DriverFee.status = CLEARED<br/>autopayPaymentStage = EXECUTION_SUCCESS"]
+        JWH -->|"FAILED"| Failure["DriverFee.status = PAYMENT_OVERDUE<br/>autopayPaymentStage = EXECUTION_FAILED<br/>Store bankErrorCode/bankErrorMessage"]
+    end
+
+    subgraph PathB["Path B: Status Polling (Backup)"]
+        Poll["OrderAndNotificationStatusUpdate cron"]
+        PollJ["Polls Juspay for pending<br/>notifications/orders without webhooks"]
+        Timeout["Marks stale items as FAILED<br/>after configured timeout"]
+        Poll --> PollJ --> Timeout
+    end
+
+    style PathA fill:#d1fae5,stroke:#059669
+    style PathB fill:#fef3c7,stroke:#d97706
+```
+
+## Step 5: Status Webhook to Aarokya
+
+After payment confirmation, Namma Yatri's existing external webhook system delivers the result to Aarokya.
+
+```mermaid
+sequenceDiagram
+    participant NY as Namma Yatri<br/>Webhook System
+    participant Config as SubscriptionConfig
+    participant AB as Aarokya Backend
+
+    NY->>Config: Read AAROKYA_HEALTH config<br/>get baseUrl, auth credentials
+
+    NY->>AB: POST https://aarokya.example.com/Service/Yatri/Webhook<br/>Auth: BasicAuth
+    Note over AB: Request body
+    Note over AB: {<br/>"id": "webhook-uuid",<br/>"shortId": "short-id",<br/>"eventName": "MANDATE",<br/>"webhookData": {<br/>  "driver_id": "driver-uuid",<br/>  "mandate_id": "mandate-uuid",<br/>  "mandate_status": "ACTIVE",<br/>  "order_id": "order-short-id",<br/>  "event_name": "MANDATE",<br/>  "vehicle_number": "KA01AB1234",<br/>  "phone_number": "9876543210",<br/>  "name": "Driver Name",<br/>  "org_id": "aarokya-org-id",<br/>  "mandate_created_at": "2026-01-15T10:00:00Z",<br/>  "last_sent_at": "2026-04-04T12:30:00Z"<br/>}<br/>}
+
+    alt Aarokya endpoint is down
+        NY->>NY: Retry with exponential backoff<br/>Max retries from webhook_config.retryLimit
+    end
+```
+
+### Webhook Payload Reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique webhook event ID |
+| `shortId` | string | Short identifier |
+| `eventName` | string | Event type (e.g., `MANDATE`) |
+| `webhookData.driver_id` | string | Driver's unique ID |
+| `webhookData.mandate_id` | string | UPI mandate ID |
+| `webhookData.mandate_status` | string | `ACTIVE`, `CANCELLED_PSP`, etc. |
+| `webhookData.order_id` | string | Payment order ID |
+| `webhookData.event_name` | string | Event type within webhook data |
+| `webhookData.vehicle_number` | string | Driver's vehicle registration |
+| `webhookData.phone_number` | string | Driver's phone number |
+| `webhookData.name` | string | Driver's name |
+| `webhookData.org_id` | string | Aarokya organization ID |
+| `webhookData.mandate_created_at` | datetime | When the mandate was created |
+| `webhookData.last_sent_at` | datetime | Timestamp of this webhook delivery |

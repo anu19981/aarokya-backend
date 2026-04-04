@@ -1,0 +1,136 @@
+---
+title: "Enrollment & Plan Management"
+description: "How drivers enroll in Aarokya health plans, change plans, and unenroll via the Namma Yatri integration"
+---
+
+## Enrollment
+
+When a driver selects an Aarokya health plan in the SDK, the Aarokya backend calls Namma Yatri's enroll API.
+
+```mermaid
+sequenceDiagram
+    participant AB as Aarokya Backend
+    participant NY as Namma Yatri Backend
+    participant DB as Database
+
+    AB->>NY: POST /internal/aarokya/enroll<br/>{driverId, dailyAmount: 10.0, planName: "Standard"}
+    NY->>NY: Validate HMAC signature
+
+    NY->>DB: Find YATRI_SUBSCRIPTION DriverPlan
+    alt No DriverPlan or no mandateId
+        NY-->>AB: {error: NO_MANDATE}
+    end
+
+    NY->>DB: Find Mandate record
+    alt Mandate INACTIVE
+        NY-->>AB: {error: MANDATE_INACTIVE}
+    else Mandate expired
+        NY-->>AB: {error: MANDATE_EXPIRED}
+    end
+
+    NY->>DB: Find Plan where serviceName=AAROKYA_HEALTH<br/>AND planBaseAmount=DAILY_BASE_10.0
+    alt Plan not found
+        NY->>DB: Create Plan automatically
+    end
+
+    NY->>DB: Create DriverPlan record
+    Note over DB: driverId, planId, serviceName=AAROKYA_HEALTH<br/>mandateId (copied from YATRI_SUBSCRIPTION)<br/>planType=AUTOPAY, autoPayStatus=ACTIVE<br/>enableServiceUsageCharge=true
+
+    NY-->>AB: {status: ENROLLED, mandateId, maxAmount}
+```
+
+### What the DriverPlan Record Controls
+
+The DriverPlan record created during enrollment is the enrollment record. It tells Namma Yatri's daily cron:
+
+| Field | Purpose |
+|-------|---------|
+| `driverId` | **Who** to charge |
+| `planId` -> `Plan.planBaseAmount` | **How much** to charge (e.g., Rs 10) |
+| `mandateId` | **How** to charge (the driver's UPI mandate) |
+| `serviceName = AAROKYA_HEALTH` | **What service** this is for |
+| `enableServiceUsageCharge = true` | **Whether** to generate fees |
+
+Without this record, no fees are generated and nothing happens.
+
+## Unenrollment
+
+When a driver opts out of Aarokya:
+
+```mermaid
+sequenceDiagram
+    participant AB as Aarokya Backend
+    participant NY as Namma Yatri Backend
+    participant DB as Database
+    participant Cron as CalculateDriverFees Cron
+
+    AB->>NY: POST /internal/aarokya/unenroll<br/>{driverId}
+    NY->>DB: Find DriverPlan(AAROKYA_HEALTH)<br/>for this driver
+    NY->>DB: Set enableServiceUsageCharge = false
+    NY-->>AB: {status: UNENROLLED}
+
+    Note over Cron, DB: Next day
+    Cron->>DB: Query eligible drivers<br/>(enableServiceUsageCharge = true)
+    Note over Cron: Driver is skipped -<br/>no fee generated
+```
+
+<Note>
+If a driver unenrolls mid-day, any in-progress fee for today will still complete. The unenrollment takes effect from the next day onward.
+</Note>
+
+<Warning>
+Refund policy for mid-day unenrollment is still to be decided.
+</Warning>
+
+## Plan Change
+
+When a driver switches plans (e.g., Rs 10/day to Rs 15/day), the same enroll API is called with the new amount:
+
+```mermaid
+sequenceDiagram
+    participant AB as Aarokya Backend
+    participant NY as Namma Yatri Backend
+    participant DB as Database
+
+    AB->>NY: POST /internal/aarokya/enroll<br/>{driverId, dailyAmount: 15.0, planName: "Premium"}
+
+    NY->>DB: Find/create Plan(DAILY_BASE_15.0)
+    NY->>DB: Update DriverPlan.planId<br/>to point to Rs 15 Plan
+    NY-->>AB: {status: ENROLLED}
+
+    Note over DB: Next day's cron reads<br/>updated planId and charges Rs 15
+```
+
+The same `/enroll` endpoint handles both first-time enrollment and plan changes.
+
+## Mandate Revocation
+
+When a driver revokes their UPI mandate from their banking app, it affects **both** the Yatri subscription and Aarokya simultaneously since they share the same mandate.
+
+```mermaid
+sequenceDiagram
+    participant Driver
+    participant Bank as Bank/UPI App
+    participant Juspay
+    participant NY as Namma Yatri Backend
+    participant DB as Database
+    participant AB as Aarokya Backend
+
+    Driver->>Bank: Revoke UPI mandate
+    Bank->>Juspay: Mandate revoked
+    Juspay->>NY: Webhook: mandate REVOKED
+
+    NY->>NY: processMandate(REVOKED)
+
+    par Update all records
+        NY->>DB: Mandate.status = INACTIVE
+        NY->>DB: DriverPlan(YATRI_SUBSCRIPTION)<br/>.autoPayStatus = CANCELLED_PSP
+        NY->>DB: DriverPlan(AAROKYA_HEALTH)<br/>.autoPayStatus = CANCELLED_PSP
+        NY->>DB: All pending AAROKYA_HEALTH<br/>DriverFees = PAYMENT_OVERDUE
+        NY->>DB: All active AAROKYA_HEALTH<br/>Invoices = INACTIVE
+    end
+
+    NY->>AB: Webhook: {mandate_status: CANCELLED_PSP,<br/>driver_id: "xxx"}
+    AB->>AB: Mark driver as "mandate revoked"
+    AB-->>Driver: Show "Re-enable autopay" prompt
+```

@@ -1,0 +1,425 @@
+---
+title: "Screen Flows & API Mapping"
+sidebarTitle: "Screen Flows"
+description: "Complete mapping of every Aarokya screen to its backend APIs, with flow diagrams showing the user journey from onboarding to insurance enrollment."
+---
+
+## Overall User Journey
+
+```mermaid
+flowchart LR
+    subgraph Onboarding
+        A[NammaYatri Entry] --> B[Profile Setup]
+        B --> C[Add Dependants]
+    end
+
+    subgraph Benefits
+        C --> D[Available Benefits]
+        D --> E[Benefit Detail]
+    end
+
+    subgraph Insurance
+        E --> F[Insurance Enrollment]
+        F --> G[Premium Compute]
+        G --> H[Hyper PG Payment]
+    end
+
+    subgraph Payments
+        H --> I[UPI / Mandate Setup]
+        I --> J[Success]
+    end
+
+    subgraph PostEnrollment
+        J --> K[Policy Page]
+        K --> L[Wallet & Transactions]
+        L --> M[Consultations]
+        L --> N[Hospital Registration]
+    end
+```
+
+---
+
+## Screen-by-Screen Breakdown
+
+### 1. Onboarding (Profile Setup)
+
+The driver enters Aarokya from NammaYatri for the first time. NammaYatri passes the driver's identity via the SDK token flow.
+
+```mermaid
+sequenceDiagram
+    actor Driver
+    participant App as Aarokya SDK
+    participant API as Aarokya Backend
+
+    Note over Driver,App: First-time entry from NammaYatri
+    Driver->>App: Enters Name, DOB, Gender, Email, Mobile
+    Driver->>App: Taps "Submit"
+    App->>API: POST /user/profile (create/update)
+    API-->>App: 200 OK (profile saved)
+    App->>Driver: Navigate to Add Dependants
+```
+
+**Screen fields:**
+- Name (pre-filled from NammaYatri if available)
+- Date of Birth
+- Gender
+- Email
+- Mobile (pre-filled, read-only)
+
+**APIs called:**
+
+| API | Method | Purpose |
+|-----|--------|---------|
+| `POST /user/profile` | Create | Create user profile with onboarding details |
+
+---
+
+### 2. Add Dependants
+
+Driver adds family members who will be covered under the insurance plan. Can be skipped.
+
+```mermaid
+sequenceDiagram
+    actor Driver
+    participant App as Aarokya SDK
+    participant API as Aarokya Backend
+
+    Driver->>App: Add Family Member 1 (name, DOB, relationship)
+    Driver->>App: Add Family Member 2
+    Driver->>App: Add Family Member 3
+    Driver->>App: Taps "Submit" (or "Skip")
+    App->>API: POST /user/dependants (batch create)
+    API-->>App: 200 OK (dependants saved)
+    App->>Driver: Navigate to Available Benefits
+```
+
+**Screen fields (per dependant):**
+- Name
+- Date of Birth
+- Gender
+- Relationship (spouse, child, parent, etc.)
+- Add (+) button for more members
+
+**APIs called:**
+
+| API | Method | Purpose |
+|-----|--------|---------|
+| `POST /user/dependants` | Create | Save family members as dependants |
+
+---
+
+### 3. Available Benefits
+
+Shows the benefits the driver can avail -- free doctor consultations, insurance plans, etc.
+
+```mermaid
+sequenceDiagram
+    actor Driver
+    participant App as Aarokya SDK
+    participant API as Aarokya Backend
+
+    App->>API: GET /benefits/available
+    API-->>App: List of benefits (consultations, insurance, etc.)
+    Driver->>App: Browses available benefits
+    Driver->>App: Taps on a benefit to see details
+```
+
+**Screen layout:**
+- List/grid of benefit cards
+- Each card: title, short description, icon
+- Examples: "Free Doctor Consultations", "Health Insurance"
+
+**APIs called:**
+
+| API | Method | Purpose |
+|-----|--------|---------|
+| `GET /benefits/available` | Read | List benefits available to this driver |
+
+---
+
+### 4. Benefit Detail (To Avail)
+
+Detail page for a specific benefit (e.g., Insurance). Shows what the benefit covers and how to avail it.
+
+```mermaid
+sequenceDiagram
+    actor Driver
+    participant App as Aarokya SDK
+    participant API as Aarokya Backend
+
+    App->>API: GET /benefits (list all with details)
+    API-->>App: Full benefit details
+    Driver->>App: Views insurance benefit info
+    Driver->>App: Taps "Avail" to proceed to enrollment
+```
+
+**Screen layout:**
+- Benefit name and description
+- Coverage details
+- Info icon with more details
+- "Avail" / "Enroll" CTA button
+
+**APIs called:**
+
+| API | Method | Purpose |
+|-----|--------|---------|
+| `GET /benefits` | Read | List all benefits with full details |
+
+---
+
+### 5. Insurance Enrollment
+
+The main enrollment screen. Shows premium amount, lets the driver add/remove dependants from coverage, and proceeds to payment.
+
+```mermaid
+sequenceDiagram
+    actor Driver
+    participant App as Aarokya SDK
+    participant API as Aarokya Backend
+    participant PG as Hyper PG
+
+    App->>API: GET /user/dependants
+    API-->>App: List of dependants
+    App->>API: POST /insurance/premium/compute
+    Note over API: Calculate premium based on<br/>self + selected dependants
+    API-->>App: Premium amount
+    Driver->>App: Select/deselect dependants (+/-)
+    App->>API: POST /insurance/premium/compute (recalculate)
+    API-->>App: Updated premium
+    Driver->>App: Taps "Proceed to Pay"
+    App->>API: POST /insurance/enroll
+    API-->>App: Enrollment initiated, redirect to payment
+    App->>PG: Open Hyper PG (setup autopay)
+```
+
+**Screen fields:**
+- Premium amount (computed dynamically)
+- Dependant list with +/- toggle
+- "Setup Autopay" button
+- Proceeds to Hyper PG for payment
+
+**APIs called:**
+
+| API | Method | Purpose |
+|-----|--------|---------|
+| `GET /user/dependants` | Read | Fetch saved dependants for selection |
+| `POST /insurance/premium/compute` | Compute | Calculate premium for self + selected dependants |
+| `POST /insurance/enroll` | Create | Initiate benefit enrollment |
+
+---
+
+### 6. Payments Page (UPI / Mandate Setup)
+
+Payment collection via Hyper PG. Supports UPI payment and mandate setup for recurring autopay.
+
+```mermaid
+sequenceDiagram
+    actor Driver
+    participant App as Aarokya SDK
+    participant PG as Hyper PG
+    participant UPI as UPI App (GPay/PhonePe/etc.)
+    participant API as Aarokya Backend
+
+    App->>PG: Open payment page
+    Driver->>PG: Selects UPI / Mandate Setup
+    PG->>UPI: Redirect to UPI app
+    Driver->>UPI: Authorizes payment
+    UPI-->>PG: Payment success
+    PG-->>App: Payment callback (success)
+    App->>API: POST /mandate/create
+    API-->>App: Mandate created
+    App->>Driver: Show success screen
+```
+
+**Screen layout:**
+- UPI payment option
+- Mandate setup option
+- Payment app icons (GPay, PhonePe, Paytm)
+- Amount display
+
+**APIs called:**
+
+| API | Method | Purpose |
+|-----|--------|---------|
+| `POST /mandate/create` | Create | Create autopay mandate for recurring deductions |
+
+---
+
+### 7. Success Screen
+
+Confirmation after successful payment and mandate setup.
+
+**Screen layout:**
+- Success checkmark
+- "Payment Successful" message
+- Summary of enrollment
+- "Continue" button to go to wallet/home
+
+---
+
+### 8. Wallet Creation
+
+Wallet setup screen. Collects any additional info needed for the health savings wallet (backed by Transcorp).
+
+```mermaid
+sequenceDiagram
+    actor Driver
+    participant App as Aarokya SDK
+    participant API as Aarokya Backend
+    participant TC as Transcorp
+
+    Driver->>App: Enters wallet info (if needed)
+    App->>API: POST /wallet
+    API->>TC: Register customer + create wallet
+    TC-->>API: wallet_id, status
+    API-->>App: Wallet created
+    App->>Driver: Show wallet screen
+```
+
+**APIs called:**
+
+| API | Method | Purpose |
+|-----|--------|---------|
+| `POST /wallet` | Create | Create health savings wallet (Transcorp registration) |
+
+---
+
+### 9. Wallet & Transactions (Home)
+
+Main wallet view showing balance, recent transactions, and add money option.
+
+```mermaid
+sequenceDiagram
+    actor Driver
+    participant App as Aarokya SDK
+    participant API as Aarokya Backend
+
+    App->>API: GET /wallet/{id}/balance
+    API-->>App: Current balance
+    App->>API: GET /wallet/{id}/transactions/history/30
+    API-->>App: Recent transactions
+    Driver->>App: Views balance and history
+```
+
+**Screen layout:**
+- Balance display (prominent)
+- Transaction history list
+- "Add Money" button
+- Each transaction: amount, status, date, description
+
+**APIs called:**
+
+| API | Method | Purpose |
+|-----|--------|---------|
+| `GET /wallet/{id}/balance` | Read | Fetch live balance from wallet provider |
+| `GET /wallet/{id}/transactions/history/{days}` | Read | Fetch transaction history |
+
+---
+
+### 10. Hospital Registration (Dispute Region)
+
+Register at a network hospital for cashless treatment.
+
+```mermaid
+sequenceDiagram
+    actor Driver
+    participant App as Aarokya SDK
+    participant API as Aarokya Backend
+
+    App->>API: POST /hospital/register
+    API-->>App: Registration confirmed
+    Driver->>App: Views hospital membership details
+```
+
+**APIs called:**
+
+| API | Method | Purpose |
+|-----|--------|---------|
+| `POST /hospital/register` | Create | Register driver at a network hospital |
+
+---
+
+### 11. Consultations
+
+View consultation history and book new doctor consultations (free benefit).
+
+```mermaid
+sequenceDiagram
+    actor Driver
+    participant App as Aarokya SDK
+    participant API as Aarokya Backend
+
+    App->>API: GET /consultations/history
+    API-->>App: Past consultations
+    Driver->>App: Views consultation history
+    Driver->>App: Taps "Book Consultation"
+```
+
+**APIs called:**
+
+| API | Method | Purpose |
+|-----|--------|---------|
+| `GET /consultations/history` | Read | Fetch past consultation records |
+
+---
+
+### 12. Policy Page
+
+View active insurance policy details, coverage, and claims.
+
+**Screen layout:**
+- Policy number
+- Coverage amount
+- Start and expiry dates
+- Covered members
+- Claim history link
+- Policy document download
+
+**APIs called:**
+
+| API | Method | Purpose |
+|-----|--------|---------|
+| `GET /insurance/policies/{id}` | Read | Fetch policy details |
+
+---
+
+## Complete API Map by Screen
+
+| # | Screen | APIs | Status |
+|---|--------|------|--------|
+| 1 | Onboarding | `POST /user/profile` | Exists |
+| 2 | Add Dependants | `POST /user/dependants` | New |
+| 3 | Available Benefits | `GET /benefits/available` | New |
+| 4 | Benefit Detail | `GET /benefits` | New |
+| 5 | Insurance Enrollment | `GET /user/dependants`, `POST /insurance/premium/compute`, `POST /insurance/enroll` | New |
+| 6 | Payments | `POST /mandate/create` | New |
+| 7 | Success | (no API call) | N/A |
+| 8 | Wallet Creation | `POST /wallet` | Exists |
+| 9 | Wallet & Transactions | `GET /wallet/{id}/balance`, `GET /wallet/{id}/transactions/history/{days}` | Exists |
+| 10 | Hospital Registration | `POST /hospital/register` | New |
+| 11 | Consultations | `GET /consultations/history` | New |
+| 12 | Policy Page | `GET /insurance/policies/{id}` | Exists |
+
+---
+
+## Flow Connections
+
+```mermaid
+flowchart TD
+    A[NammaYatri Entry<br/>SDK Token] --> B[Onboarding<br/>POST /user/profile]
+    B --> C{First time?}
+    C -->|Yes| D[Add Dependants<br/>POST /user/dependants]
+    C -->|No| E[Home / Wallet]
+    D -->|Submit or Skip| F[Available Benefits<br/>GET /benefits/available]
+    F --> G[Benefit Detail<br/>GET /benefits]
+    G --> H[Insurance Enrollment<br/>POST /insurance/premium/compute<br/>POST /insurance/enroll]
+    H --> I[Hyper PG Payment<br/>POST /mandate/create]
+    I -->|Success| J[Wallet Creation<br/>POST /wallet]
+    J --> E
+
+    E --> K[Wallet Balance<br/>GET /wallet/balance]
+    E --> L[Transactions<br/>GET /wallet/transactions]
+    E --> M[Policy Page<br/>GET /insurance/policies]
+    E --> N[Consultations<br/>GET /consultations/history]
+    E --> O[Hospital Registration<br/>POST /hospital/register]
+```

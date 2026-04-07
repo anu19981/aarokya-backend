@@ -23,6 +23,7 @@
             "group": "Architecture",
             "pages": [
               "architecture/system-overview",
+              "architecture/screen-flows",
               "architecture/codegen-pipeline",
               "architecture/smithy-codegen-guide",
               "architecture/data-model"

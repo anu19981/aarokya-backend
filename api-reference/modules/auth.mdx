@@ -1,349 +1,127 @@
 ---
 title: "Auth Module"
-description: "Two auth channels: direct OTP login and partner SDK token generation. JWT access + refresh tokens for all sessions."
+description: "Partner-driven token issuance. External partners call POST /auth/token with a phone number and platform ID — Aarokya creates the user on first call and returns a JWT."
 ---
 
 <Info>
-  Aarokya supports **two authentication channels**:
-
-  1. **Direct OTP login** -- for standalone use (phone OTP -> JWT). Auth endpoints are public except `POST /auth/logout`.
-  2. **Partner SDK token** -- for embedded SDK use (NammaYatri backend requests token via API key). See [SDK Authentication](/api/sdk-authentication).
-
-  **UAT:** OTP is hardcoded as `123456` — no SMS is sent in the sandbox environment.
+  **Auth guard:** `api-key` header (external partner key — one key per partner, configured server-side).
+  Partners cannot call admin endpoints. Admin cannot call this endpoint.
 </Info>
 
-## Why No Passwords?
+## Design — Why No OTP?
 
-Aarokya's primary users are gig workers — delivery riders, drivers, domestic workers. Designing for this user base led directly to a password-free system:
+Aarokya's users module is embedded in partner apps (e.g. Namma Yatri). The partner app already owns the user's phone-based identity. Rather than duplicating OTP infrastructure, the partner backend calls `POST /auth/token` with a verified phone number and receives a JWT scoped to that user.
 
-- **Multiple devices:** A delivery rider may use a shared household phone in the morning and a company-issued device in the evening. Passwords create friction at every device switch.
-- **No password manager culture:** The target audience does not use password managers. Passwords get forgotten, leading to support calls and account lockouts.
-- **OTP is already trusted:** Every UPI payment in India uses OTP as the authentication primitive. Users already understand the flow — enter your number, get an SMS, enter the code.
-- **Reduced credential stuffing risk:** Without passwords, there are no stored credential pairs that can be harvested from a breach and reused elsewhere.
-- **Natural alignment with phone number as identity:** In India, the mobile number is the primary digital identity. It links to Aadhaar, UPI, and now to Aarokya.
+This is the "partner SDK" pattern — the partner is the identity authority, Aarokya is the service layer.
+
+**Benefits:**
+- No SMS infrastructure in Aarokya
+- No OTP session management or replay risk
+- Single API call: phone number in, JWT out
+- Partners retain full control of their auth UX
 
 ---
 
-## OTP Flow — Step by Step
+## Token Issuance Flow
 
 ```mermaid
 sequenceDiagram
     actor U as User
-    participant App
-    participant API as Rust Backend
-    participant SMS as ValueFirst SMS
+    participant PartnerApp as Partner App (e.g. Namma Yatri)
+    participant PartnerBE as Partner Backend
+    participant API as Aarokya API
 
-    U->>App: Enter 10-digit phone number
-    App->>API: POST /auth/otp/trigger {"phone": "9876543210"}
-    API->>API: Validate phone format
-    API->>API: Hash a random 6-digit OTP (bcrypt)
-    API->>API: Store otp_session row (expires in 10 min)
-    API->>SMS: Forward OTP for delivery (prod only)
-    SMS-->>U: SMS: "Your Aarokya OTP is 123456"
-    API-->>App: 200 OK
-    U->>App: Enter OTP received via SMS
-    App->>API: POST /auth/otp/verify {"phone": "...", "otp": "123456"}
-    API->>API: Look up latest OTP session for phone
-    API->>API: Check: not expired, not verified, attempts < 5
-    API->>API: bcrypt verify OTP against otp_hash
-    API->>API: Mark verified_at = NOW()
-    API->>API: Create or fetch user row
-    API->>API: Create user_session row + generate tokens
-    API->>API: Trigger wallet provisioning (async)
-    API-->>App: access_token + refresh_token + is_new_user
-    Note over App: Store tokens securely
-    Note over API: Wallet creation runs in background
+    U->>PartnerApp: Open app (already authenticated with partner)
+    PartnerApp->>PartnerBE: Request Aarokya token for user
+    PartnerBE->>API: POST /auth/token\n{ phone_number, phone_country_code, platform_id }\napi-key: <partner_key>
+    API->>API: Validate partner key
+    API->>API: Validate platform_id exists
+    API->>API: Find user by (platform_id, phone_number)\nor create new user with status=onboarding
+    API->>API: Sign JWT { user_id, status, exp }
+    API-->>PartnerBE: { access_token }
+    PartnerBE-->>PartnerApp: access_token
+    PartnerApp->>API: All subsequent calls with\nAuthorization: Bearer <access_token>
 ```
 
-### OTP Timing Constraints
+---
 
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| OTP validity | 10 minutes | `expires_at = created_at + 10 min` |
-| Max attempts | 5 | Session permanently invalidated after 5 failures |
-| Access token lifetime | 24 hours | JWT `exp` claim |
-| Refresh token lifetime | 30 days | `user_sessions.expires_at` |
-| OTP length | 6 digits | Numeric only |
-| OTP generation | CSPRNG | Never predictable |
+## Find-or-Create Semantics
+
+`POST /auth/token` is **idempotent** for the same `(platform_id, phone_number)` pair:
+
+- **First call:** creates a user with `status = onboarding`, returns token
+- **Subsequent calls:** returns a fresh token for the existing user (reflects current `status`)
+
+The token always reflects the **current status in DB**. If a user has been soft-deleted, the endpoint returns an error — deleted users cannot receive new tokens.
+
+---
+
+## JWT Claims
+
+```json
+{
+  "sub": "usr_7Hq4nMdKpRsXwYzA1b",
+  "status": "onboarding",
+  "iat": 1718000000,
+  "exp": 1718086400
+}
+```
+
+| Claim | Description |
+|-------|-------------|
+| `sub` | User ID — use this to identify the user in all subsequent calls |
+| `status` | `onboarding` or `active` — use to decide whether to show onboarding UI |
+| `exp` | Expiry (configurable via `jwt.expiry_hours`) |
+
+There are **no refresh tokens**. When the JWT expires, call `POST /auth/token` again from the partner backend.
 
 ---
 
 ## Endpoints
 
-<CardGroup cols={2}>
-  <Card title="POST /auth/otp/trigger" icon="phone" color="#f59e0b">
-    Send OTP to phone number. UAT always succeeds and returns `otp: "123456"` in the response body (dev convenience — not present in production).
-  </Card>
-  <Card title="POST /auth/otp/verify" icon="check" color="#16a34a">
-    Verify OTP → JWT pair + `is_new_user` flag. Triggers wallet provisioning on success. Increments `attempts` on every wrong OTP.
-  </Card>
-  <Card title="POST /auth/token/refresh" icon="arrows-rotate" color="#3b82f6">
-    Exchange a valid refresh token for a new token pair. Old refresh token is **revoked immediately** (single-use rotation).
-  </Card>
-  <Card title="POST /auth/logout" icon="right-from-bracket" color="#dc2626">
-    Revoke current device session. Requires `Authorization: Bearer` header. Other active sessions on other devices are unaffected.
+<CardGroup cols={1}>
+  <Card title="POST /auth/token" icon="key" color="#16a34a" href="/api/endpoints/auth/generate-token">
+    Issue a JWT for a user. Creates the user on first call. Requires partner `api-key` header.
   </Card>
 </CardGroup>
 
 ---
 
-## Security Model
-
-### OTP Security
-
-<CardGroup cols={2}>
-  <Card title="OTP Hashing" icon="shield-check" color="#0891b2">
-    OTP is hashed with **bcrypt** (cost factor 12) before storage. The plaintext OTP is never written to the database. When the user submits their OTP, it is verified against the bcrypt hash using constant-time comparison.
-  </Card>
-  <Card title="Single Use" icon="ban" color="#dc2626">
-    `verified_at` is set on the first successful verification. Any subsequent call to verify with the same OTP — even the correct one — returns `INVALID_OTP`. This prevents replay attacks.
-  </Card>
-  <Card title="Brute Force Protection" icon="shield" color="#7c3aed">
-    `attempts` is incremented atomically on every wrong OTP. After 5 failures, the session is permanently invalidated — no further attempts are accepted regardless of the OTP value. The user must trigger a new OTP.
-  </Card>
-  <Card title="10-Minute Expiry" icon="clock" color="#f59e0b">
-    OTP sessions expire 10 minutes after creation. `expires_at` is checked before bcrypt verification, so an expired OTP returns `OTP_EXPIRED` immediately without doing bcrypt work.
-  </Card>
-</CardGroup>
-
-### Token Security
-
-<CardGroup cols={2}>
-  <Card title="JWT Access Token" icon="key" color="#16a34a">
-    Signed with HS256 using a server-side secret. Claims include `user_id` and `exp`. Validated on every protected request by the middleware — no DB lookup required for access token validation (stateless).
-  </Card>
-  <Card title="Refresh Token — Hash Only" icon="database" color="#f59e0b">
-    Refresh tokens are 256-bit random hex strings. Only the SHA-256 hash is stored in `user_sessions.refresh_token_hash`. The plaintext token is only ever in the HTTP response — the DB never holds it.
-  </Card>
-  <Card title="Token Rotation" icon="arrows-rotate" color="#3b82f6">
-    Refresh tokens are single-use. `/auth/token/refresh` atomically revokes the submitted token and issues a new pair. If the same token is used twice (race condition), the second call returns `401`.
-  </Card>
-  <Card title="Per-Device Sessions" icon="mobile" color="#8b5cf6">
-    Each login creates a new `user_sessions` row. Logout revokes only the session associated with the current `Authorization` token. A user with 3 active devices can log out of one without affecting the others.
-  </Card>
-</CardGroup>
-
----
-
-## Token Lifecycle
-
-```mermaid
-stateDiagram-v2
-    direction LR
-    [*] --> Active : POST /auth/otp/verify succeeds
-    Active --> Refreshed : POST /auth/token/refresh
-    Refreshed --> Active : new token pair issued to app
-    Active --> Revoked : POST /auth/logout
-    Active --> Expired : 24h elapsed (access token)
-    Active --> Expired : 30d elapsed (refresh token)
-    Refreshed --> Revoked : old session marked is_revoked=true
-    Revoked --> [*]
-    Expired --> [*]
-```
-
-| Token | Expiry | Recommended Storage |
-|-------|--------|---------------------|
-| Access token (JWT) | 24 hours | In-memory only; SecureEnclave/TEE if persisted |
-| Refresh token (opaque) | 30 days | iOS Keychain / Android Keystore |
-
-<Warning>
-  Never store tokens in `localStorage`, `SharedPreferences` (unencrypted), or in plaintext files. The access token is essentially a password for 24 hours — treat it with equivalent care.
-</Warning>
-
----
-
-## Session Management
-
-Each user can have multiple concurrent sessions — one per device or app install. Sessions are tracked in the `user_sessions` table:
-
-- **`is_revoked`**: Set to `true` by logout or by double-use of a refresh token.
-- **`expires_at`**: Hard expiry after 30 days regardless of activity.
-- **`last_used_at`**: Updated on each token refresh. Used for audit and inactive session cleanup.
-- **`device_info`**: Optional client-provided string identifying the device/platform.
-
-### What happens on token refresh?
-
-```text
-1. Receive refresh_token from client
-2. Compute SHA-256(refresh_token) → lookup_hash
-3. SELECT session WHERE refresh_token_hash = lookup_hash AND NOT is_revoked AND expires_at > NOW()
-4. If not found → 401 INVALID_TOKEN
-5. UPDATE session SET is_revoked = true  (old token invalidated)
-6. INSERT new session row with new token pair
-7. Return new access_token + refresh_token to client
-```
-
-This is an atomic read-invalidate-reissue pattern. Steps 5 and 6 run in a database transaction.
-
----
-
-## Database Schema
-
-```mermaid
-erDiagram
-    users {
-        varchar id PK
-        varchar phone UK
-        varchar first_name
-        varchar last_name
-        varchar email
-        timestamp created_at
-    }
-    otp_sessions {
-        varchar id PK
-        varchar phone
-        varchar otp_hash
-        timestamp expires_at
-        timestamp verified_at
-        int attempts
-        timestamp created_at
-    }
-    user_sessions {
-        varchar id PK
-        varchar user_id FK
-        varchar refresh_token_hash UK
-        varchar device_info
-        bool is_revoked
-        timestamp expires_at
-        timestamp last_used_at
-        timestamp created_at
-    }
-    users ||--o{ user_sessions : "has many"
-```
-
-<Tip>
-  `otp_hash` and `refresh_token_hash` are **never** plaintext. Raw values exist only in transit (HTTP response body). The DB stores only hashes.
-</Tip>
-
----
-
-## Request / Response Examples
+## Request / Response Example
 
 <CodeGroup>
-```bash Trigger OTP
-curl -X POST http://localhost:8080/auth/otp/trigger \
-  -H 'Content-Type: application/json' \
-  -d '{"phone": "9876543210"}'
-```
-
-```json Response 200 (UAT)
-{
-  "success": true,
-  "otp": "123456"
-}
-```
-
-```json Response 400 — invalid phone
-{
-  "error": "VALIDATION_ERROR",
-  "message": "Phone must be a 10-digit Indian mobile number",
-  "status_code": 400
-}
-```
-</CodeGroup>
-
-<CodeGroup>
-```bash Verify OTP
-curl -X POST http://localhost:8080/auth/otp/verify \
+```bash Generate token
+curl -X POST http://localhost:8080/auth/token \
+  -H 'api-key: your-partner-key' \
   -H 'Content-Type: application/json' \
   -d '{
-    "phone": "9876543210",
-    "otp": "123456"
+    "phone_number": "9876543210",
+    "phone_country_code": "+91",
+    "platform_id": "platform_3Xk9mNpQrBvLwJtY2c"
   }'
 ```
 
-```json Response 200 — success
+```json Response 201 — token issued
 {
-  "success": true,
-  "message": "OTP verified successfully",
-  "user_id": "a3f8c2d1-...",
-  "is_new_user": true,
-  "access_token": "eyJhbGci...",
-  "refresh_token": "d4e5f6a7...",
-  "access_token_expires_at": 1750000000,
-  "refresh_token_expires_at": 1752592000
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```
 
-```json Response 401 — wrong OTP
+```json Response 400 — platform not found
 {
-  "error": "INVALID_OTP",
-  "message": "OTP is incorrect or has expired",
-  "status_code": 401
+  "error": {
+    "code": "PLATFORM_NOT_FOUND",
+    "message": "platform not found"
+  }
 }
 ```
 
-```json Response 401 — OTP expired
+```json Response 401 — invalid partner key
 {
-  "error": "OTP_EXPIRED",
-  "message": "OTP session has expired. Please request a new OTP.",
-  "status_code": 401
-}
-```
-
-```json Response 429 — too many attempts
-{
-  "error": "TOO_MANY_OTP_ATTEMPTS",
-  "message": "Too many incorrect attempts. Please request a new OTP.",
-  "status_code": 429
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "missing or invalid API key"
+  }
 }
 ```
 </CodeGroup>
-
-<CodeGroup>
-```bash Refresh Token
-curl -X POST http://localhost:8080/auth/token/refresh \
-  -H 'Content-Type: application/json' \
-  -d '{"refresh_token": "d4e5f6a7..."}'
-```
-
-```json Response 200
-{
-  "success": true,
-  "access_token": "eyJhbGci...",
-  "refresh_token": "b8c9d0e1...",
-  "access_token_expires_at": 1750086400,
-  "refresh_token_expires_at": 1752678400
-}
-```
-
-```json Response 401 — token already used or expired
-{
-  "error": "INVALID_TOKEN",
-  "message": "Refresh token is invalid, revoked, or expired",
-  "status_code": 401
-}
-```
-</CodeGroup>
-
-<CodeGroup>
-```bash Logout
-curl -X POST http://localhost:8080/auth/logout \
-  -H 'Authorization: Bearer eyJhbGci...'
-```
-
-```json Response 200
-{
-  "success": true,
-  "message": "Logged out successfully"
-}
-```
-</CodeGroup>
-
----
-
-## Wallet Provisioning at Login
-
-When a new user successfully verifies their OTP, the Auth module triggers wallet creation in the background:
-
-```text
-POST /auth/otp/verify (success)
-  └── User row created (or fetched if existing)
-  └── JWT token pair issued  ← returned to client immediately
-  └── [background] wallet::ensure_customer_wallet(user_id)
-        └── Check: does customer_wallets row exist?
-        └── No → insert with status = CREATED, balance = 0
-        └── Yes → no-op (idempotent)
-```
-
-The login response does **not** wait for wallet creation. The wallet status transitions from `CREATED` → `PENDING` → `IN_PROGRESS` → `COMPLETED` as the Juspay API is called in the background. Check `/wallet` status before initiating payments.

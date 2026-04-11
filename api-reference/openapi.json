@@ -2,17 +2,13 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Aarokya API",
-    "description": "API for Aarokya healthcare application",
+    "description": "API for the Aarokya users module — platform management, user lifecycle, and token issuance.",
     "contact": {
-      "name": "Aarokya Team"
+      "name": "Aarokya Engineering"
     },
     "version": "0.1.0"
   },
   "servers": [
-    {
-      "url": "https://4d3f-2401-4900-1cbc-dfe1-4c84-26fc-fed9-a7a3.ngrok-free.app",
-      "description": "Local (ngrok)"
-    },
     {
       "url": "http://localhost:8080",
       "description": "Local"
@@ -27,1214 +23,649 @@
     }
   ],
   "paths": {
-    "/auth/logout": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "operationId": "logout",
-        "responses": {
-          "200": {
-            "description": "Logged out successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LogoutResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Invalid or missing token"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ]
-      }
-    },
-    "/auth/otp/trigger": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "operationId": "otp_trigger",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OtpTriggerRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OTP sent successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OtpTriggerResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        }
-      }
-    },
-    "/auth/otp/verify": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "operationId": "otp_verify",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OtpVerifyRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OTP verified, tokens issued",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OtpVerifyResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid OTP or request"
-          },
-          "401": {
-            "description": "OTP expired or too many attempts"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        }
-      }
-    },
-    "/auth/token/refresh": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "operationId": "token_refresh",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TokenRefreshRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Tokens refreshed successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TokenRefreshResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Invalid or expired refresh token"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        }
-      }
-    },
     "/health": {
       "get": {
-        "tags": [
-          "Health"
-        ],
-        "operationId": "get_health",
+        "tags": ["Health"],
+        "summary": "Health check",
+        "operationId": "health_check",
         "responses": {
           "200": {
             "description": "Service is healthy",
             "content": {
               "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
+                "schema": { "type": "string", "example": "OK" }
               }
             }
           }
         }
       }
     },
-    "/user/profile": {
-      "get": {
-        "tags": [
-          "User"
-        ],
-        "operationId": "get_profile",
+    "/auth/token": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Generate token",
+        "description": "Authenticate a user by phone number and platform, returning a JWT access token. Creates the user account on first call (find-or-create). Requires an external partner API key (`api-key` header).",
+        "operationId": "generate_token",
+        "security": [{ "ExternalApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/GenerateTokenRequest" }
+            }
+          }
+        },
         "responses": {
-          "200": {
-            "description": "Current user's profile",
+          "201": {
+            "description": "Token issued",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GetUserProfileResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/GenerateTokenResponse" }
               }
             }
           },
-          "401": {
-            "description": "Missing or invalid token"
-          },
-          "404": {
-            "description": "User not found"
-          },
-          "500": {
-            "description": "Internal server error"
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/platforms": {
+      "post": {
+        "tags": ["Platforms"],
+        "summary": "Create platform",
+        "description": "Create a new platform (tenant). Requires admin API key.",
+        "operationId": "create_platform",
+        "security": [{ "AdminApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreatePlatformRequest" }
+            }
           }
         },
-        "security": [
+        "responses": {
+          "201": {
+            "description": "Platform created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlatformResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "get": {
+        "tags": ["Platforms"],
+        "summary": "List platforms",
+        "description": "Returns a paginated list of platforms. Requires admin API key.",
+        "operationId": "list_platforms",
+        "security": [{ "AdminApiKey": [] }],
+        "parameters": [
           {
-            "Bearer": []
+            "name": "status",
+            "in": "query",
+            "schema": { "$ref": "#/components/schemas/PlatformStatus" }
+          },
+          {
+            "name": "start_time",
+            "in": "query",
+            "schema": { "type": "string", "format": "date-time", "example": "2024-01-01T00:00:00Z" }
+          },
+          {
+            "name": "end_time",
+            "in": "query",
+            "schema": { "type": "string", "format": "date-time", "example": "2024-12-31T23:59:59Z" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20, "maximum": 100 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": { "type": "integer", "default": 0 }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "List of platforms",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlatformListResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/platforms/{platform_id}": {
+      "get": {
+        "tags": ["Platforms"],
+        "summary": "Get platform",
+        "description": "Fetch a platform by ID. Requires admin API key.",
+        "operationId": "get_platform_by_id",
+        "security": [{ "AdminApiKey": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/platform_id" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Platform found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlatformResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
       },
       "patch": {
-        "tags": [
-          "User"
+        "tags": ["Platforms"],
+        "summary": "Update platform",
+        "description": "Update a platform's name. Requires admin API key.",
+        "operationId": "update_platform",
+        "security": [{ "AdminApiKey": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/platform_id" }
         ],
-        "operationId": "update_profile",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateUserProfileRequest"
-              }
+              "schema": { "$ref": "#/components/schemas/UpdatePlatformRequest" }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
-            "description": "Updated user profile",
+            "description": "Platform updated",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UpdateUserProfileResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/PlatformResponse" }
               }
             }
           },
-          "400": {
-            "description": "Validation error — invalid gender or dob format"
-          },
-          "401": {
-            "description": "Missing or invalid token"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ]
-      }
-    },
-    "/wallet": {
-      "get": {
-        "tags": [
-          "Wallet"
-        ],
-        "operationId": "get_wallet",
-        "responses": {
-          "200": {
-            "description": "Wallet summary for the authenticated user",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WalletSummaryResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "No wallet found for this user"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ]
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
       },
-      "post": {
-        "tags": [
-          "Wallet"
+      "delete": {
+        "tags": ["Platforms"],
+        "summary": "Delete platform",
+        "description": "Soft-delete a platform (sets status to inactive). Requires admin API key.",
+        "operationId": "delete_platform",
+        "security": [{ "AdminApiKey": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/platform_id" }
         ],
-        "operationId": "create_wallet",
         "responses": {
           "200": {
-            "description": "Wallet already existed",
+            "description": "Platform deleted",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateWalletResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/DeletePlatformResponse" }
               }
             }
           },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "List users",
+        "description": "Returns a paginated list of users. Requires admin API key.",
+        "operationId": "list_users",
+        "security": [{ "AdminApiKey": [] }],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "$ref": "#/components/schemas/UserStatus" }
+          },
+          {
+            "name": "start_time",
+            "in": "query",
+            "schema": { "type": "string", "format": "date-time" }
+          },
+          {
+            "name": "end_time",
+            "in": "query",
+            "schema": { "type": "string", "format": "date-time" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20, "maximum": 100 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": { "type": "integer", "default": 0 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of users",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserListResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/users/{user_id}": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get user",
+        "description": "Fetch a user by ID. JWT-authenticated users can only fetch their own record; admin key has full access.",
+        "operationId": "get_user_by_id",
+        "security": [{ "BearerAuth": [] }, { "AdminApiKey": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/user_id" }
+        ],
+        "responses": {
+          "200": {
+            "description": "User found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "patch": {
+        "tags": ["Users"],
+        "summary": "Update user",
+        "description": "Update a user's profile fields. Allowed for users in both `onboarding` and `active` status.",
+        "operationId": "update_user",
+        "security": [{ "BearerAuth": [] }, { "AdminApiKey": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/user_id" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateUserRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User updated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "delete": {
+        "tags": ["Users"],
+        "summary": "Delete user",
+        "description": "Soft-delete a user. Requires admin API key.",
+        "operationId": "delete_user",
+        "security": [{ "AdminApiKey": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/user_id" }
+        ],
+        "responses": {
+          "200": {
+            "description": "User deleted",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DeleteUserResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/users/{user_id}/complete_onboarding": {
+      "post": {
+        "tags": ["Users"],
+        "summary": "Complete onboarding",
+        "description": "Finalise a user's onboarding by submitting required profile fields. Transitions `status` from `onboarding` → `active` and returns a fresh access token.",
+        "operationId": "complete_onboarding",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/user_id" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CompleteOnboardingRequest" }
+            }
+          }
+        },
+        "responses": {
           "201": {
-            "description": "Wallet created",
+            "description": "Onboarding complete",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateWalletResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/CompleteOnboardingResponse" }
               }
             }
           },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ]
-      }
-    },
-    "/wallet/{wallet_id}/balance": {
-      "get": {
-        "tags": [
-          "Wallet"
-        ],
-        "operationId": "get_wallet_balance",
-        "parameters": [
-          {
-            "name": "wallet_id",
-            "in": "path",
-            "description": "Transcorp wallet id (`transcorp_wallet_id` from GET /wallet)",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Balance from DB",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GetWalletBalanceOutput"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "No data available"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ]
-      }
-    },
-    "/wallet/{wallet_id}/status": {
-      "get": {
-        "tags": [
-          "Wallet"
-        ],
-        "operationId": "get_wallet_status",
-        "parameters": [
-          {
-            "name": "wallet_id",
-            "in": "path",
-            "description": "Transcorp wallet id (`transcorp_wallet_id` from GET /wallet)",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Status from DB",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GetWalletStatusOutput"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "No data available"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ]
-      }
-    },
-    "/wallet/{wallet_id}/transactions/history/{number_of_days}": {
-      "get": {
-        "tags": [
-          "Wallet"
-        ],
-        "operationId": "get_wallet_transaction_history",
-        "parameters": [
-          {
-            "name": "wallet_id",
-            "in": "path",
-            "description": "Transcorp wallet id (`transcorp_wallet_id` from GET /wallet)",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "number_of_days",
-            "in": "path",
-            "description": "Filter window in days (0 = all history, 1–365)",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int32"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Local ledger (max 10 entries)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GetWalletTransactionHistoryOutput"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "number_of_days out of range"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "No data available"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "security": [
-          {
-            "Bearer": []
-          }
-        ]
-      }
-    },
-    "/insurance/plan": {
-      "get": {
-        "tags": ["Insurance"],
-        "operationId": "get_insurance_plan",
-        "security": [{"Bearer": []}],
-        "responses": {
-          "200": {
-            "description": "Insurance plan details",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GetInsurancePlanOutput"
-                }
-              }
-            }
-          },
-          "401": {"description": "Unauthorized"},
-          "404": {"description": "No active insurance plan found"},
-          "500": {"description": "Internal server error"}
-        }
-      }
-    },
-    "/insurance/policies": {
-      "post": {
-        "tags": ["Insurance Policy"],
-        "operationId": "purchase_policy",
-        "security": [{"Bearer": []}],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PurchasePolicyRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Policy purchased successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PurchasePolicyResponse"
-                }
-              }
-            }
-          },
-          "400": {"description": "Validation error"},
-          "401": {"description": "Unauthorized"},
-          "404": {"description": "Insurance plan not found"},
-          "500": {"description": "Internal server error"}
-        }
-      }
-    },
-    "/insurance/policies/{policyId}": {
-      "get": {
-        "tags": ["Insurance Policy"],
-        "operationId": "get_insurance_policy",
-        "security": [{"Bearer": []}],
-        "parameters": [
-          {
-            "name": "policyId",
-            "in": "path",
-            "required": true,
-            "schema": {"type": "string"}
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Policy details",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GetInsurancePolicyResponse"
-                }
-              }
-            }
-          },
-          "401": {"description": "Unauthorized"},
-          "404": {"description": "Policy not found"},
-          "500": {"description": "Internal server error"}
-        }
-      }
-    },
-    "/insurance/claims": {
-      "post": {
-        "tags": ["Insurance Claims"],
-        "operationId": "raise_claim",
-        "security": [{"Bearer": []}],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RaiseClaimRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Claim raised and approved",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RaiseClaimResponse"
-                }
-              }
-            }
-          },
-          "400": {"description": "Validation error"},
-          "401": {"description": "Unauthorized"},
-          "404": {"description": "Policy not found"},
-          "500": {"description": "Internal server error"}
-        }
-      }
-    },
-    "/insurance/claims/{claimId}/status": {
-      "get": {
-        "tags": ["Insurance Claims"],
-        "operationId": "get_claim_status",
-        "security": [{"Bearer": []}],
-        "parameters": [
-          {
-            "name": "claimId",
-            "in": "path",
-            "required": true,
-            "schema": {"type": "string"}
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Claim status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GetClaimStatusResponse"
-                }
-              }
-            }
-          },
-          "401": {"description": "Unauthorized"},
-          "404": {"description": "Claim not found"},
-          "500": {"description": "Internal server error"}
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "500": { "$ref": "#/components/responses/InternalError" }
         }
       }
     }
   },
   "components": {
-    "schemas": {
-      "CreateWalletResponse": {
-        "type": "object",
-        "required": [
-          "user_id",
-          "transcorp_wallet_id",
-          "balance",
-          "wallet_status",
-          "wallet_status_transcorp",
-          "created"
-        ],
-        "properties": {
-          "balance": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Balance in minor units (paise for INR)."
-          },
-          "created": {
-            "type": "boolean",
-            "description": "`true` if a new row was inserted; `false` if the wallet already existed."
-          },
-          "transcorp_wallet_id": {
-            "type": "string"
-          },
-          "user_id": {
-            "type": "string"
-          },
-          "wallet_status": {
-            "$ref": "#/components/schemas/WalletStatus"
-          },
-          "wallet_status_transcorp": {
-            "$ref": "#/components/schemas/WalletStatusTranscorp"
-          }
-        }
-      },
-      "GetUserProfileResponse": {
-        "type": "object",
-        "description": "Response body for GET /user/profile.",
-        "required": [
-          "user_id",
-          "phone",
-          "profile_complete"
-        ],
-        "properties": {
-          "aadhaar_last4": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Aadhaar last-4 masked as \"XXXXXXXX{last4}\", e.g. \"XXXXXXXX1234\"."
-          },
-          "address": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "dob": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Date of birth as \"YYYY-MM-DD\" string, if set."
-          },
-          "email": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "employer": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "first_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "gender": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "One of: \"male\", \"female\", \"other\".",
-            "example": "male"
-          },
-          "last_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "occupation": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "One of: \"salaried\", \"self_employed\", \"professional\", \"student\", \"homemaker\", \"retired\", \"other\".",
-            "example": "salaried"
-          },
-          "phone": {
-            "type": "string"
-          },
-          "profile_complete": {
-            "type": "boolean",
-            "description": "`true` when both `first_name` and `last_name` are present."
-          },
-          "user_id": {
-            "type": "string"
-          }
-        }
-      },
-      "GetWalletBalanceOutput": {
-        "type": "object",
-        "required": [
-          "wallet_id",
-          "current_balance",
-          "currency"
-        ],
-        "properties": {
-          "currency": {
-            "type": "string"
-          },
-          "current_balance": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "last_refreshed": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/Timestamp"
-              }
-            ]
-          },
-          "linked": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "wallet_id": {
-            "type": "string"
-          }
-        }
-      },
-      "GetWalletStatusOutput": {
-        "type": "object",
-        "required": [
-          "wallet_id",
-          "wallet_status"
-        ],
-        "properties": {
-          "wallet_id": {
-            "type": "string"
-          },
-          "wallet_status": {
-            "$ref": "#/components/schemas/WalletStatus"
-          }
-        }
-      },
-      "GetWalletTransactionHistoryOutput": {
-        "type": "object",
-        "required": [
-          "wallet_id",
-          "transactions"
-        ],
-        "properties": {
-          "transactions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/WalletTransaction"
-            }
-          },
-          "wallet_id": {
-            "type": "string"
-          }
-        }
-      },
-      "LogoutResponse": {
-        "type": "object",
-        "required": [
-          "success",
-          "message"
-        ],
-        "properties": {
-          "message": {
-            "type": "string"
-          },
-          "success": {
-            "type": "boolean"
-          }
-        }
-      },
-      "OtpTriggerRequest": {
-        "type": "object",
-        "required": [
-          "phone"
-        ],
-        "properties": {
-          "phone": {
-            "type": "string"
-          }
-        }
-      },
-      "OtpTriggerResponse": {
-        "type": "object",
-        "required": [
-          "success"
-        ],
-        "properties": {
-          "otp": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "In UAT: OTP returned for testing; remove in production"
-          },
-          "success": {
-            "type": "boolean"
-          }
-        }
-      },
-      "OtpVerifyRequest": {
-        "type": "object",
-        "required": [
-          "phone",
-          "otp"
-        ],
-        "properties": {
-          "device_info": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "otp": {
-            "type": "string"
-          },
-          "phone": {
-            "type": "string"
-          }
-        }
-      },
-      "OtpVerifyResponse": {
-        "type": "object",
-        "required": [
-          "success",
-          "message",
-          "user_id",
-          "is_new_user",
-          "access_token",
-          "refresh_token",
-          "access_token_expires_at",
-          "refresh_token_expires_at"
-        ],
-        "properties": {
-          "access_token": {
-            "type": "string"
-          },
-          "access_token_expires_at": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "is_new_user": {
-            "type": "boolean"
-          },
-          "message": {
-            "type": "string"
-          },
-          "refresh_token": {
-            "type": "string"
-          },
-          "refresh_token_expires_at": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "success": {
-            "type": "boolean"
-          },
-          "user_id": {
-            "type": "string"
-          }
-        }
-      },
-      "Timestamp": {
-        "type": "object",
-        "required": [
-          "seconds"
-        ],
-        "properties": {
-          "seconds": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "TokenRefreshRequest": {
-        "type": "object",
-        "required": [
-          "refresh_token"
-        ],
-        "properties": {
-          "refresh_token": {
-            "type": "string"
-          }
-        }
-      },
-      "TokenRefreshResponse": {
-        "type": "object",
-        "required": [
-          "success",
-          "access_token",
-          "refresh_token",
-          "access_token_expires_at",
-          "refresh_token_expires_at"
-        ],
-        "properties": {
-          "access_token": {
-            "type": "string"
-          },
-          "access_token_expires_at": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "refresh_token": {
-            "type": "string"
-          },
-          "refresh_token_expires_at": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "success": {
-            "type": "boolean"
-          }
-        }
-      },
-      "TransactionStatus": {
-        "type": "string",
-        "enum": [
-          "SUCCESS",
-          "FAILED",
-          "PENDING"
-        ]
-      },
-      "UpdateUserProfileRequest": {
-        "type": "object",
-        "description": "Request body for PATCH /user/profile.\n\nAll fields are optional — only provided fields are updated.\n`dob` must be in \"YYYY-MM-DD\" format.\n`phone` and `aadhaar_last4` cannot be updated via this endpoint.",
-        "properties": {
-          "address": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "dob": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Date of birth in \"YYYY-MM-DD\" format."
-          },
-          "email": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "employer": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "first_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "gender": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "One of: \"male\", \"female\", \"other\".",
-            "example": "male"
-          },
-          "last_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "occupation": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "One of: \"salaried\", \"self_employed\", \"professional\", \"student\", \"homemaker\", \"retired\", \"other\".",
-            "example": "salaried"
-          }
-        }
-      },
-      "UpdateUserProfileResponse": {
-        "type": "object",
-        "description": "Response body for PATCH /user/profile.",
-        "required": [
-          "user_id",
-          "phone",
-          "profile_complete"
-        ],
-        "properties": {
-          "aadhaar_last4": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Aadhaar last-4 masked as \"XXXXXXXX{last4}\", e.g. \"XXXXXXXX1234\"."
-          },
-          "address": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "dob": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Date of birth as \"YYYY-MM-DD\" string, if set."
-          },
-          "email": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "employer": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "first_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "gender": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "One of: \"male\", \"female\", \"other\".",
-            "example": "male"
-          },
-          "last_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "occupation": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "One of: \"salaried\", \"self_employed\", \"professional\", \"student\", \"homemaker\", \"retired\", \"other\".",
-            "example": "salaried"
-          },
-          "phone": {
-            "type": "string"
-          },
-          "profile_complete": {
-            "type": "boolean",
-            "description": "`true` when both `first_name` and `last_name` are present."
-          },
-          "user_id": {
-            "type": "string"
-          }
-        }
-      },
-      "WalletStatus": {
-        "type": "string",
-        "enum": [
-          "CREATED",
-          "PENDING",
-          "IN_PROGRESS",
-          "COMPLETED",
-          "RETRYING",
-          "FAILED"
-        ]
-      },
-      "WalletStatusTranscorp": {
-        "type": "string",
-        "description": "Transcorp-reported wallet state (when integrated).\n`Unknown` is returned when the Transcorp status has not been provisioned yet.",
-        "enum": [
-          "ACTIVE",
-          "BLOCKED",
-          "UNKNOWN"
-        ]
-      },
-      "WalletSummaryResponse": {
-        "type": "object",
-        "description": "Returned by `GET /wallet/me` — use this in tests to read `transcorp_wallet_id` after login.",
-        "required": [
-          "user_id",
-          "transcorp_wallet_id",
-          "balance",
-          "wallet_status",
-          "wallet_status_transcorp"
-        ],
-        "properties": {
-          "balance": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "transcorp_wallet_id": {
-            "type": "string"
-          },
-          "user_id": {
-            "type": "string"
-          },
-          "wallet_status": {
-            "$ref": "#/components/schemas/WalletStatus"
-          },
-          "wallet_status_transcorp": {
-            "$ref": "#/components/schemas/WalletStatusTranscorp"
-          }
-        }
-      },
-      "WalletTransaction": {
-        "type": "object",
-        "required": [
-          "transaction_id",
-          "transaction_status",
-          "amount",
-          "currency",
-          "occurred_at"
-        ],
-        "properties": {
-          "amount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "currency": {
-            "type": "string"
-          },
-          "occurred_at": {
-            "$ref": "#/components/schemas/Timestamp"
-          },
-          "transaction_id": {
-            "type": "string"
-          },
-          "transaction_status": {
-            "$ref": "#/components/schemas/TransactionStatus"
-          }
-        }
-      }
-    },
     "securitySchemes": {
-      "ApiKey": {
+      "AdminApiKey": {
         "type": "apiKey",
         "in": "header",
-        "name": "api-key"
+        "name": "admin-api-key",
+        "description": "Internal admin key. Used for platform management and admin-level user operations."
       },
-      "Bearer": {
+      "ExternalApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "api-key",
+        "description": "External partner key (e.g. Namma Yatri). Used to issue tokens on behalf of users."
+      },
+      "BearerAuth": {
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "JWT access token. Obtain from /auth/otp/verify endpoint."
+        "description": "JWT issued by `POST /auth/token`. Pass as `Authorization: Bearer <token>`."
+      }
+    },
+    "parameters": {
+      "platform_id": {
+        "name": "platform_id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" },
+        "example": "platform_3Xk9mNpQrBvLwJtY2c"
+      },
+      "user_id": {
+        "name": "user_id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" },
+        "example": "usr_7Hq4nMdKpRsXwYzA1b"
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request body or parameters",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": { "error": { "code": "VALIDATION_ERROR", "message": "name cannot be empty" } }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid authentication",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": { "error": { "code": "UNAUTHORIZED", "message": "missing or invalid API key" } }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Authenticated but not authorised for this resource",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": { "error": { "code": "FORBIDDEN", "message": "access to this user is not allowed" } }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": { "error": { "code": "NOT_FOUND", "message": "platform not found" } }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Resource already exists",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": { "error": { "code": "CONFLICT", "message": "a platform with this name already exists" } }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Unexpected server error",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "PlatformStatus": {
+        "type": "string",
+        "enum": ["active", "inactive"],
+        "description": "Platform lifecycle status."
+      },
+      "UserStatus": {
+        "type": "string",
+        "enum": ["onboarding", "active", "deactivated"],
+        "description": "User lifecycle status."
+      },
+      "Gender": {
+        "type": "string",
+        "enum": ["male", "female", "other"]
+      },
+      "IdProofType": {
+        "type": "string",
+        "enum": ["aadhaar", "pan", "passport", "driving_license", "voter_id"]
+      },
+      "AddressDetails": {
+        "type": "object",
+        "properties": {
+          "line1": { "type": "string", "example": "42 MG Road" },
+          "line2": { "type": "string", "example": "Koramangala" },
+          "city": { "type": "string", "example": "Bengaluru" },
+          "state": { "type": "string", "example": "Karnataka" },
+          "pincode": { "type": "string", "example": "560034" },
+          "country": { "type": "string", "example": "IN" }
+        }
+      },
+      "IdProof": {
+        "type": "object",
+        "required": ["proof_type", "number"],
+        "properties": {
+          "proof_type": { "$ref": "#/components/schemas/IdProofType" },
+          "number": { "type": "string", "description": "Document number (masked in logs)." }
+        }
+      },
+      "GenerateTokenRequest": {
+        "type": "object",
+        "required": ["phone_number", "phone_country_code", "platform_id"],
+        "properties": {
+          "phone_number": { "type": "string", "example": "9876543210", "description": "Masked in server logs." },
+          "phone_country_code": { "type": "string", "example": "+91" },
+          "platform_id": { "type": "string", "example": "platform_3Xk9mNpQrBvLwJtY2c" }
+        }
+      },
+      "GenerateTokenResponse": {
+        "type": "object",
+        "required": ["access_token"],
+        "properties": {
+          "access_token": { "type": "string", "description": "JWT. Pass as `Authorization: Bearer <token>`." }
+        }
+      },
+      "CreatePlatformRequest": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "example": "Namma Yatri" }
+        }
+      },
+      "UpdatePlatformRequest": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "example": "Namma Yatri v2" }
+        }
+      },
+      "PlatformResponse": {
+        "type": "object",
+        "required": ["id", "name", "status", "created_at", "last_modified_at"],
+        "properties": {
+          "id": { "type": "string", "example": "platform_3Xk9mNpQrBvLwJtY2c" },
+          "name": { "type": "string", "example": "Namma Yatri" },
+          "status": { "$ref": "#/components/schemas/PlatformStatus" },
+          "created_at": { "type": "string", "format": "date-time", "example": "2024-06-01T10:30:00Z" },
+          "last_modified_at": { "type": "string", "format": "date-time", "example": "2024-06-01T10:30:00Z" }
+        }
+      },
+      "PlatformListResponse": {
+        "type": "object",
+        "required": ["data", "total", "limit", "offset"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PlatformResponse" }
+          },
+          "total": { "type": "integer", "example": 5 },
+          "limit": { "type": "integer", "example": 20 },
+          "offset": { "type": "integer", "example": 0 }
+        }
+      },
+      "DeletePlatformResponse": {
+        "type": "object",
+        "required": ["id", "status"],
+        "properties": {
+          "id": { "type": "string", "example": "platform_3Xk9mNpQrBvLwJtY2c" },
+          "status": { "$ref": "#/components/schemas/PlatformStatus" }
+        }
+      },
+      "UserResponse": {
+        "type": "object",
+        "required": ["user_id", "phone_number", "phone_country_code", "status"],
+        "properties": {
+          "user_id": { "type": "string", "example": "usr_7Hq4nMdKpRsXwYzA1b" },
+          "phone_number": { "type": "string", "example": "9876543210" },
+          "phone_country_code": { "type": "string", "example": "+91" },
+          "first_name": { "type": "string", "example": "Ravi" },
+          "last_name": { "type": "string", "example": "Kumar" },
+          "email": { "type": "string", "example": "ravi@example.com" },
+          "dob": { "type": "string", "format": "date", "example": "1990-05-15" },
+          "gender": { "$ref": "#/components/schemas/Gender" },
+          "address": { "$ref": "#/components/schemas/AddressDetails" },
+          "status": { "$ref": "#/components/schemas/UserStatus" }
+        }
+      },
+      "UserListResponse": {
+        "type": "object",
+        "required": ["data", "total", "limit", "offset"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/UserResponse" }
+          },
+          "total": { "type": "integer", "example": 42 },
+          "limit": { "type": "integer", "example": 20 },
+          "offset": { "type": "integer", "example": 0 }
+        }
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "first_name": { "type": "string", "example": "Ravi" },
+          "last_name": { "type": "string", "example": "Kumar" },
+          "email": { "type": "string", "example": "ravi@example.com" },
+          "dob": { "type": "string", "format": "date", "example": "1990-05-15" },
+          "gender": { "$ref": "#/components/schemas/Gender" },
+          "address": { "$ref": "#/components/schemas/AddressDetails" }
+        }
+      },
+      "CompleteOnboardingRequest": {
+        "type": "object",
+        "required": ["first_name", "last_name", "dob", "gender", "address"],
+        "properties": {
+          "first_name": { "type": "string", "example": "Ravi" },
+          "last_name": { "type": "string", "example": "Kumar" },
+          "dob": { "type": "string", "format": "date", "example": "1990-05-15" },
+          "gender": { "$ref": "#/components/schemas/Gender" },
+          "address": { "$ref": "#/components/schemas/AddressDetails" },
+          "email": { "type": "string", "example": "ravi@example.com" },
+          "id_proof": { "$ref": "#/components/schemas/IdProof" }
+        }
+      },
+      "CompleteOnboardingResponse": {
+        "type": "object",
+        "required": ["user", "access_token"],
+        "properties": {
+          "user": { "$ref": "#/components/schemas/UserResponse" },
+          "access_token": { "type": "string", "description": "Fresh JWT with status=active." }
+        }
+      },
+      "DeleteUserResponse": {
+        "type": "object",
+        "required": ["user_id", "deleted"],
+        "properties": {
+          "user_id": { "type": "string", "example": "usr_7Hq4nMdKpRsXwYzA1b" },
+          "deleted": { "type": "boolean", "example": true }
+        }
       }
     }
-  },
-  "tags": [
-    {
-      "name": "Health",
-      "description": "Health check endpoints"
-    },
-    {
-      "name": "Auth",
-      "description": "Authentication operations"
-    },
-    {
-      "name": "User",
-      "description": "User profile operations"
-    },
-    {
-      "name": "Wallet",
-      "description": "Customer wallet (stub Transcorp)"
-    }
-  ]
+  }
 }

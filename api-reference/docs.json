@@ -43,10 +43,7 @@
             "pages": [
               "modules/overview",
               "modules/auth",
-              "modules/user",
-              "modules/wallet",
-              "modules/insurance",
-              "modules/call-doctor"
+              "modules/user"
             ]
           }
         ]
@@ -59,26 +56,7 @@
             "pages": [
               "api/overview",
               "api/authentication",
-              "api/sdk-authentication",
               "api/errors"
-            ]
-          },
-          {
-            "group": "Endpoint Guides",
-            "pages": [
-              "api/auth",
-              "api/user-guide",
-              "api/wallet",
-              "api/insurance"
-            ]
-          },
-          {
-            "group": "Aarokya <> Namma Yatri",
-            "pages": [
-              "api/nammayatri/overview",
-              "api/nammayatri/enrollment",
-              "api/nammayatri/payment-lifecycle",
-              "api/nammayatri/configuration"
             ]
           },
           {
@@ -87,37 +65,27 @@
               {
                 "group": "Auth",
                 "pages": [
-                  "api/endpoints/auth/otp-trigger",
-                  "api/endpoints/auth/otp-verify",
-                  "api/endpoints/auth/token-refresh",
-                  "api/endpoints/auth/logout"
+                  "api/endpoints/auth/generate-token"
                 ]
               },
               {
-                "group": "User",
+                "group": "Platforms",
                 "pages": [
-                  "api/endpoints/user/get-profile",
-                  "api/endpoints/user/update-profile"
+                  "api/endpoints/platforms/create",
+                  "api/endpoints/platforms/list",
+                  "api/endpoints/platforms/get",
+                  "api/endpoints/platforms/update",
+                  "api/endpoints/platforms/delete"
                 ]
               },
               {
-                "group": "Wallet",
+                "group": "Users",
                 "pages": [
-                  "api/endpoints/wallet/get-wallet",
-                  "api/endpoints/wallet/create-wallet",
-                  "api/endpoints/wallet/get-balance",
-                  "api/endpoints/wallet/get-status",
-                  "api/endpoints/wallet/transaction-history"
-                ]
-              },
-              {
-                "group": "Insurance",
-                "pages": [
-                  "api/endpoints/insurance/get-plan",
-                  "api/endpoints/insurance/purchase-policy",
-                  "api/endpoints/insurance/get-policy",
-                  "api/endpoints/insurance/raise-claim",
-                  "api/endpoints/insurance/get-claim-status"
+                  "api/endpoints/users/list",
+                  "api/endpoints/users/get",
+                  "api/endpoints/users/update",
+                  "api/endpoints/users/complete-onboarding",
+                  "api/endpoints/users/delete"
                 ]
               },
               {

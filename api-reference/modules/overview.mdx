@@ -1,6 +1,6 @@
 ---
 title: "Modules Overview"
-description: "Aarokya's users-module is composed of three domains: Auth, Platform, and User. Each owns its own database tables, business logic, and error types."
+description: "Aarokya is composed of five domains: Auth, Platform, User, Benefit Provider, and Benefit. Each owns its own database tables, business logic, and error types."
 ---
 
 ## Module Map
@@ -9,6 +9,8 @@ description: "Aarokya's users-module is composed of three domains: Auth, Platfor
 flowchart TD
     subgraph Admin["Admin Operations"]
         PLAT["Platform\nTenant management"]
+        BP["Benefit Provider\nCatalogue management"]
+        BEN["Benefit\nOffering management"]
     end
     subgraph Partner["Partner (Namma Yatri)"]
         AUTH["Auth\nToken issuance"]
@@ -19,6 +21,8 @@ flowchart TD
 
     PLAT -->|"platform_id"| AUTH
     AUTH -->|"find-or-create user"| USR
+    BP -->|"provider_id"| BEN
+    BEN -->|"browsed by"| USR
 ```
 
 ---
@@ -46,6 +50,20 @@ flowchart TD
     Full user lifecycle — read profile, update fields, complete onboarding, soft-delete. Self-access enforced: JWT users can only read/write their own record.
 
     **Tables:** `users`
+  </Card>
+  <Card title="Benefit Provider" icon="hospital" color="#0891b2" href="/modules/benefit_provider">
+    **Admin-only**
+
+    Companies and entities that offer benefits. Top-level grouping for the benefit catalogue. A provider must exist before any benefit can reference it.
+
+    **Tables:** `benefit_providers`
+  </Card>
+  <Card title="Benefit" icon="stethoscope" color="#7c3aed" href="/modules/benefit">
+    **Admin write · JWT + Admin read**
+
+    Individual offerings (consultation, insurance) linked to a provider. Admins manage the catalogue; active JWT users browse and redeem benefits.
+
+    **Tables:** `benefits`
   </Card>
 </CardGroup>
 

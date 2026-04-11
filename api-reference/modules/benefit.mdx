@@ -1,0 +1,144 @@
+---
+title: "Benefit Module"
+description: "Individual offerings (consultation, insurance, etc.) attached to a benefit provider. Admins manage the catalogue; JWT users browse active benefits."
+---
+
+<Info>
+  **Auth guards vary by endpoint** — Create, Update, and Delete are admin-only. Get and List accept both JWT users (active only) and the admin key.
+</Info>
+
+## Overview
+
+A **benefit** is a specific offering — a free consultation session, an insurance policy, a diagnostic test — provided by a [Benefit Provider](/modules/benefit_provider). Benefits carry a `benefit_type` enum and a `benefit_details` JSONB object whose variant must match the type.
+
+Responses always include `provider_name` via a JOIN, so callers never need a separate lookup to display who offers the benefit.
+
+---
+
+## Benefit Types
+
+| `benefit_type` | `benefit_details` variant | Description |
+|----------------|--------------------------|-------------|
+| `consultation` | `Consultation { description }` | Free or subsidised doctor consultation |
+| `insurance_policy` | `InsurancePolicy { description }` | Health or accident insurance |
+
+**Type consistency is enforced at create time.** Sending `benefit_type = consultation` with `InsurancePolicy` details returns `400 BenefitTypeMismatch`.
+
+---
+
+## Visibility Rules
+
+| Actor | Active benefits | Inactive benefits |
+|-------|----------------|-------------------|
+| JWT user (`active` status) | ✓ visible | Hidden — returned as 404 |
+| Admin key | ✓ visible | ✓ visible |
+
+JWT users that are still `onboarding` cannot call benefit endpoints — `GET /benefits` requires `status = active`.
+
+---
+
+## Endpoints
+
+<CardGroup cols={2}>
+  <Card title="POST /benefits" icon="plus" color="#16a34a" href="/api/endpoints/benefits/create">
+    **Admin only.** Create a benefit. Provider must exist and be active. Name must be unique within that provider.
+  </Card>
+  <Card title="GET /benefits" icon="list" color="#f59e0b" href="/api/endpoints/benefits/list">
+    List benefits. JWT users see only `active` ones regardless of filters. Supports `provider_id`, `benefit_type`, `status`, pagination.
+  </Card>
+  <Card title="GET /benefits/{benefit_id}" icon="stethoscope" color="#3b82f6" href="/api/endpoints/benefits/get">
+    Fetch a benefit by UUID. JWT users receive 404 for inactive benefits.
+  </Card>
+  <Card title="PATCH /benefits/{benefit_id}" icon="pen" color="#8b5cf6" href="/api/endpoints/benefits/update">
+    **Admin only.** Update `name`, `benefit_details`, or `status`. All fields optional; omitting all is a no-op.
+  </Card>
+  <Card title="DELETE /benefits/{benefit_id}" icon="trash" color="#dc2626" href="/api/endpoints/benefits/delete">
+    **Admin only.** Soft-delete a benefit (sets `status = inactive`). No child-record check.
+  </Card>
+</CardGroup>
+
+---
+
+## Request / Response Examples
+
+<CodeGroup>
+```bash Create a benefit
+curl -X POST http://localhost:8080/benefits \
+  -H 'admin-api-key: your-admin-key' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Free GP Consultation",
+    "benefit_type": "consultation",
+    "provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
+    "benefit_details": {
+      "type": "Consultation",
+      "description": "One free general physician consultation per month"
+    }
+  }'
+```
+
+```json Response 201 — created
+{
+  "id": "019a1b2c-3d4e-5f6a-7b8c-9d0e1f2a3b4c",
+  "name": "Free GP Consultation",
+  "benefit_type": "consultation",
+  "provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
+  "provider_name": "Apollo Diagnostics",
+  "benefit_details": {
+    "type": "Consultation",
+    "description": "One free general physician consultation per month"
+  },
+  "status": "active",
+  "created_at": "2025-04-12T10:05:00Z",
+  "last_modified_at": "2025-04-12T10:05:00Z"
+}
+```
+
+```json Response 400 — type mismatch
+{
+  "error": {
+    "type": "bad_request",
+    "code": "BE_503",
+    "message": "The benefit_type field does not match the variant in benefit_details"
+  }
+}
+```
+</CodeGroup>
+
+<CodeGroup>
+```bash List benefits filtered by provider (JWT user)
+curl http://localhost:8080/benefits?provider_id=018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b \
+  -H 'Authorization: Bearer eyJhbGci...'
+```
+
+```json Response 200
+{
+  "data": [
+    {
+      "id": "019a1b2c-3d4e-5f6a-7b8c-9d0e1f2a3b4c",
+      "name": "Free GP Consultation",
+      "benefit_type": "consultation",
+      "provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
+      "provider_name": "Apollo Diagnostics",
+      "status": "active"
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}
+```
+</CodeGroup>
+
+---
+
+## Error Codes
+
+| Code | HTTP | Description |
+|------|------|-------------|
+| `BE_500` | 500 | Internal server error |
+| `BE_501` | 404 | Benefit not found |
+| `BE_502` | 409 | Name already exists for this provider |
+| `BE_503` | 400 | `benefit_type` / `benefit_details` mismatch |
+| `BE_504` | 404 | Benefit provider not found or inactive |
+| `BE_505` | 400 | Validation error (e.g. empty name) |

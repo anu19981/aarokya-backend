@@ -2,16 +2,16 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Aarokya API",
-    "description": "API for the Aarokya users module — platform management, user lifecycle, and token issuance.",
+    "description": "API for Aarokya healthcare application",
     "contact": {
-      "name": "Aarokya Engineering"
+      "name": "Aarokya Team"
     },
     "version": "0.1.0"
   },
   "servers": [
     {
       "url": "http://localhost:8080",
-      "description": "Local"
+      "description": "Local development"
     },
     {
       "url": "https://sandbox.api.aarokya.in",
@@ -23,114 +23,684 @@
     }
   ],
   "paths": {
+    "/auth/token": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "generate_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateTokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Platform not found or inactive"
+          },
+          "401": {
+            "description": "Invalid API key"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/benefit_providers": {
+      "get": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "list_benefit_providers",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/BenefitProviderStatus"
+                }
+              ]
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of benefit providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitProviderListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid API key"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "create_benefit_provider",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBenefitProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Benefit provider created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitProviderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Benefit provider name already exists"
+          },
+          "401": {
+            "description": "Invalid API key"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/benefit_providers/{benefit_provider_id}": {
+      "get": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "get_benefit_provider_by_id",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Benefit provider found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitProviderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Benefit provider not found"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "delete_benefit_provider",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Benefit provider deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteBenefitProviderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Benefit provider not found"
+          },
+          "409": {
+            "description": "Benefit provider has active benefits"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "update_benefit_provider",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBenefitProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Benefit provider updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitProviderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Benefit provider name already exists"
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Benefit provider not found"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/benefits": {
+      "get": {
+        "tags": [
+          "Benefit"
+        ],
+        "operationId": "list_benefits",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/BenefitStatus"
+                }
+              ]
+            }
+          },
+          {
+            "name": "benefit_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/BenefitType"
+                }
+              ]
+            }
+          },
+          {
+            "name": "provider_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of benefits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Benefit"
+        ],
+        "operationId": "create_benefit",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBenefitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Benefit created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or benefit type mismatch"
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Benefit provider not found"
+          },
+          "409": {
+            "description": "Benefit name already exists for provider"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/benefits/{benefit_id}": {
+      "get": {
+        "tags": [
+          "Benefit"
+        ],
+        "operationId": "get_benefit_by_id",
+        "parameters": [
+          {
+            "name": "benefit_id",
+            "in": "path",
+            "description": "Benefit ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Benefit found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Benefit not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Benefit"
+        ],
+        "operationId": "delete_benefit",
+        "parameters": [
+          {
+            "name": "benefit_id",
+            "in": "path",
+            "description": "Benefit ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Benefit deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteBenefitResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Benefit not found"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Benefit"
+        ],
+        "operationId": "update_benefit",
+        "parameters": [
+          {
+            "name": "benefit_id",
+            "in": "path",
+            "description": "Benefit ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBenefitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Benefit updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Benefit not found"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
-        "tags": ["Health"],
-        "summary": "Health check",
-        "operationId": "health_check",
+        "tags": [
+          "Health"
+        ],
+        "operationId": "get_health",
         "responses": {
           "200": {
             "description": "Service is healthy",
             "content": {
               "text/plain": {
-                "schema": { "type": "string", "example": "OK" }
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           }
-        }
-      }
-    },
-    "/auth/token": {
-      "post": {
-        "tags": ["Auth"],
-        "summary": "Generate token",
-        "description": "Authenticate a user by phone number and platform, returning a JWT access token. Creates the user account on first call (find-or-create). Requires an external partner API key (`api-key` header).",
-        "operationId": "generate_token",
-        "security": [{ "ExternalApiKey": [] }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/GenerateTokenRequest" }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Token issued",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/GenerateTokenResponse" }
-              }
-            }
-          },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "500": { "$ref": "#/components/responses/InternalError" }
         }
       }
     },
     "/platforms": {
-      "post": {
-        "tags": ["Platforms"],
-        "summary": "Create platform",
-        "description": "Create a new platform (tenant). Requires admin API key.",
-        "operationId": "create_platform",
-        "security": [{ "AdminApiKey": [] }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreatePlatformRequest" }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Platform created",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/PlatformResponse" }
-              }
-            }
-          },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
-      },
       "get": {
-        "tags": ["Platforms"],
-        "summary": "List platforms",
-        "description": "Returns a paginated list of platforms. Requires admin API key.",
+        "tags": [
+          "Platform"
+        ],
         "operationId": "list_platforms",
-        "security": [{ "AdminApiKey": [] }],
         "parameters": [
           {
             "name": "status",
             "in": "query",
-            "schema": { "$ref": "#/components/schemas/PlatformStatus" }
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/PlatformStatus"
+                }
+              ]
+            }
           },
           {
-            "name": "start_time",
+            "name": "time_range",
             "in": "query",
-            "schema": { "type": "string", "format": "date-time", "example": "2024-01-01T00:00:00Z" }
-          },
-          {
-            "name": "end_time",
-            "in": "query",
-            "schema": { "type": "string", "format": "date-time", "example": "2024-12-31T23:59:59Z" }
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
           },
           {
             "name": "limit",
             "in": "query",
-            "schema": { "type": "integer", "default": 20, "maximum": 100 }
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
           },
           {
             "name": "offset",
             "in": "query",
-            "schema": { "type": "integer", "default": 0 }
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
           }
         ],
         "responses": {
@@ -138,127 +708,257 @@
             "description": "List of platforms",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/PlatformListResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformListResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "401": {
+            "description": "Invalid API key"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Platform"
+        ],
+        "operationId": "create_platform",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlatformRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Platform created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Platform name already exists"
+          },
+          "401": {
+            "description": "Invalid API key"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
       }
     },
     "/platforms/{platform_id}": {
       "get": {
-        "tags": ["Platforms"],
-        "summary": "Get platform",
-        "description": "Fetch a platform by ID. Requires admin API key.",
+        "tags": [
+          "Platform"
+        ],
         "operationId": "get_platform_by_id",
-        "security": [{ "AdminApiKey": [] }],
         "parameters": [
-          { "$ref": "#/components/parameters/platform_id" }
+          {
+            "name": "platform_id",
+            "in": "path",
+            "description": "Platform ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
             "description": "Platform found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/PlatformResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
-      },
-      "patch": {
-        "tags": ["Platforms"],
-        "summary": "Update platform",
-        "description": "Update a platform's name. Requires admin API key.",
-        "operationId": "update_platform",
-        "security": [{ "AdminApiKey": [] }],
-        "parameters": [
-          { "$ref": "#/components/parameters/platform_id" }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpdatePlatformRequest" }
-            }
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Platform not found"
           }
         },
-        "responses": {
-          "200": {
-            "description": "Platform updated",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/PlatformResponse" }
-              }
-            }
-          },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
       },
       "delete": {
-        "tags": ["Platforms"],
-        "summary": "Delete platform",
-        "description": "Soft-delete a platform (sets status to inactive). Requires admin API key.",
+        "tags": [
+          "Platform"
+        ],
         "operationId": "delete_platform",
-        "security": [{ "AdminApiKey": [] }],
         "parameters": [
-          { "$ref": "#/components/parameters/platform_id" }
+          {
+            "name": "platform_id",
+            "in": "path",
+            "description": "Platform ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
             "description": "Platform deleted",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/DeletePlatformResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/DeletePlatformResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Platform not found"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Platform"
+        ],
+        "operationId": "update_platform",
+        "parameters": [
+          {
+            "name": "platform_id",
+            "in": "path",
+            "description": "Platform ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlatformRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Platform updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Platform name already exists"
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Platform not found"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
       }
     },
     "/users": {
       "get": {
-        "tags": ["Users"],
-        "summary": "List users",
-        "description": "Returns a paginated list of users. Requires admin API key.",
+        "tags": [
+          "User"
+        ],
         "operationId": "list_users",
-        "security": [{ "AdminApiKey": [] }],
         "parameters": [
           {
             "name": "status",
             "in": "query",
-            "schema": { "$ref": "#/components/schemas/UserStatus" }
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserStatus"
+                }
+              ]
+            }
           },
           {
-            "name": "start_time",
+            "name": "time_range",
             "in": "query",
-            "schema": { "type": "string", "format": "date-time" }
-          },
-          {
-            "name": "end_time",
-            "in": "query",
-            "schema": { "type": "string", "format": "date-time" }
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
           },
           {
             "name": "limit",
             "in": "query",
-            "schema": { "type": "integer", "default": 20, "maximum": 100 }
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
           },
           {
             "name": "offset",
             "in": "query",
-            "schema": { "type": "integer", "default": 0 }
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
           }
         ],
         "responses": {
@@ -266,406 +966,1058 @@
             "description": "List of users",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/UserListResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/UserListResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "401": {
+            "description": "Invalid API key"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
       }
     },
     "/users/{user_id}": {
       "get": {
-        "tags": ["Users"],
-        "summary": "Get user",
-        "description": "Fetch a user by ID. JWT-authenticated users can only fetch their own record; admin key has full access.",
+        "tags": [
+          "User"
+        ],
         "operationId": "get_user_by_id",
-        "security": [{ "BearerAuth": [] }, { "AdminApiKey": [] }],
         "parameters": [
-          { "$ref": "#/components/parameters/user_id" }
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
             "description": "User found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/UserResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
-      },
-      "patch": {
-        "tags": ["Users"],
-        "summary": "Update user",
-        "description": "Update a user's profile fields. Allowed for users in both `onboarding` and `active` status.",
-        "operationId": "update_user",
-        "security": [{ "BearerAuth": [] }, { "AdminApiKey": [] }],
-        "parameters": [
-          { "$ref": "#/components/parameters/user_id" }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpdateUserRequest" }
-            }
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden \u2014 cannot access another user's data"
+          },
+          "404": {
+            "description": "User not found"
           }
         },
-        "responses": {
-          "200": {
-            "description": "User updated",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/UserResponse" }
-              }
-            }
+        "security": [
+          {
+            "Bearer": []
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          {
+            "ApiKey": []
+          }
+        ]
       },
       "delete": {
-        "tags": ["Users"],
-        "summary": "Delete user",
-        "description": "Soft-delete a user. Requires admin API key.",
+        "tags": [
+          "User"
+        ],
         "operationId": "delete_user",
-        "security": [{ "AdminApiKey": [] }],
         "parameters": [
-          { "$ref": "#/components/parameters/user_id" }
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
             "description": "User deleted",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/DeleteUserResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteUserResponse"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "update_user",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "User updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden \u2014 cannot update another user's data"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
       }
     },
     "/users/{user_id}/complete_onboarding": {
       "post": {
-        "tags": ["Users"],
-        "summary": "Complete onboarding",
-        "description": "Finalise a user's onboarding by submitting required profile fields. Transitions `status` from `onboarding` → `active` and returns a fresh access token.",
-        "operationId": "complete_onboarding",
-        "security": [{ "BearerAuth": [] }],
-        "parameters": [
-          { "$ref": "#/components/parameters/user_id" }
+        "tags": [
+          "User"
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/CompleteOnboardingRequest" }
+        "operationId": "complete_onboarding",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           }
-        },
-        "responses": {
-          "201": {
-            "description": "Onboarding complete",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/CompleteOnboardingResponse" }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteOnboardingRequest"
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Onboarding completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteOnboardingResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden \u2014 cannot complete another user's onboarding"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
       }
     }
   },
   "components": {
-    "securitySchemes": {
-      "AdminApiKey": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "admin-api-key",
-        "description": "Internal admin key. Used for platform management and admin-level user operations."
-      },
-      "ExternalApiKey": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "api-key",
-        "description": "External partner key (e.g. Namma Yatri). Used to issue tokens on behalf of users."
-      },
-      "BearerAuth": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT",
-        "description": "JWT issued by `POST /auth/token`. Pass as `Authorization: Bearer <token>`."
-      }
-    },
-    "parameters": {
-      "platform_id": {
-        "name": "platform_id",
-        "in": "path",
-        "required": true,
-        "schema": { "type": "string" },
-        "example": "platform_3Xk9mNpQrBvLwJtY2c"
-      },
-      "user_id": {
-        "name": "user_id",
-        "in": "path",
-        "required": true,
-        "schema": { "type": "string" },
-        "example": "usr_7Hq4nMdKpRsXwYzA1b"
-      }
-    },
-    "responses": {
-      "BadRequest": {
-        "description": "Invalid request body or parameters",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-            "example": { "error": { "code": "VALIDATION_ERROR", "message": "name cannot be empty" } }
-          }
-        }
-      },
-      "Unauthorized": {
-        "description": "Missing or invalid authentication",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-            "example": { "error": { "code": "UNAUTHORIZED", "message": "missing or invalid API key" } }
-          }
-        }
-      },
-      "Forbidden": {
-        "description": "Authenticated but not authorised for this resource",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-            "example": { "error": { "code": "FORBIDDEN", "message": "access to this user is not allowed" } }
-          }
-        }
-      },
-      "NotFound": {
-        "description": "Resource not found",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-            "example": { "error": { "code": "NOT_FOUND", "message": "platform not found" } }
-          }
-        }
-      },
-      "Conflict": {
-        "description": "Resource already exists",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-            "example": { "error": { "code": "CONFLICT", "message": "a platform with this name already exists" } }
-          }
-        }
-      },
-      "InternalError": {
-        "description": "Unexpected server error",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
-          }
-        }
-      }
-    },
     "schemas": {
-      "ErrorResponse": {
+      "AddressDetails": {
         "type": "object",
-        "required": ["error"],
+        "description": "Structured address details for user profiles and insurance documents.",
         "properties": {
-          "error": {
-            "type": "object",
-            "required": ["code", "message"],
-            "properties": {
-              "code": { "type": "string" },
-              "message": { "type": "string" }
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "City, district, or town.",
+            "example": "Bengaluru",
+            "maxLength": 50
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Two-letter country code (ISO 3166-1 alpha-2). Defaults to \"IN\".",
+            "example": "IN",
+            "maxLength": 2
+          },
+          "line1": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Street address or P.O. Box (line 1).",
+            "example": "123, MG Road"
+          },
+          "line2": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Apartment, suite, unit, or building (line 2).",
+            "example": "Flat 4B, Sunrise Apartments"
+          },
+          "pincode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Postal code (6-digit Indian pincode).",
+            "example": "560001"
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "State or union territory.",
+            "example": "Karnataka",
+            "maxLength": 50
+          }
+        }
+      },
+      "BenefitDetails": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConsultationBenefitDetails",
+                "description": "Teleconsultation or in-person consultation benefit."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "benefit_type"
+                ],
+                "properties": {
+                  "benefit_type": {
+                    "type": "string",
+                    "enum": [
+                      "consultation"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Teleconsultation or in-person consultation benefit."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InsurancePolicyBenefitDetails",
+                "description": "Health, life, or accident insurance policy benefit."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "benefit_type"
+                ],
+                "properties": {
+                  "benefit_type": {
+                    "type": "string",
+                    "enum": [
+                      "insurance_policy"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Health, life, or accident insurance policy benefit."
+          }
+        ],
+        "description": "Typed payload stored in `benefits.benefit_details` (JSONB).\n\nDiscriminated by the `\"benefit_type\"` JSON key, matching `common_enums::BenefitType`."
+      },
+      "BenefitListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BenefitResponse"
             }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "BenefitProviderListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BenefitProviderResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "BenefitProviderResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BenefitProviderStatus"
+          }
+        }
+      },
+      "BenefitProviderStatus": {
+        "type": "string",
+        "description": "Benefit provider lifecycle status.",
+        "enum": [
+          "active",
+          "inactive"
+        ]
+      },
+      "BenefitResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "benefit_type",
+          "provider_id",
+          "provider_name",
+          "benefit_details",
+          "status",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "benefit_details": {
+            "$ref": "#/components/schemas/BenefitDetails"
+          },
+          "benefit_type": {
+            "$ref": "#/components/schemas/BenefitType"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provider_id": {
+            "type": "string"
+          },
+          "provider_name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BenefitStatus"
+          }
+        }
+      },
+      "BenefitStatus": {
+        "type": "string",
+        "description": "Benefit lifecycle status.",
+        "enum": [
+          "active",
+          "inactive"
+        ]
+      },
+      "BenefitType": {
+        "type": "string",
+        "description": "Kind of benefit offered by a provider.",
+        "enum": [
+          "consultation",
+          "insurance_policy"
+        ]
+      },
+      "CompleteOnboardingRequest": {
+        "type": "object",
+        "required": [
+          "first_name",
+          "last_name",
+          "dob",
+          "gender",
+          "address"
+        ],
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/AddressDetails"
+          },
+          "dob": {
+            "type": "string",
+            "example": "2000-01-15"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "id_proof": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IdProof"
+              }
+            ]
+          },
+          "last_name": {
+            "type": "string"
+          }
+        }
+      },
+      "CompleteOnboardingResponse": {
+        "type": "object",
+        "required": [
+          "user",
+          "access_token"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          }
+        }
+      },
+      "ConsultationBenefitDetails": {
+        "type": "object",
+        "description": "Details for a consultation-type benefit.\n\nFields will be expanded in the `consultations` module PR.",
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Human-readable description of what the consultation covers."
+          }
+        }
+      },
+      "CreateBenefitProviderRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateBenefitRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "benefit_type",
+          "provider_id",
+          "benefit_details"
+        ],
+        "properties": {
+          "benefit_details": {
+            "$ref": "#/components/schemas/BenefitDetails"
+          },
+          "benefit_type": {
+            "$ref": "#/components/schemas/BenefitType"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provider_id": {
+            "type": "string"
+          }
+        }
+      },
+      "CreatePlatformRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "DeleteBenefitProviderResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BenefitProviderStatus"
+          }
+        }
+      },
+      "DeleteBenefitResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BenefitStatus"
+          }
+        }
+      },
+      "DeletePlatformResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PlatformStatus"
+          }
+        }
+      },
+      "DeleteUserResponse": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "deleted"
+        ],
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "Gender": {
+        "type": "string",
+        "description": "User gender.",
+        "enum": [
+          "male",
+          "female",
+          "other"
+        ]
+      },
+      "GenerateTokenRequest": {
+        "type": "object",
+        "required": [
+          "phone_number",
+          "phone_country_code",
+          "platform_id"
+        ],
+        "properties": {
+          "phone_country_code": {
+            "type": "string",
+            "example": "+91"
+          },
+          "phone_number": {
+            "type": "string"
+          },
+          "platform_id": {
+            "type": "string"
+          }
+        }
+      },
+      "GenerateTokenResponse": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "access_token"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "IdProof": {
+        "type": "object",
+        "required": [
+          "proof_type",
+          "number"
+        ],
+        "properties": {
+          "number": {
+            "type": "string"
+          },
+          "proof_type": {
+            "$ref": "#/components/schemas/IdProofType"
+          }
+        }
+      },
+      "IdProofType": {
+        "type": "string",
+        "description": "Government-issued identity document type.",
+        "enum": [
+          "aadhaar",
+          "pan",
+          "passport",
+          "driving_license",
+          "voter_id"
+        ]
+      },
+      "InsurancePolicyBenefitDetails": {
+        "type": "object",
+        "description": "Details for an insurance-policy-type benefit.\n\nFields will be expanded in the `insurance_policies` module PR.",
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Human-readable description of the policy coverage."
+          }
+        }
+      },
+      "PlatformListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "PlatformResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PlatformStatus"
           }
         }
       },
       "PlatformStatus": {
         "type": "string",
-        "enum": ["active", "inactive"],
-        "description": "Platform lifecycle status."
+        "description": "Platform lifecycle status.",
+        "enum": [
+          "active",
+          "inactive"
+        ]
       },
-      "UserStatus": {
-        "type": "string",
-        "enum": ["onboarding", "active", "deactivated"],
-        "description": "User lifecycle status."
-      },
-      "Gender": {
-        "type": "string",
-        "enum": ["male", "female", "other"]
-      },
-      "IdProofType": {
-        "type": "string",
-        "enum": ["aadhaar", "pan", "passport", "driving_license", "voter_id"]
-      },
-      "AddressDetails": {
+      "UpdateBenefitProviderRequest": {
         "type": "object",
         "properties": {
-          "line1": { "type": "string", "example": "42 MG Road" },
-          "line2": { "type": "string", "example": "Koramangala" },
-          "city": { "type": "string", "example": "Bengaluru" },
-          "state": { "type": "string", "example": "Karnataka" },
-          "pincode": { "type": "string", "example": "560034" },
-          "country": { "type": "string", "example": "IN" }
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       },
-      "IdProof": {
+      "UpdateBenefitRequest": {
         "type": "object",
-        "required": ["proof_type", "number"],
         "properties": {
-          "proof_type": { "$ref": "#/components/schemas/IdProofType" },
-          "number": { "type": "string", "description": "Document number (masked in logs)." }
-        }
-      },
-      "GenerateTokenRequest": {
-        "type": "object",
-        "required": ["phone_number", "phone_country_code", "platform_id"],
-        "properties": {
-          "phone_number": { "type": "string", "example": "9876543210", "description": "Masked in server logs." },
-          "phone_country_code": { "type": "string", "example": "+91" },
-          "platform_id": { "type": "string", "example": "platform_3Xk9mNpQrBvLwJtY2c" }
-        }
-      },
-      "GenerateTokenResponse": {
-        "type": "object",
-        "required": ["access_token"],
-        "properties": {
-          "access_token": { "type": "string", "description": "JWT. Pass as `Authorization: Bearer <token>`." }
-        }
-      },
-      "CreatePlatformRequest": {
-        "type": "object",
-        "required": ["name"],
-        "properties": {
-          "name": { "type": "string", "example": "Namma Yatri" }
+          "benefit_details": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BenefitDetails"
+              }
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BenefitStatus"
+              }
+            ]
+          }
         }
       },
       "UpdatePlatformRequest": {
         "type": "object",
         "properties": {
-          "name": { "type": "string", "example": "Namma Yatri v2" }
-        }
-      },
-      "PlatformResponse": {
-        "type": "object",
-        "required": ["id", "name", "status", "created_at", "last_modified_at"],
-        "properties": {
-          "id": { "type": "string", "example": "platform_3Xk9mNpQrBvLwJtY2c" },
-          "name": { "type": "string", "example": "Namma Yatri" },
-          "status": { "$ref": "#/components/schemas/PlatformStatus" },
-          "created_at": { "type": "string", "format": "date-time", "example": "2024-06-01T10:30:00Z" },
-          "last_modified_at": { "type": "string", "format": "date-time", "example": "2024-06-01T10:30:00Z" }
-        }
-      },
-      "PlatformListResponse": {
-        "type": "object",
-        "required": ["data", "total", "limit", "offset"],
-        "properties": {
-          "data": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/PlatformResponse" }
-          },
-          "total": { "type": "integer", "example": 5 },
-          "limit": { "type": "integer", "example": 20 },
-          "offset": { "type": "integer", "example": 0 }
-        }
-      },
-      "DeletePlatformResponse": {
-        "type": "object",
-        "required": ["id", "status"],
-        "properties": {
-          "id": { "type": "string", "example": "platform_3Xk9mNpQrBvLwJtY2c" },
-          "status": { "$ref": "#/components/schemas/PlatformStatus" }
-        }
-      },
-      "UserResponse": {
-        "type": "object",
-        "required": ["user_id", "phone_number", "phone_country_code", "status"],
-        "properties": {
-          "user_id": { "type": "string", "example": "usr_7Hq4nMdKpRsXwYzA1b" },
-          "phone_number": { "type": "string", "example": "9876543210" },
-          "phone_country_code": { "type": "string", "example": "+91" },
-          "first_name": { "type": "string", "example": "Ravi" },
-          "last_name": { "type": "string", "example": "Kumar" },
-          "email": { "type": "string", "example": "ravi@example.com" },
-          "dob": { "type": "string", "format": "date", "example": "1990-05-15" },
-          "gender": { "$ref": "#/components/schemas/Gender" },
-          "address": { "$ref": "#/components/schemas/AddressDetails" },
-          "status": { "$ref": "#/components/schemas/UserStatus" }
-        }
-      },
-      "UserListResponse": {
-        "type": "object",
-        "required": ["data", "total", "limit", "offset"],
-        "properties": {
-          "data": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/UserResponse" }
-          },
-          "total": { "type": "integer", "example": 42 },
-          "limit": { "type": "integer", "example": 20 },
-          "offset": { "type": "integer", "example": 0 }
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       },
       "UpdateUserRequest": {
         "type": "object",
         "properties": {
-          "first_name": { "type": "string", "example": "Ravi" },
-          "last_name": { "type": "string", "example": "Kumar" },
-          "email": { "type": "string", "example": "ravi@example.com" },
-          "dob": { "type": "string", "format": "date", "example": "1990-05-15" },
-          "gender": { "$ref": "#/components/schemas/Gender" },
-          "address": { "$ref": "#/components/schemas/AddressDetails" }
+          "address": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AddressDetails"
+              }
+            ]
+          },
+          "dob": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2000-01-15"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Gender"
+              }
+            ]
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       },
-      "CompleteOnboardingRequest": {
+      "UserListResponse": {
         "type": "object",
-        "required": ["first_name", "last_name", "dob", "gender", "address"],
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
         "properties": {
-          "first_name": { "type": "string", "example": "Ravi" },
-          "last_name": { "type": "string", "example": "Kumar" },
-          "dob": { "type": "string", "format": "date", "example": "1990-05-15" },
-          "gender": { "$ref": "#/components/schemas/Gender" },
-          "address": { "$ref": "#/components/schemas/AddressDetails" },
-          "email": { "type": "string", "example": "ravi@example.com" },
-          "id_proof": { "$ref": "#/components/schemas/IdProof" }
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
         }
       },
-      "CompleteOnboardingResponse": {
+      "UserResponse": {
         "type": "object",
-        "required": ["user", "access_token"],
+        "required": [
+          "user_id",
+          "phone_number",
+          "phone_country_code",
+          "status"
+        ],
         "properties": {
-          "user": { "$ref": "#/components/schemas/UserResponse" },
-          "access_token": { "type": "string", "description": "Fresh JWT with status=active." }
+          "address": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AddressDetails"
+              }
+            ]
+          },
+          "dob": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Date of birth as \"YYYY-MM-DD\".",
+            "example": "2000-01-15"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Gender"
+              }
+            ]
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone_country_code": {
+            "type": "string"
+          },
+          "phone_number": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserStatus"
+          },
+          "user_id": {
+            "type": "string"
+          }
         }
       },
-      "DeleteUserResponse": {
-        "type": "object",
-        "required": ["user_id", "deleted"],
-        "properties": {
-          "user_id": { "type": "string", "example": "usr_7Hq4nMdKpRsXwYzA1b" },
-          "deleted": { "type": "boolean", "example": true }
-        }
+      "UserStatus": {
+        "type": "string",
+        "description": "User lifecycle status.",
+        "enum": [
+          "onboarding",
+          "active",
+          "deactivated"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "api-key"
+      },
+      "Bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT access token. Obtain from /auth/otp/verify endpoint."
       }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Health check endpoints"
+    },
+    {
+      "name": "Auth",
+      "description": "Authentication endpoints"
+    },
+    {
+      "name": "Platform",
+      "description": "Platform management endpoints"
+    },
+    {
+      "name": "BenefitProvider",
+      "description": "Benefit provider management endpoints"
+    },
+    {
+      "name": "Benefit",
+      "description": "Benefit management endpoints"
+    },
+    {
+      "name": "User",
+      "description": "User management endpoints"
+    }
+  ]
 }

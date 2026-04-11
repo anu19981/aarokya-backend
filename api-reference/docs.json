@@ -43,7 +43,9 @@
             "pages": [
               "modules/overview",
               "modules/auth",
-              "modules/user"
+              "modules/user",
+              "modules/benefit_provider",
+              "modules/benefit"
             ]
           }
         ]
@@ -86,6 +88,26 @@
                   "api/endpoints/users/update",
                   "api/endpoints/users/complete-onboarding",
                   "api/endpoints/users/delete"
+                ]
+              },
+              {
+                "group": "Benefit Providers",
+                "pages": [
+                  "api/endpoints/benefit_providers/create",
+                  "api/endpoints/benefit_providers/list",
+                  "api/endpoints/benefit_providers/get",
+                  "api/endpoints/benefit_providers/update",
+                  "api/endpoints/benefit_providers/delete"
+                ]
+              },
+              {
+                "group": "Benefits",
+                "pages": [
+                  "api/endpoints/benefits/create",
+                  "api/endpoints/benefits/list",
+                  "api/endpoints/benefits/get",
+                  "api/endpoints/benefits/update",
+                  "api/endpoints/benefits/delete"
                 ]
               },
               {

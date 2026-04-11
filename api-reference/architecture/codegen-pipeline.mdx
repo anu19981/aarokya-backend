@@ -8,14 +8,21 @@ description: "How Smithy IDL generates type-safe Rust server stubs and a TypeScr
 In a traditional setup, API contracts drift between backend and frontend: the Rust team writes structs, the TypeScript team writes matching types, and they diverge silently. We eliminated this entirely.
 
 <CardGroup cols={3}>
-  <Card title="Before: 3 Sources of Truth" icon="triangle-exclamation" color="#dc2626">
-    Hand-written Rust structs + hand-written TypeScript types + an OpenAPI doc nobody keeps in sync.
+  <Card
+    title="Before: 3 Sources of Truth"
+    icon="triangle-exclamation"
+    color="#dc2626"
+  >
+    Hand-written Rust structs + hand-written TypeScript types + an OpenAPI doc
+    nobody keeps in sync.
   </Card>
   <Card title="After: 1 Source of Truth" icon="circle-check" color="#16a34a">
-    One `.smithy` model file generates **everything** — Rust server traits, TypeScript SDK, and DTO types.
+    One `.smithy` model file generates **everything** — Rust server traits,
+    TypeScript SDK, and DTO types.
   </Card>
   <Card title="Zero Drift" icon="lock" color="#0891b2">
-    If the Smithy model doesn't compile, nothing builds. Contract mismatch caught at compile time, not runtime.
+    If the Smithy model doesn't compile, nothing builds. Contract mismatch
+    caught at compile time, not runtime.
   </Card>
 </CardGroup>
 
@@ -25,7 +32,7 @@ In a traditional setup, API contracts drift between backend and frontend: the Ru
 
 ```mermaid
 flowchart TD
-    A["📄 .smithy Model Files\n(com.aarokya.api#AarokyaService)\nSource of Truth"] --> B{smithy build}
+    A["📄 .smithy Model Files\n(in.aarokya.api#AarokyaService)\nSource of Truth"] --> B{smithy build}
 
     B -->|"--projection server-rust"| C["🦀 smithy-rs\nRust Server Crate\naarokya_server_api\n(v0.1.0)"]
     B -->|"--projection client-typescript"| D["📦 smithy-typescript\n@aarokya/api-client\n(npm package)"]
@@ -50,7 +57,7 @@ flowchart TD
 
 <Steps>
   <Step title="Define the contract in Smithy IDL">
-    API shapes, operations, and errors are described once in `.smithy` files under `smithy/model/`. The service is `com.aarokya.api#AarokyaService`.
+    API shapes, operations, and errors are described once in `.smithy` files under `smithy/model/`. The service is `in.aarokya.api#AarokyaService`.
 
     ```yaml
     @restJson1
@@ -66,6 +73,7 @@ flowchart TD
         errors: [ValidationException, InternalServerError]
     }
     ```
+
   </Step>
 
   <Step title="Generate the Rust server (smithy-rs)">
@@ -75,6 +83,7 @@ flowchart TD
     ```
 
     Produces the `aarokya_server_api` Rust crate with generated handler traits. Your Actix-web handlers implement these traits — the compiler enforces the contract.
+
   </Step>
 
   <Step title="Generate the TypeScript client">
@@ -86,6 +95,7 @@ flowchart TD
     ```
 
     Produces `@aarokya/api-client` — a fully typed npm package. The Expo app consumes it directly via a `file:` dependency path.
+
   </Step>
 
   <Step title="Generate DTO types (Rust + TypeScript)">
@@ -98,6 +108,7 @@ flowchart TD
     Outputs:
     - `backend/smithy-api-model-generated/dto-rust/dto.rs`
     - `backend/smithy-api-model-generated/dto-ts/api.ts`
+
   </Step>
 
   <Step title="OpenAPI docs (separate, from Rust annotations)">
@@ -107,6 +118,7 @@ flowchart TD
     GET /api_docs/openapi.json  →  raw OpenAPI spec
     GET /api_docs/ui            →  Swagger UI
     ```
+
   </Step>
 </Steps>
 
@@ -114,11 +126,11 @@ flowchart TD
 
 ## Build Matrix
 
-| Projection | Maven Plugin | Output | Used By |
-|-----------|-------------|--------|---------|
-| `server-rust` | `smithy-rs:codegen-server:0.1.6` | Rust crate with server traits | Actix-web backend |
+| Projection          | Maven Plugin                           | Output                            | Used By               |
+| ------------------- | -------------------------------------- | --------------------------------- | --------------------- |
+| `server-rust`       | `smithy-rs:codegen-server:0.1.6`       | Rust crate with server traits     | Actix-web backend     |
 | `client-typescript` | `smithy-aws-typescript-codegen:0.47.0` | npm package `@aarokya/api-client` | Expo React Native app |
-| `(codegen binary)` | `cargo run` (Rust binary) | `dto.rs` + `api.ts` | Both ends |
+| `(codegen binary)`  | `cargo run` (Rust binary)              | `dto.rs` + `api.ts`               | Both ends             |
 
 ---
 
@@ -127,7 +139,8 @@ flowchart TD
 <Note>
   Smithy generates Rust server code and TypeScript clients **directly**, bypassing OpenAPI entirely in the codegen path. OpenAPI is only generated from Rust code annotations (via utoipa) — separately — for documentation/developer tooling purposes.
 
-  This means the Smithy model is the authoritative contract, not an OpenAPI document that could drift.
+This means the Smithy model is the authoritative contract, not an OpenAPI document that could drift.
+
 </Note>
 
 ```mermaid

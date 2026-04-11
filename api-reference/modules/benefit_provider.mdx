@@ -1,0 +1,106 @@
+---
+title: "Benefit Provider Module"
+description: "Admin-managed catalogue of companies and entities that deliver benefits to users. Every benefit must belong to an active provider."
+---
+
+<Info>
+  **Auth guard:** `admin-api-key` header required for all endpoints. No JWT/user access.
+</Info>
+
+## Overview
+
+A **benefit provider** is a company or entity (e.g. a diagnostic chain, an insurance company, a telemedicine platform) that offers one or more benefits to Aarokya users. Providers are the top-level grouping in the benefit catalogue — every `Benefit` row has a `provider_id` foreign key referencing a `BenefitProvider`.
+
+Providers are managed exclusively by system admins. There is no partner or user path.
+
+---
+
+## Key Rules
+
+- **Name uniqueness is global.** No two active providers may share the same name.
+- **Soft delete is guarded.** A provider with associated benefits (active or inactive) cannot be deleted. Remove all benefits first via `DELETE /benefits/{benefit_id}`.
+- **Update is name-only.** Only `name` can be changed. Passing `null` for `name` is a no-op (returns the current provider unchanged).
+
+---
+
+## Endpoints
+
+<CardGroup cols={2}>
+  <Card title="POST /benefit_providers" icon="plus" color="#16a34a" href="/api/endpoints/benefit_providers/create">
+    Create a new benefit provider. Name must be unique across all active providers.
+  </Card>
+  <Card title="GET /benefit_providers" icon="list" color="#f59e0b" href="/api/endpoints/benefit_providers/list">
+    Paginated list of benefit providers. Supports filtering by `status`, `start_time`, `end_time`.
+  </Card>
+  <Card title="GET /benefit_providers/{benefit_provider_id}" icon="building" color="#3b82f6" href="/api/endpoints/benefit_providers/get">
+    Fetch a single provider by UUID.
+  </Card>
+  <Card title="PATCH /benefit_providers/{benefit_provider_id}" icon="pen" color="#8b5cf6" href="/api/endpoints/benefit_providers/update">
+    Rename a provider. The new name must not conflict with any other active provider.
+  </Card>
+  <Card title="DELETE /benefit_providers/{benefit_provider_id}" icon="trash" color="#dc2626" href="/api/endpoints/benefit_providers/delete">
+    Soft-delete a provider (sets `status = inactive`). Fails if the provider has any benefits.
+  </Card>
+</CardGroup>
+
+---
+
+## Request / Response Examples
+
+<CodeGroup>
+```bash Create a provider
+curl -X POST http://localhost:8080/benefit_providers \
+  -H 'admin-api-key: your-admin-key' \
+  -H 'Content-Type: application/json' \
+  -d '{ "name": "Apollo Diagnostics" }'
+```
+
+```json Response 201 — created
+{
+  "id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
+  "name": "Apollo Diagnostics",
+  "status": "active",
+  "created_at": "2025-04-12T10:00:00Z",
+  "last_modified_at": "2025-04-12T10:00:00Z"
+}
+```
+
+```json Response 409 — name already exists
+{
+  "error": {
+    "type": "conflict",
+    "code": "BPE_402",
+    "message": "A benefit provider with name 'Apollo Diagnostics' already exists"
+  }
+}
+```
+</CodeGroup>
+
+<CodeGroup>
+```bash Delete a provider that still has benefits
+curl -X DELETE http://localhost:8080/benefit_providers/018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b \
+  -H 'admin-api-key: your-admin-key'
+```
+
+```json Response 409 — has benefits
+{
+  "error": {
+    "type": "conflict",
+    "code": "BPE_403",
+    "message": "Cannot delete benefit provider '018f4c2a-...': it has associated benefits"
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Error Codes
+
+| Code | HTTP | Description |
+|------|------|-------------|
+| `BPE_400` | 500 | Internal server error |
+| `BPE_401` | 404 | Provider not found |
+| `BPE_402` | 409 | Name already exists |
+| `BPE_403` | 409 | Provider has associated benefits |
+| `BPE_404` | 400 | Validation error (e.g. empty name) |

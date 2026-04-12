@@ -34,6 +34,7 @@ When you `PATCH /dependants/{id}`, the server:
 | Endpoint | JWT user | Admin key | Notes |
 |----------|----------|-----------|-------|
 | `POST /users/{user_id}/dependants` | ✓ own only | ✓ | `relationship = self` not allowed |
+| `POST /users/{user_id}/dependants/bulk` | ✓ own only | ✓ | Atomic batch insert, max 50. `relationship = self` not allowed |
 | `GET /users/{user_id}/dependants` | ✓ own only | ✓ | Defaults to `status = active` |
 | `GET /users/{user_id}/dependants/{id}` | ✓ own only | ✓ | 403 if accessing another user's |
 | `PATCH /users/{user_id}/dependants/{id}` | ✓ own only | ✓ | SELF not allowed |
@@ -68,6 +69,9 @@ Every user has exactly one active `relationship = self` dependant. It is created
   <Card title="POST /users/{user_id}/dependants" icon="plus" color="#16a34a" href="/api/endpoints/dependants/create">
     Add a new dependant. `relationship = self` not allowed.
   </Card>
+  <Card title="POST /users/{user_id}/dependants/bulk" icon="layer-group" color="#16a34a" href="/api/endpoints/dependants/bulk-create">
+    Atomically insert up to 50 dependants in one request. `relationship = self` not allowed.
+  </Card>
   <Card title="GET /users/{user_id}/dependants" icon="list" color="#3b82f6" href="/api/endpoints/dependants/list">
     Paginated list. Defaults to `status = active`. JWT users see only their own.
   </Card>
@@ -88,7 +92,7 @@ Every user has exactly one active `relationship = self` dependant. It is created
 
 <CodeGroup>
 ```bash Create a dependant
-curl -X POST http://localhost:8080/users/usr_7Hq4nMdKpRsXwYzA1b/dependants \
+curl -X POST http://localhost:8080/users/047382910564/dependants \
   -H 'Authorization: Bearer eyJhbGci...' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -103,7 +107,7 @@ curl -X POST http://localhost:8080/users/usr_7Hq4nMdKpRsXwYzA1b/dependants \
 ```json Response 201
 {
   "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
-  "primary_user_id": "usr_7Hq4nMdKpRsXwYzA1b",
+  "primary_user_id": "047382910564",
   "relationship": "spouse",
   "first_name": "Priya",
   "last_name": "Kumar",
@@ -113,6 +117,63 @@ curl -X POST http://localhost:8080/users/usr_7Hq4nMdKpRsXwYzA1b/dependants \
   "previous_version_id": null,
   "created_at": "2026-04-12T10:00:00Z",
   "last_modified_at": "2026-04-12T10:00:00Z"
+}
+```
+
+```bash Bulk create dependants
+curl -X POST http://localhost:8080/users/047382910564/dependants/bulk \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "dependants": [
+      {
+        "relationship": "spouse",
+        "first_name": "Priya",
+        "last_name": "Kumar",
+        "date_of_birth": "1992-08-20",
+        "gender": "female"
+      },
+      {
+        "relationship": "child",
+        "first_name": "Arjun",
+        "last_name": "Kumar",
+        "date_of_birth": "2015-03-10",
+        "gender": "male"
+      }
+    ]
+  }'
+```
+
+```json Response 201
+{
+  "data": [
+    {
+      "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
+      "primary_user_id": "047382910564",
+      "relationship": "spouse",
+      "first_name": "Priya",
+      "last_name": "Kumar",
+      "date_of_birth": "1992-08-20",
+      "gender": "female",
+      "status": "active",
+      "previous_version_id": null,
+      "created_at": "2026-04-12T10:00:00Z",
+      "last_modified_at": "2026-04-12T10:00:00Z"
+    },
+    {
+      "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60002",
+      "primary_user_id": "047382910564",
+      "relationship": "child",
+      "first_name": "Arjun",
+      "last_name": "Kumar",
+      "date_of_birth": "2015-03-10",
+      "gender": "male",
+      "status": "active",
+      "previous_version_id": null,
+      "created_at": "2026-04-12T10:00:00Z",
+      "last_modified_at": "2026-04-12T10:00:00Z"
+    }
+  ]
 }
 ```
 </CodeGroup>

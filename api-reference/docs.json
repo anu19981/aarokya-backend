@@ -119,6 +119,7 @@
                 "group": "Dependants",
                 "pages": [
                   "api/endpoints/dependants/create",
+                  "api/endpoints/dependants/bulk-create",
                   "api/endpoints/dependants/list",
                   "api/endpoints/dependants/get",
                   "api/endpoints/dependants/update",

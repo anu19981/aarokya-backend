@@ -67,7 +67,7 @@ Required fields for `complete_onboarding`: `first_name`, `last_name`, `dob`, `ge
 
 <CodeGroup>
 ```bash Complete onboarding
-curl -X POST http://localhost:8080/users/usr_7Hq4nMdKpRsXwYzA1b/complete_onboarding \
+curl -X POST http://localhost:8080/users/047382910564/complete_onboarding \
   -H 'Authorization: Bearer eyJhbGci...' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -87,7 +87,7 @@ curl -X POST http://localhost:8080/users/usr_7Hq4nMdKpRsXwYzA1b/complete_onboard
 
 ```json Response 201
 {
-  "user": { "user_id": "usr_7Hq4nMdKpRsXwYzA1b", "status": "active", "..." : "..." },
+  "user": { "user_id": "047382910564", "status": "active", "..." : "..." },
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```

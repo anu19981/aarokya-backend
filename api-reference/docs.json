@@ -43,10 +43,14 @@
             "pages": [
               "modules/overview",
               "modules/auth",
+              "modules/platform",
               "modules/user",
               "modules/benefit_provider",
               "modules/benefit",
-              "modules/dependant"
+              "modules/dependant",
+              "modules/account_provider",
+              "modules/account",
+              "modules/mrn"
             ]
           }
         ]
@@ -139,6 +143,15 @@
                   "api/endpoints/accounts/get",
                   "api/endpoints/accounts/update",
                   "api/endpoints/accounts/delete"
+                ]
+              },
+              {
+                "group": "MRNs",
+                "pages": [
+                  "api/endpoints/mrns/create",
+                  "api/endpoints/mrns/list",
+                  "api/endpoints/mrns/get",
+                  "api/endpoints/mrns/delete"
                 ]
               },
               {

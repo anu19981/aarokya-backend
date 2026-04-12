@@ -1,0 +1,116 @@
+---
+title: "MRN Module"
+description: "Link dependants to benefit providers with an external Medical Record Number — flat routes, JWT ownership enforcement, admin-only soft delete."
+---
+
+<Info>
+  **Auth guards vary by endpoint** — Create and List accept JWT users and partner keys. Delete is admin-only. The JWT ownership check happens in core, not at the route level.
+</Info>
+
+## Overview
+
+An MRN (Medical Record Number) links a **dependant** to a **benefit provider** with an external string identifier. Each MRN is uniquely scoped to one `(dependant_id, benefit_provider_id)` pair — only one active MRN per dependant per provider is allowed.
+
+Routes are flat at `/mrns` (no user nesting). The `primary_user_id` is derived server-side from the dependant row — callers never supply it.
+
+---
+
+## Create Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Caller
+    participant API as Aarokya API
+    participant DB as Database
+
+    C->>API: POST /mrns<br/>{dependant_id, benefit_provider_id, mrn}
+    API->>DB: Find active dependant
+    DB-->>API: dependant row (primary_user_id)
+    alt JWT caller
+        API->>API: Assert jwt.sub == primary_user_id
+    end
+    API->>DB: Find active benefit_provider
+    DB-->>API: provider row
+    API->>DB: INSERT mrn (unique on dependant+provider)
+    alt Duplicate
+        DB-->>API: UniqueViolation
+        API-->>C: 409 MRN-903
+    else Success
+        DB-->>API: mrn row
+        API-->>C: 201 MrnResponse
+    end
+```
+
+---
+
+## Auth Guards by Endpoint
+
+| Endpoint | JWT user | Partner key | Admin key | Notes |
+|----------|----------|-------------|-----------|-------|
+| `POST /mrns` | ✓ | ✓ | — | JWT: dependant must belong to token user |
+| `GET /mrns` | ✓ | ✓ | — | All filters optional |
+| `GET /mrns/{id}` | ✓ | ✓ | — | Returns 404 if inactive |
+| `DELETE /mrns/{id}` | — | — | ✓ | Sets `status → inactive` |
+
+---
+
+## Endpoints
+
+<CardGroup cols={2}>
+  <Card title="POST /mrns" icon="plus" color="#16a34a" href="/api/endpoints/mrns/create">
+    Create an MRN linking a dependant to a benefit provider.
+  </Card>
+  <Card title="GET /mrns" icon="list" color="#3b82f6" href="/api/endpoints/mrns/list">
+    List MRNs. Filter by `dependant_id`, `benefit_provider_id`, `primary_user_id`, or `mrn` string.
+  </Card>
+  <Card title="GET /mrns/{id}" icon="id-card" color="#3b82f6" href="/api/endpoints/mrns/get">
+    Fetch a single active MRN by its internal UUID.
+  </Card>
+  <Card title="DELETE /mrns/{id}" icon="trash" color="#dc2626" href="/api/endpoints/mrns/delete">
+    Soft-delete (`status → inactive`). Admin key required.
+  </Card>
+</CardGroup>
+
+---
+
+## Request / Response Examples
+
+<CodeGroup>
+```bash Create an MRN
+curl -X POST http://localhost:8080/mrns \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
+    "benefit_provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
+    "mrn": "MRN-12345"
+  }'
+```
+
+```json Response 201
+{
+  "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60020",
+  "primary_user_id": "usr_7Hq4nMdKpRsXwYzA1b",
+  "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
+  "benefit_provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
+  "mrn": "MRN-12345",
+  "status": "active",
+  "created_at": "2026-04-12T10:00:00Z",
+  "last_modified_at": "2026-04-12T10:00:00Z"
+}
+```
+</CodeGroup>
+
+---
+
+## Error Codes
+
+| Code | HTTP | Description |
+|------|------|-------------|
+| `MR-900` | 500 | Internal server error |
+| `MR-901` | 404 | MRN not found or inactive |
+| `MR-902` | 403 | JWT user accessing MRN belonging to another user's dependant |
+| `MR-903` | 409 | MRN already exists for this dependant + provider combination |
+| `MR-904` | 404 | Dependant not found or inactive |
+| `MR-905` | 404 | Benefit provider not found or inactive |
+| `MR-906` | 400 | Invalid UUID in filter or request body |

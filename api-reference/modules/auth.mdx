@@ -4,21 +4,12 @@ description: "Partner-driven token issuance. External partners call POST /auth/t
 ---
 
 <Info>
-  **Auth guard:** `api-key` header (external partner key — one key per partner, configured server-side).
-  Partners cannot call admin endpoints. Admin cannot call this endpoint.
+  **Auth guard:** `api-key` header (external partner key). Partners cannot call admin endpoints. Admin cannot call this endpoint.
 </Info>
 
-## Design — Why No OTP?
+## Overview
 
-Aarokya's users module is embedded in partner apps (e.g. Namma Yatri). The partner app already owns the user's phone-based identity. Rather than duplicating OTP infrastructure, the partner backend calls `POST /auth/token` with a verified phone number and receives a JWT scoped to that user.
-
-This is the "partner SDK" pattern — the partner is the identity authority, Aarokya is the service layer.
-
-**Benefits:**
-- No SMS infrastructure in Aarokya
-- No OTP session management or replay risk
-- Single API call: phone number in, JWT out
-- Partners retain full control of their auth UX
+Aarokya does not own user authentication — that belongs to the partner app (e.g. Namma Yatri). The partner backend calls `POST /auth/token` with a verified phone number and receives a short-lived JWT scoped to that user. This is the only auth endpoint; there are no refresh tokens, OTP flows, or session management.
 
 ---
 
@@ -26,33 +17,33 @@ This is the "partner SDK" pattern — the partner is the identity authority, Aar
 
 ```mermaid
 sequenceDiagram
-    actor U as User
-    participant PartnerApp as Partner App (e.g. Namma Yatri)
     participant PartnerBE as Partner Backend
     participant API as Aarokya API
+    participant DB as Database
 
-    U->>PartnerApp: Open app (already authenticated with partner)
-    PartnerApp->>PartnerBE: Request Aarokya token for user
-    PartnerBE->>API: POST /auth/token\n{ phone_number, phone_country_code, platform_id }\napi-key: <partner_key>
-    API->>API: Validate partner key
-    API->>API: Validate platform_id exists
-    API->>API: Find user by (platform_id, phone_number)\nor create new user with status=onboarding
-    API->>API: Sign JWT { user_id, status, exp }
-    API-->>PartnerBE: { access_token }
-    PartnerBE-->>PartnerApp: access_token
-    PartnerApp->>API: All subsequent calls with\nAuthorization: Bearer <access_token>
+    PartnerBE->>API: POST /auth/token<br/>{phone_number, phone_country_code, platform_id}<br/>api-key: partner_key
+    API->>DB: Validate platform_id
+    DB-->>API: platform row
+    API->>DB: Find user by (platform_id, phone_number)
+    alt User exists
+        DB-->>API: existing user row
+    else First call
+        API->>DB: INSERT user (status=onboarding)
+        DB-->>API: new user row
+    end
+    API->>API: Sign JWT {sub, status, exp}
+    API-->>PartnerBE: {access_token}
 ```
 
 ---
 
 ## Find-or-Create Semantics
 
-`POST /auth/token` is **idempotent** for the same `(platform_id, phone_number)` pair:
-
-- **First call:** creates a user with `status = onboarding`, returns token
-- **Subsequent calls:** returns a fresh token for the existing user (reflects current `status`)
-
-The token always reflects the **current status in DB**. If a user has been soft-deleted, the endpoint returns an error — deleted users cannot receive new tokens.
+| Scenario | Behaviour |
+|----------|-----------|
+| First call for this phone + platform | Creates user with `status = onboarding`, returns token |
+| Subsequent calls | Returns fresh token for existing user, reflects current `status` |
+| User is deactivated | Returns error — deactivated users cannot receive tokens |
 
 ---
 
@@ -69,11 +60,9 @@ The token always reflects the **current status in DB**. If a user has been soft-
 
 | Claim | Description |
 |-------|-------------|
-| `sub` | User ID — use this to identify the user in all subsequent calls |
-| `status` | `onboarding` or `active` — use to decide whether to show onboarding UI |
-| `exp` | Expiry (configurable via `jwt.expiry_hours`) |
-
-There are **no refresh tokens**. When the JWT expires, call `POST /auth/token` again from the partner backend.
+| `sub` | User ID — pass in `{user_id}` path params for all user-scoped calls |
+| `status` | `onboarding` or `active` — drive onboarding UI from this |
+| `exp` | Configurable via `jwt.expiry_hours`; call token again when expired |
 
 ---
 
@@ -101,27 +90,24 @@ curl -X POST http://localhost:8080/auth/token \
   }'
 ```
 
-```json Response 201 — token issued
+```json Response 201
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```
-
-```json Response 400 — platform not found
-{
-  "error": {
-    "code": "PLATFORM_NOT_FOUND",
-    "message": "platform not found"
-  }
-}
-```
-
-```json Response 401 — invalid partner key
-{
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "missing or invalid API key"
-  }
-}
-```
 </CodeGroup>
+
+---
+
+## Error Codes
+
+| Code | HTTP | Description |
+|------|------|-------------|
+| `AUE-300` | 500 | Internal server error |
+| `AUE-301` | 401 | Invalid or expired token |
+| `AUE-302` | 401 | Invalid API key |
+| `AUE-303` | 403 | User account is not active |
+| `AUE-304` | 400 | Invalid platform ID format |
+| `AUE-305` | 400 | Platform not found |
+| `AUE-306` | 400 | Platform is inactive |
+| `AUE-307` | 422 | Onboarding already complete |

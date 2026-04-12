@@ -23,6 +23,252 @@
     }
   ],
   "paths": {
+    "/account_providers": {
+      "get": {
+        "tags": [
+          "AccountProvider"
+        ],
+        "operationId": "list_account_providers",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/AccountProviderStatus"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of account providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountProviderListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid API key"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "AccountProvider"
+        ],
+        "operationId": "create_account_provider",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccountProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Account provider created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountProviderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or name already exists"
+          },
+          "401": {
+            "description": "Invalid API key"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/account_providers/{account_provider_id}": {
+      "get": {
+        "tags": [
+          "AccountProvider"
+        ],
+        "operationId": "get_account_provider_by_id",
+        "parameters": [
+          {
+            "name": "account_provider_id",
+            "in": "path",
+            "description": "Account provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account provider found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountProviderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Account provider not found"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "AccountProvider"
+        ],
+        "operationId": "delete_account_provider",
+        "parameters": [
+          {
+            "name": "account_provider_id",
+            "in": "path",
+            "description": "Account provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account provider deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteAccountProviderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Account provider not found"
+          },
+          "409": {
+            "description": "Account provider has associated accounts"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "AccountProvider"
+        ],
+        "operationId": "update_account_provider",
+        "parameters": [
+          {
+            "name": "account_provider_id",
+            "in": "path",
+            "description": "Account provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAccountProviderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Account provider updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountProviderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or name already exists"
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Account provider not found"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
     "/auth/token": {
       "post": {
         "tags": [
@@ -641,6 +887,243 @@
         }
       }
     },
+    "/mrns": {
+      "get": {
+        "tags": [
+          "Mrn"
+        ],
+        "operationId": "list_mrns",
+        "parameters": [
+          {
+            "name": "primary_user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "dependant_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "benefit_provider_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "mrn",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of MRNs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MrnListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Mrn"
+        ],
+        "operationId": "create_mrn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMrnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "MRN created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MrnResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or invalid UUID"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — JWT user does not own the dependant"
+          },
+          "404": {
+            "description": "Dependant or benefit provider not found"
+          },
+          "409": {
+            "description": "MRN already exists for this dependant and provider"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/mrns/{mrn_id}": {
+      "get": {
+        "tags": [
+          "Mrn"
+        ],
+        "operationId": "get_mrn_by_id",
+        "parameters": [
+          {
+            "name": "mrn_id",
+            "in": "path",
+            "description": "Internal MRN record ID (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MRN found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MrnResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "MRN not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Mrn"
+        ],
+        "operationId": "delete_mrn",
+        "parameters": [
+          {
+            "name": "mrn_id",
+            "in": "path",
+            "description": "Internal MRN record ID (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MRN deactivated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteMrnResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "MRN not found"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
     "/platforms": {
       "get": {
         "tags": [
@@ -1015,7 +1498,7 @@
             "description": "Unauthorized"
           },
           "403": {
-            "description": "Forbidden \u2014 cannot access another user's data"
+            "description": "Forbidden — cannot access another user's data"
           },
           "404": {
             "description": "User not found"
@@ -1111,10 +1594,341 @@
             "description": "Unauthorized"
           },
           "403": {
-            "description": "Forbidden \u2014 cannot update another user's data"
+            "description": "Forbidden — cannot update another user's data"
           },
           "404": {
             "description": "User not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/users/{user_id}/accounts": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "operationId": "list_accounts",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/AccountStatus"
+                }
+              ]
+            }
+          },
+          {
+            "name": "account_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/AccountType"
+                }
+              ]
+            }
+          },
+          {
+            "name": "account_provider_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Account"
+        ],
+        "operationId": "create_account",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Account provider not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/users/{user_id}/accounts/{account_id}": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "operationId": "get_account_by_id",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "path",
+            "description": "Account ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Account not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Account"
+        ],
+        "operationId": "delete_account",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "path",
+            "description": "Account ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteAccountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Account not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Account"
+        ],
+        "operationId": "update_account",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "account_id",
+            "in": "path",
+            "description": "Account ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Account updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Account not found"
           }
         },
         "security": [
@@ -1169,7 +1983,7 @@
             "description": "Unauthorized"
           },
           "403": {
-            "description": "Forbidden \u2014 cannot complete another user's onboarding"
+            "description": "Forbidden — cannot complete another user's onboarding"
           },
           "404": {
             "description": "User not found"
@@ -1181,10 +1995,494 @@
           }
         ]
       }
+    },
+    "/users/{user_id}/dependants": {
+      "get": {
+        "tags": [
+          "Dependant"
+        ],
+        "operationId": "list_dependants",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "relationship",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Relationship"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of dependants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DependantListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Dependant"
+        ],
+        "operationId": "create_dependant",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDependantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Dependant created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DependantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or SELF relationship not allowed"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/users/{user_id}/dependants/{dependant_id}": {
+      "get": {
+        "tags": [
+          "Dependant"
+        ],
+        "operationId": "get_dependant_by_id",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dependant_id",
+            "in": "path",
+            "description": "Dependant ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dependant found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DependantResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Dependant not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Dependant"
+        ],
+        "operationId": "delete_dependant",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dependant_id",
+            "in": "path",
+            "description": "Dependant ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dependant deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteDependantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cannot delete a SELF dependant via this endpoint"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Dependant not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Dependant"
+        ],
+        "operationId": "update_dependant",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dependant_id",
+            "in": "path",
+            "description": "Dependant ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDependantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Dependant updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DependantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error, no fields to update, or SELF not allowed"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Dependant not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      }
     }
   },
   "components": {
     "schemas": {
+      "AccountListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AccountProviderListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountProviderResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AccountProviderResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccountProviderStatus"
+          }
+        }
+      },
+      "AccountProviderStatus": {
+        "type": "string",
+        "description": "Account provider lifecycle status.",
+        "enum": [
+          "active",
+          "inactive"
+        ]
+      },
+      "AccountResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "provider_account_id",
+          "status",
+          "account_type",
+          "account_provider_id",
+          "account_provider_name",
+          "account_provider_status",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "account_provider_id": {
+            "type": "string"
+          },
+          "account_provider_name": {
+            "type": "string"
+          },
+          "account_provider_status": {
+            "$ref": "#/components/schemas/AccountProviderStatus"
+          },
+          "account_type": {
+            "$ref": "#/components/schemas/AccountType"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "provider_account_id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccountStatus"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "AccountStatus": {
+        "type": "string",
+        "description": "Account lifecycle status.",
+        "enum": [
+          "active",
+          "inactive",
+          "pending"
+        ]
+      },
+      "AccountType": {
+        "type": "string",
+        "description": "Type of financial or health account.",
+        "enum": [
+          "s_a_v_i_n_g_s",
+          "h_s_a",
+          "e_d_u_c_a_t_i_o_n"
+        ]
+      },
       "AddressDetails": {
         "type": "object",
         "description": "Structured address details for user profiles and insurance documents.",
@@ -1517,6 +2815,42 @@
           }
         }
       },
+      "CreateAccountProviderRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateAccountRequest": {
+        "type": "object",
+        "required": [
+          "provider_account_id",
+          "account_type",
+          "account_provider_id"
+        ],
+        "properties": {
+          "account_provider_id": {
+            "type": "string"
+          },
+          "account_type": {
+            "$ref": "#/components/schemas/AccountType"
+          },
+          "customer_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider_account_id": {
+            "type": "string"
+          }
+        }
+      },
       "CreateBenefitProviderRequest": {
         "type": "object",
         "required": [
@@ -1551,6 +2885,53 @@
           }
         }
       },
+      "CreateDependantRequest": {
+        "type": "object",
+        "required": [
+          "relationship",
+          "first_name",
+          "last_name",
+          "date_of_birth",
+          "gender"
+        ],
+        "properties": {
+          "date_of_birth": {
+            "type": "string",
+            "example": "2000-01-15"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/Relationship"
+          }
+        }
+      },
+      "CreateMrnRequest": {
+        "type": "object",
+        "required": [
+          "dependant_id",
+          "mrn",
+          "benefit_provider_id"
+        ],
+        "properties": {
+          "benefit_provider_id": {
+            "type": "string"
+          },
+          "dependant_id": {
+            "type": "string"
+          },
+          "mrn": {
+            "type": "string"
+          }
+        }
+      },
       "CreatePlatformRequest": {
         "type": "object",
         "required": [
@@ -1559,6 +2940,36 @@
         "properties": {
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "DeleteAccountProviderResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccountProviderStatus"
+          }
+        }
+      },
+      "DeleteAccountResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AccountStatus"
           }
         }
       },
@@ -1592,6 +3003,36 @@
           }
         }
       },
+      "DeleteDependantResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DependantStatus"
+          }
+        }
+      },
+      "DeleteMrnResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MrnStatus"
+          }
+        }
+      },
       "DeletePlatformResponse": {
         "type": "object",
         "required": [
@@ -1621,6 +3062,97 @@
             "type": "string"
           }
         }
+      },
+      "DependantListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DependantResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DependantResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "primary_user_id",
+          "relationship",
+          "first_name",
+          "last_name",
+          "date_of_birth",
+          "gender",
+          "status",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "example": "2000-01-15"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "previous_version_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "primary_user_id": {
+            "type": "string"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/Relationship"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DependantStatus"
+          }
+        }
+      },
+      "DependantStatus": {
+        "type": "string",
+        "description": "Dependant row lifecycle status.",
+        "enum": [
+          "active",
+          "discarded"
+        ]
       },
       "Gender": {
         "type": "string",
@@ -1705,6 +3237,82 @@
           }
         }
       },
+      "MrnListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MrnResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "MrnResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "primary_user_id",
+          "dependant_id",
+          "mrn",
+          "benefit_provider_id",
+          "status",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "benefit_provider_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "dependant_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "mrn": {
+            "type": "string"
+          },
+          "primary_user_id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MrnStatus"
+          }
+        }
+      },
+      "MrnStatus": {
+        "type": "string",
+        "description": "MRN record lifecycle status.",
+        "enum": [
+          "active",
+          "inactive"
+        ]
+      },
       "PlatformListResponse": {
         "type": "object",
         "required": [
@@ -1769,6 +3377,46 @@
           "inactive"
         ]
       },
+      "Relationship": {
+        "type": "string",
+        "description": "Relationship of a dependant to the primary user.",
+        "enum": [
+          "self",
+          "spouse",
+          "mother",
+          "father",
+          "child",
+          "father_in_law",
+          "mother_in_law",
+          "sibling"
+        ]
+      },
+      "UpdateAccountProviderRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "UpdateAccountRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AccountStatus"
+              }
+            ]
+          }
+        }
+      },
       "UpdateBenefitProviderRequest": {
         "type": "object",
         "properties": {
@@ -1807,6 +3455,40 @@
               {
                 "$ref": "#/components/schemas/BenefitStatus"
               }
+            ]
+          }
+        }
+      },
+      "UpdateDependantRequest": {
+        "type": "object",
+        "properties": {
+          "date_of_birth": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2000-01-15"
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Gender"
+              }
+            ]
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
             ]
           }
         }
@@ -2018,6 +3700,22 @@
     {
       "name": "User",
       "description": "User management endpoints"
+    },
+    {
+      "name": "Dependant",
+      "description": "Dependant management endpoints"
+    },
+    {
+      "name": "Mrn",
+      "description": "MRN management endpoints"
+    },
+    {
+      "name": "AccountProvider",
+      "description": "Account provider management endpoints"
+    },
+    {
+      "name": "Account",
+      "description": "Account management endpoints"
     }
   ]
 }

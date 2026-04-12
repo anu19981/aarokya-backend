@@ -4,14 +4,14 @@ description: "Individual offerings (consultation, insurance, etc.) attached to a
 ---
 
 <Info>
-  **Auth guards vary by endpoint** — Create, Update, and Delete are admin-only. Get and List accept both JWT users (active only) and the admin key.
+  **Auth guards vary by endpoint** — Create, Update, Delete are admin-only. Get and List accept both JWT users (active benefits only) and the admin key (all benefits).
 </Info>
 
 ## Overview
 
-A **benefit** is a specific offering — a free consultation session, an insurance policy, a diagnostic test — provided by a [Benefit Provider](/modules/benefit_provider). Benefits carry a `benefit_type` enum and a `benefit_details` JSONB object whose variant must match the type.
+A **benefit** is a specific offering — a free consultation, an insurance policy, a diagnostic test — provided by a [Benefit Provider](/modules/benefit_provider). Benefits carry a `benefit_type` enum and a `benefit_details` JSONB block whose variant must match the type.
 
-Responses always include `provider_name` via a JOIN, so callers never need a separate lookup to display who offers the benefit.
+Responses always include `provider_name` via a JOIN — callers never need a separate provider lookup.
 
 ---
 
@@ -22,18 +22,30 @@ Responses always include `provider_name` via a JOIN, so callers never need a sep
 | `consultation` | `Consultation { description }` | Free or subsidised doctor consultation |
 | `insurance_policy` | `InsurancePolicy { description }` | Health or accident insurance |
 
-**Type consistency is enforced at create time.** Sending `benefit_type = consultation` with `InsurancePolicy` details returns `400 BenefitTypeMismatch`.
+Type and details must be consistent — mismatches return `BE-503`.
 
 ---
 
-## Visibility Rules
+## Visibility by Actor
 
-| Actor | Active benefits | Inactive benefits |
-|-------|----------------|-------------------|
-| JWT user (`active` status) | ✓ visible | Hidden — returned as 404 |
-| Admin key | ✓ visible | ✓ visible |
+```mermaid
+flowchart LR
+    JWT[JWT User\nstatus=active] -->|GET /benefits| ActiveOnly[Active benefits only]
+    Admin[Admin Key] -->|GET /benefits| All[Active + Inactive]
+    JWT -->|GET /benefits/id inactive| E[404 Not Found]
+```
 
-JWT users that are still `onboarding` cannot call benefit endpoints — `GET /benefits` requires `status = active`.
+---
+
+## Auth Guards by Endpoint
+
+| Endpoint | JWT user | Admin key | Notes |
+|----------|----------|-----------|-------|
+| `POST /benefits` | — | ✓ | Provider must be active |
+| `GET /benefits` | ✓ active only | ✓ all | |
+| `GET /benefits/{id}` | ✓ active only | ✓ all | |
+| `PATCH /benefits/{id}` | — | ✓ | |
+| `DELETE /benefits/{id}` | — | ✓ | Sets `status → inactive` |
 
 ---
 
@@ -41,19 +53,19 @@ JWT users that are still `onboarding` cannot call benefit endpoints — `GET /be
 
 <CardGroup cols={2}>
   <Card title="POST /benefits" icon="plus" color="#16a34a" href="/api/endpoints/benefits/create">
-    **Admin only.** Create a benefit. Provider must exist and be active. Name must be unique within that provider.
+    **Admin only.** Create a benefit. Provider must exist and be active.
   </Card>
-  <Card title="GET /benefits" icon="list" color="#f59e0b" href="/api/endpoints/benefits/list">
-    List benefits. JWT users see only `active` ones regardless of filters. Supports `provider_id`, `benefit_type`, `status`, pagination.
+  <Card title="GET /benefits" icon="list" color="#3b82f6" href="/api/endpoints/benefits/list">
+    List benefits. JWT users see only `active` ones. Filter by `provider_id`, `benefit_type`, `status`.
   </Card>
   <Card title="GET /benefits/{benefit_id}" icon="stethoscope" color="#3b82f6" href="/api/endpoints/benefits/get">
     Fetch a benefit by UUID. JWT users receive 404 for inactive benefits.
   </Card>
   <Card title="PATCH /benefits/{benefit_id}" icon="pen" color="#8b5cf6" href="/api/endpoints/benefits/update">
-    **Admin only.** Update `name`, `benefit_details`, or `status`. All fields optional; omitting all is a no-op.
+    **Admin only.** Update `name`, `benefit_details`, or `status`.
   </Card>
   <Card title="DELETE /benefits/{benefit_id}" icon="trash" color="#dc2626" href="/api/endpoints/benefits/delete">
-    **Admin only.** Soft-delete a benefit (sets `status = inactive`). No child-record check.
+    **Admin only.** Soft-delete (`status → inactive`).
   </Card>
 </CardGroup>
 
@@ -77,55 +89,17 @@ curl -X POST http://localhost:8080/benefits \
   }'
 ```
 
-```json Response 201 — created
+```json Response 201
 {
   "id": "019a1b2c-3d4e-5f6a-7b8c-9d0e1f2a3b4c",
   "name": "Free GP Consultation",
   "benefit_type": "consultation",
   "provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
   "provider_name": "Apollo Diagnostics",
-  "benefit_details": {
-    "type": "Consultation",
-    "description": "One free general physician consultation per month"
-  },
+  "benefit_details": { "type": "Consultation", "description": "..." },
   "status": "active",
-  "created_at": "2025-04-12T10:05:00Z",
-  "last_modified_at": "2025-04-12T10:05:00Z"
-}
-```
-
-```json Response 400 — type mismatch
-{
-  "error": {
-    "type": "bad_request",
-    "code": "BE_503",
-    "message": "The benefit_type field does not match the variant in benefit_details"
-  }
-}
-```
-</CodeGroup>
-
-<CodeGroup>
-```bash List benefits filtered by provider (JWT user)
-curl http://localhost:8080/benefits?provider_id=018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b \
-  -H 'Authorization: Bearer eyJhbGci...'
-```
-
-```json Response 200
-{
-  "data": [
-    {
-      "id": "019a1b2c-3d4e-5f6a-7b8c-9d0e1f2a3b4c",
-      "name": "Free GP Consultation",
-      "benefit_type": "consultation",
-      "provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
-      "provider_name": "Apollo Diagnostics",
-      "status": "active"
-    }
-  ],
-  "total": 1,
-  "limit": 20,
-  "offset": 0
+  "created_at": "2026-04-12T10:05:00Z",
+  "last_modified_at": "2026-04-12T10:05:00Z"
 }
 ```
 </CodeGroup>
@@ -136,9 +110,9 @@ curl http://localhost:8080/benefits?provider_id=018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f
 
 | Code | HTTP | Description |
 |------|------|-------------|
-| `BE_500` | 500 | Internal server error |
-| `BE_501` | 404 | Benefit not found |
-| `BE_502` | 409 | Name already exists for this provider |
-| `BE_503` | 400 | `benefit_type` / `benefit_details` mismatch |
-| `BE_504` | 404 | Benefit provider not found or inactive |
-| `BE_505` | 400 | Validation error (e.g. empty name) |
+| `BE-500` | 500 | Internal server error |
+| `BE-501` | 404 | Benefit not found |
+| `BE-502` | 409 | Name already exists for this provider |
+| `BE-503` | 400 | `benefit_type` / `benefit_details` type mismatch |
+| `BE-504` | 404 | Benefit provider not found or inactive |
+| `BE-505` | 400 | Validation error (e.g. empty name) |

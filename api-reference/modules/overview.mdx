@@ -1,28 +1,36 @@
 ---
 title: "Modules Overview"
-description: "Aarokya is composed of five domains: Auth, Platform, User, Benefit Provider, and Benefit. Each owns its own database tables, business logic, and error types."
+description: "Aarokya is composed of nine domains: Auth, Platform, User, Benefit Provider, Benefit, Dependant, Account Provider, Account, and MRN. Each owns its own tables, business logic, and error types."
 ---
 
 ## Module Map
 
 ```mermaid
 flowchart TD
-    subgraph Admin["Admin Operations"]
-        PLAT["Platform\nTenant management"]
-        BP["Benefit Provider\nCatalogue management"]
-        BEN["Benefit\nOffering management"]
+    subgraph Admin["Admin Only"]
+        PLAT[Platform]
+        BP[Benefit Provider]
+        BEN[Benefit]
+        AP[Account Provider]
     end
-    subgraph Partner["Partner (Namma Yatri)"]
-        AUTH["Auth\nToken issuance"]
+    subgraph Partner["Partner API Key"]
+        AUTH[Auth]
     end
-    subgraph User["User Operations"]
-        USR["User\nLifecycle · Onboarding · Profile"]
+    subgraph UserOps["JWT / Partner Key"]
+        USR[User]
+        DEP[Dependant]
+        ACC[Account]
+        MRN[MRN]
     end
 
-    PLAT -->|"platform_id"| AUTH
-    AUTH -->|"find-or-create user"| USR
-    BP -->|"provider_id"| BEN
-    BEN -->|"browsed by"| USR
+    PLAT -->|platform_id| AUTH
+    AUTH -->|find-or-create| USR
+    USR -->|owns| DEP
+    USR -->|owns| ACC
+    AP -->|provider_id| ACC
+    BP -->|provider_id| BEN
+    DEP -->|dependant_id| MRN
+    BP -->|benefit_provider_id| MRN
 ```
 
 ---
@@ -30,40 +38,68 @@ flowchart TD
 ## Domains
 
 <CardGroup cols={3}>
-  <Card title="Platform" icon="building" color="#f59e0b" href="/modules/auth">
-    **Admin-only**
-
-    Create and manage tenants (e.g. Namma Yatri). Every user belongs to exactly one platform. Platform ID is required for token issuance.
-
-    **Tables:** `platforms`
-  </Card>
   <Card title="Auth" icon="key" color="#16a34a" href="/modules/auth">
     **Partner API key**
 
-    External partners call `POST /auth/token` with a phone number and platform ID. Aarokya creates the user on first call and issues a JWT. No OTP, no passwords.
+    Partners call `POST /auth/token` with a phone number. Aarokya creates the user on first call and issues a JWT. No OTP, no passwords.
 
     **Tables:** `users` (find-or-create)
+  </Card>
+  <Card title="Platform" icon="server" color="#f59e0b" href="/modules/platform">
+    **Admin-only**
+
+    Create and manage tenants (e.g. Namma Yatri). Every user belongs to one platform. Platform ID is required for token issuance.
+
+    **Tables:** `platforms`
   </Card>
   <Card title="User" icon="user" color="#3b82f6" href="/modules/user">
     **JWT + Admin**
 
-    Full user lifecycle — read profile, update fields, complete onboarding, soft-delete. Self-access enforced: JWT users can only read/write their own record.
+    Full user lifecycle — profile, onboarding, soft-delete. Self-access enforced: JWT users can only read/write their own record.
 
     **Tables:** `users`
   </Card>
-  <Card title="Benefit Provider" icon="hospital" color="#0891b2" href="/modules/benefit_provider">
+  <Card title="Dependant" icon="user-group" color="#0891b2" href="/modules/dependant">
+    **JWT self + Admin**
+
+    Family members linked to a user. Immutable append-only rows — every update creates a new version. SELF dependant is system-managed.
+
+    **Tables:** `dependants`
+  </Card>
+  <Card title="Benefit Provider" icon="building" color="#0891b2" href="/modules/benefit_provider">
     **Admin-only**
 
-    Companies and entities that offer benefits. Top-level grouping for the benefit catalogue. A provider must exist before any benefit can reference it.
+    Companies that offer benefits. Top-level catalogue grouping. A provider must exist before any benefit can reference it.
 
     **Tables:** `benefit_providers`
   </Card>
   <Card title="Benefit" icon="stethoscope" color="#7c3aed" href="/modules/benefit">
     **Admin write · JWT + Admin read**
 
-    Individual offerings (consultation, insurance) linked to a provider. Admins manage the catalogue; active JWT users browse and redeem benefits.
+    Individual offerings (consultation, insurance) linked to a provider. Admins manage the catalogue; active JWT users browse benefits.
 
     **Tables:** `benefits`
+  </Card>
+  <Card title="Account Provider" icon="building-columns" color="#f59e0b" href="/modules/account_provider">
+    **Admin-only**
+
+    Financial institutions (banks, HSA custodians) that back user accounts. Delete guarded by child accounts.
+
+    **Tables:** `account_providers`
+  </Card>
+  <Card title="Account" icon="credit-card" color="#16a34a" href="/modules/account">
+    **JWT self + Partner key**
+
+    Links a user to an account provider with an external account ID. Responses include denormalized provider fields via JOIN.
+
+    **Tables:** `accounts`
+  </Card>
+  <Card title="MRN" icon="id-card" color="#dc2626" href="/modules/mrn">
+    **JWT + Partner · Admin delete**
+
+    Links a dependant to a benefit provider with an external Medical Record Number. Unique per `(dependant, provider)` pair.
+
+    **Tables:** `mrns`
   </Card>
 </CardGroup>
 
@@ -71,15 +107,13 @@ flowchart TD
 
 ## Authentication Model
 
-Aarokya uses three distinct auth mechanisms — one per actor type:
-
 | Header | Scheme | Used by |
 |--------|--------|---------|
-| `admin-api-key` | Static secret | Internal ops — platform CRUD, user admin |
-| `api-key` | Static secret (per partner) | External partners — token issuance |
-| `Authorization: Bearer <jwt>` | JWT (HS256) | Logged-in users — profile, onboarding |
+| `admin-api-key` | Static secret | Internal ops — CRUD for platforms, providers, benefits |
+| `api-key` | Static secret (per partner) | External partners — token issuance, account/MRN ops |
+| `Authorization: Bearer <jwt>` | JWT (HS256) | Logged-in users — profile, dependants, accounts, MRNs |
 
-There are no passwords, no OTP flows, and no refresh tokens. The JWT is the only credential issued to end users, and its lifetime is controlled by the `jwt.expiry_hours` config.
+No passwords, OTP flows, or refresh tokens. When the JWT expires, the partner backend calls `POST /auth/token` again.
 
 ---
 
@@ -88,17 +122,17 @@ There are no passwords, no OTP flows, and no refresh tokens. The JWT is the only
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> Onboarding : POST /auth/token (first call)
-    Onboarding --> Active : POST /users/{id}/complete_onboarding
-    Active --> Deactivated : DELETE /users/{id} (admin)
-    Deactivated --> [*]
+    [*] --> onboarding: POST /auth/token (first call)
+    onboarding --> active: POST /users/id/complete_onboarding
+    active --> deactivated: DELETE /users/id (admin)
+    deactivated --> [*]
 ```
 
-| Status | Meaning | What's allowed |
-|--------|---------|----------------|
-| `onboarding` | Created, profile incomplete | `PATCH /users/{id}`, `POST /users/{id}/complete_onboarding` |
-| `active` | Fully onboarded | All user endpoints |
-| `deactivated` | Soft-deleted | No further operations |
+| Status | Meaning | Allowed operations |
+|--------|---------|-------------------|
+| `onboarding` | Created, profile incomplete | `PATCH /users/{id}`, `complete_onboarding` |
+| `active` | Fully onboarded | All endpoints |
+| `deactivated` | Soft-deleted | None |
 
 ---
 
@@ -106,12 +140,12 @@ stateDiagram-v2
 
 <CardGroup cols={3}>
   <Card title="server_wrap" icon="shield-check" color="#7c3aed">
-    Single entry point for all auth validation and error handling. Every route handler calls `server_wrap(auth_guard, ...)`. No handler can accidentally skip auth.
+    Single entry point for auth validation and error handling. Every handler calls `server_wrap(auth_guard, ...)` — no handler can skip auth accidentally.
   </Card>
   <Card title="Error Envelope" icon="triangle-exclamation" color="#dc2626">
-    All errors return `{ "error": { "code": "...", "message": "..." } }`. Machine-readable `code` field — client code should switch on `code`, not `message`.
+    All errors return `{"error": {"code": "...", "message": "..."}}`. Switch on `code` (e.g. `MR-903`), not `message`.
   </Card>
   <Card title="OpenAPI / Swagger" icon="book" color="#0891b2">
-    Interactive Swagger UI at `GET /docs`. OpenAPI JSON at `GET /docs/openapi.json`. Generated from code annotations using `utoipa`.
+    Swagger UI at `/api_docs/ui`. OpenAPI JSON at `/api_docs/openapi.json`. Generated from code via `utoipa`.
   </Card>
 </CardGroup>

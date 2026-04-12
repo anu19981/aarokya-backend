@@ -4,33 +4,28 @@ description: "Full user lifecycle — read profile, update fields, complete onbo
 ---
 
 <Info>
-  **Auth guards vary by endpoint** — see the table below. JWT users can only access their own record; admin key has full access.
+  **Auth guards vary by endpoint** — JWT users can only access their own record. Admin key has full access.
 </Info>
 
 ## Overview
 
-The user row is **created by the Auth module** on first `POST /auth/token`. This module reads and writes the profile fields, manages the onboarding transition, and handles soft-deletion.
+User rows are **created by the Auth module** on first `POST /auth/token`. This module owns everything after creation: profile reads and writes, the onboarding transition, and soft-deletion. Phone number and user ID are immutable once set.
 
 ---
 
 ## Onboarding Flow
 
-New users start with `status = onboarding`. They must call `POST /users/{user_id}/complete_onboarding` to transition to `active`.
+New users start with `status = onboarding`. Calling `POST /users/{user_id}/complete_onboarding` transitions them to `active` and returns a fresh JWT.
 
 ```mermaid
-flowchart TD
-    A["POST /auth/token\n(first call)"] --> B["User created\nstatus = onboarding"]
-    B --> C["Partner app shows\nonboarding screen"]
-    C --> D["PATCH /users/{user_id}\n(optional: fill fields progressively)"]
-    D --> E["POST /users/{user_id}/complete_onboarding\n(submit required fields)"]
-    E --> F["status = active\nFresh JWT returned"]
-    F --> G["Full access to all features"]
+flowchart LR
+    A[POST /auth/token\nfirst call] --> B[status = onboarding]
+    B --> C[PATCH /users/id\nfill fields optionally]
+    C --> D[POST /users/id/complete_onboarding\nsubmit required fields]
+    D --> E[status = active\nfresh JWT returned]
 ```
 
-### Required fields for onboarding
-
-`complete_onboarding` requires: `first_name`, `last_name`, `dob`, `gender`, `address`.
-`email` and `id_proof` are optional.
+Required fields for `complete_onboarding`: `first_name`, `last_name`, `dob`, `gender`, `address`.
 
 ---
 
@@ -39,30 +34,10 @@ flowchart TD
 | Endpoint | JWT user | Admin key | Notes |
 |----------|----------|-----------|-------|
 | `GET /users` | — | ✓ | Admin only |
-| `GET /users/{user_id}` | ✓ (own record only) | ✓ | Self-access enforced in core |
-| `PATCH /users/{user_id}` | ✓ (onboarding + active) | ✓ | Allowed while onboarding |
-| `POST /users/{user_id}/complete_onboarding` | ✓ (onboarding only) | — | User-only, no admin |
+| `GET /users/{user_id}` | ✓ own only | ✓ | 403 if `jwt.sub != user_id` |
+| `PATCH /users/{user_id}` | ✓ own only | ✓ | Allowed while `onboarding` |
+| `POST /users/{user_id}/complete_onboarding` | ✓ only | — | No admin path |
 | `DELETE /users/{user_id}` | — | ✓ | Admin only |
-
-**Self-access enforcement:** When a JWT user calls `GET /users/{user_id}` or `PATCH /users/{user_id}`, the server validates that `jwt.sub == path.user_id`. Attempting to access another user's record returns `403 Forbidden`.
-
----
-
-## Profile Fields
-
-| Field | Type | Required at onboarding | Notes |
-|-------|------|----------------------|-------|
-| `user_id` | string | — | Immutable, set at creation |
-| `phone_number` | string | — | Immutable, identity anchor |
-| `phone_country_code` | string | — | Immutable |
-| `first_name` | string | ✓ | |
-| `last_name` | string | ✓ | |
-| `dob` | string (date) | ✓ | `YYYY-MM-DD` format |
-| `gender` | enum | ✓ | `male` \| `female` \| `other` |
-| `address` | object | ✓ | See `AddressDetails` |
-| `email` | string | — | Optional |
-| `id_proof` | object | — | Optional at onboarding |
-| `status` | enum | — | Read-only; set by server |
 
 ---
 
@@ -70,19 +45,19 @@ flowchart TD
 
 <CardGroup cols={2}>
   <Card title="GET /users" icon="list" color="#f59e0b" href="/api/endpoints/users/list">
-    **Admin only.** Paginated list of all users. Supports filtering by `status`, `start_time`, `end_time`.
+    **Admin only.** Paginated list of all users. Filter by `status`.
   </Card>
   <Card title="GET /users/{user_id}" icon="user" color="#3b82f6" href="/api/endpoints/users/get">
-    Fetch a user by ID. JWT users can only fetch their own record. Admin has full access.
+    Fetch a user profile. JWT users can only fetch their own record.
   </Card>
   <Card title="PATCH /users/{user_id}" icon="pen" color="#8b5cf6" href="/api/endpoints/users/update">
-    Partial profile update. Send only the fields you want to change. Allowed while `onboarding` or `active`.
+    Partial profile update. Send only changed fields. Allowed while `onboarding` or `active`.
   </Card>
   <Card title="POST /users/{user_id}/complete_onboarding" icon="circle-check" color="#16a34a" href="/api/endpoints/users/complete-onboarding">
-    Submit required profile fields and transition `status → active`. Returns a fresh JWT with updated status claim.
+    Submit required fields and transition `status → active`. Returns fresh JWT.
   </Card>
   <Card title="DELETE /users/{user_id}" icon="trash" color="#dc2626" href="/api/endpoints/users/delete">
-    **Admin only.** Soft-delete a user (sets `status → deactivated`). Deactivated users cannot receive new tokens.
+    **Admin only.** Soft-delete a user (`status → deactivated`).
   </Card>
 </CardGroup>
 
@@ -110,64 +85,21 @@ curl -X POST http://localhost:8080/users/usr_7Hq4nMdKpRsXwYzA1b/complete_onboard
   }'
 ```
 
-```json Response 201 — onboarding complete
+```json Response 201
 {
-  "user": {
-    "user_id": "usr_7Hq4nMdKpRsXwYzA1b",
-    "phone_number": "9876543210",
-    "phone_country_code": "+91",
-    "first_name": "Ravi",
-    "last_name": "Kumar",
-    "dob": "1990-05-15",
-    "gender": "male",
-    "address": {
-      "line1": "42 MG Road",
-      "city": "Bengaluru",
-      "state": "Karnataka",
-      "pincode": "560034",
-      "country": "IN"
-    },
-    "status": "active"
-  },
+  "user": { "user_id": "usr_7Hq4nMdKpRsXwYzA1b", "status": "active", "..." : "..." },
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-</CodeGroup>
-
-<CodeGroup>
-```bash Update profile (partial)
-curl -X PATCH http://localhost:8080/users/usr_7Hq4nMdKpRsXwYzA1b \
-  -H 'Authorization: Bearer eyJhbGci...' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "email": "ravi@example.com"
-  }'
-```
-
-```json Response 200
-{
-  "user_id": "usr_7Hq4nMdKpRsXwYzA1b",
-  "phone_number": "9876543210",
-  "phone_country_code": "+91",
-  "first_name": "Ravi",
-  "last_name": "Kumar",
-  "email": "ravi@example.com",
-  "status": "active"
-}
-```
-
-```json Response 403 — accessing another user's record
-{
-  "error": {
-    "code": "FORBIDDEN",
-    "message": "access to this user is not allowed"
-  }
 }
 ```
 </CodeGroup>
 
 ---
 
-## Soft Delete
+## Error Codes
 
-`DELETE /users/{user_id}` sets `status → deactivated` on the user row — the record is never physically removed. A deactivated user's phone number can be re-registered (a new user row is created on the next `POST /auth/token`).
+| Code | HTTP | Description |
+|------|------|-------------|
+| `UE-100` | 500 | Internal server error |
+| `UE-101` | 404 | User not found |
+| `UE-102` | 400 | Validation error |
+| `UE-103` | 500 | Encryption error |

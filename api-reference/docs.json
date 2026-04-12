@@ -45,7 +45,8 @@
               "modules/auth",
               "modules/user",
               "modules/benefit_provider",
-              "modules/benefit"
+              "modules/benefit",
+              "modules/dependant"
             ]
           }
         ]
@@ -108,6 +109,16 @@
                   "api/endpoints/benefits/get",
                   "api/endpoints/benefits/update",
                   "api/endpoints/benefits/delete"
+                ]
+              },
+              {
+                "group": "Dependants",
+                "pages": [
+                  "api/endpoints/dependants/create",
+                  "api/endpoints/dependants/list",
+                  "api/endpoints/dependants/get",
+                  "api/endpoints/dependants/update",
+                  "api/endpoints/dependants/delete"
                 ]
               },
               {

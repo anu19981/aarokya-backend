@@ -82,7 +82,7 @@ flowchart TD
     Submit required profile fields and transition `status → active`. Returns a fresh JWT with updated status claim.
   </Card>
   <Card title="DELETE /users/{user_id}" icon="trash" color="#dc2626" href="/api/endpoints/users/delete">
-    **Admin only.** Soft-delete a user (sets `deleted_at`). Deleted users cannot receive new tokens.
+    **Admin only.** Soft-delete a user (sets `status → deactivated`). Deactivated users cannot receive new tokens.
   </Card>
 </CardGroup>
 
@@ -170,4 +170,4 @@ curl -X PATCH http://localhost:8080/users/usr_7Hq4nMdKpRsXwYzA1b \
 
 ## Soft Delete
 
-`DELETE /users/{user_id}` sets `deleted_at` on the user row — the record is never physically removed. A deleted user's phone number can be re-registered (a new user row is created on the next `POST /auth/token`).
+`DELETE /users/{user_id}` sets `status → deactivated` on the user row — the record is never physically removed. A deactivated user's phone number can be re-registered (a new user row is created on the next `POST /auth/token`).

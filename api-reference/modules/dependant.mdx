@@ -1,0 +1,202 @@
+---
+title: "Dependant Module"
+description: "Manage family members linked to a user — immutable append-only rows, SELF auto-sync, and JWT self-scoped access."
+---
+
+<Info>
+  **Immutable rows** — dependant fields are never updated in place. Every change produces a new row with `status = active`; the old row is set to `status = discarded`. Use `previous_version_id` to walk the version history.
+</Info>
+
+## Overview
+
+A dependant represents a family member linked to a primary user (spouse, child, parent, sibling, etc.).
+The SELF dependant is a special row that mirrors the user's own identity — it is managed automatically
+by the server and cannot be created or deleted via this API.
+
+---
+
+## Immutability model
+
+```
+                 previous_version_id
+┌─────────────┐ ◄──────────────────── ┌─────────────┐
+│ id: uuid-A  │                        │ id: uuid-B  │
+│ status: discarded │               │ status: active  │
+│ first_name: Ravi  │               │ first_name: Ravi K │
+└─────────────┘                        └─────────────┘
+     v1                                     v2 (current)
+```
+
+When you `PATCH /dependants/{id}`, the server:
+1. Sets the old row's `status → discarded`
+2. Inserts a new row with a new UUID and `previous_version_id = old_id`
+3. Returns the new (current) row
+
+To query only current rows, filter `status = active` (the default).
+
+---
+
+## SELF dependant
+
+Every user has exactly one active `relationship = self` dependant at any time.
+It is automatically created on `POST /users/{user_id}/complete_onboarding` and re-versioned
+when `PATCH /users/{user_id}` changes `first_name`, `last_name`, `dob`, or `gender`.
+
+The SELF row **cannot** be created, updated, or deleted via the dependants API.
+Attempting to do so returns `400 SelfDependantNotAllowed`.
+
+---
+
+## Auth Guards by Endpoint
+
+| Endpoint | JWT user | Admin key | Notes |
+|----------|----------|-----------|-------|
+| `POST /dependants` | ✓ (own dependants only) | ✓ | `primary_user_id` must match JWT |
+| `GET /dependants` | ✓ (own dependants only) | ✓ | Admin can filter any user |
+| `GET /dependants/{id}` | ✓ (own dependants only) | ✓ | 403 if accessing another user's |
+| `PATCH /dependants/{id}` | ✓ (own dependants only) | ✓ | |
+| `DELETE /dependants/{id}` | ✓ (own dependants only) | ✓ | Sets `status → discarded` |
+
+---
+
+## Relationship values
+
+| Value | Description |
+|-------|-------------|
+| `self` | The user themselves (system-managed) |
+| `spouse` | Husband or wife |
+| `mother` | Mother |
+| `father` | Father |
+| `child` | Son or daughter |
+| `father_in_law` | Father-in-law |
+| `mother_in_law` | Mother-in-law |
+| `sibling` | Brother or sister |
+
+---
+
+## Endpoints
+
+<CardGroup cols={2}>
+  <Card title="POST /dependants" icon="plus" color="#16a34a" href="/api/endpoints/dependants/create">
+    Add a new dependant for a user. `relationship = self` is not allowed.
+  </Card>
+  <Card title="GET /dependants" icon="list" color="#3b82f6" href="/api/endpoints/dependants/list">
+    Paginated list. Defaults to `status = active`. JWT users see only their own.
+  </Card>
+  <Card title="GET /dependants/{id}" icon="user-group" color="#3b82f6" href="/api/endpoints/dependants/get">
+    Fetch a single dependant by UUID.
+  </Card>
+  <Card title="PATCH /dependants/{id}" icon="pen" color="#8b5cf6" href="/api/endpoints/dependants/update">
+    Update fields. Produces a new immutable row; old row is discarded. SELF not allowed.
+  </Card>
+  <Card title="DELETE /dependants/{id}" icon="trash" color="#dc2626" href="/api/endpoints/dependants/delete">
+    Discard a dependant (`status → discarded`). SELF not allowed.
+  </Card>
+</CardGroup>
+
+---
+
+## Request / Response Examples
+
+<CodeGroup>
+```bash Create a dependant
+curl -X POST http://localhost:8080/dependants \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "primary_user_id": "usr_7Hq4nMdKpRsXwYzA1b",
+    "relationship": "spouse",
+    "first_name": "Priya",
+    "last_name": "Kumar",
+    "date_of_birth": "1992-08-20",
+    "gender": "female"
+  }'
+```
+
+```json Response 201
+{
+  "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
+  "primary_user_id": "usr_7Hq4nMdKpRsXwYzA1b",
+  "relationship": "spouse",
+  "first_name": "Priya",
+  "last_name": "Kumar",
+  "date_of_birth": "1992-08-20",
+  "gender": "female",
+  "status": "active",
+  "previous_version_id": null,
+  "created_at": "2026-04-12T10:00:00Z",
+  "last_modified_at": "2026-04-12T10:00:00Z"
+}
+```
+</CodeGroup>
+
+<CodeGroup>
+```bash Update a dependant (produces new version)
+curl -X PATCH http://localhost:8080/dependants/01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001 \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "last_name": "Sharma"
+  }'
+```
+
+```json Response 200 — new row returned
+{
+  "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60002",
+  "primary_user_id": "usr_7Hq4nMdKpRsXwYzA1b",
+  "relationship": "spouse",
+  "first_name": "Priya",
+  "last_name": "Sharma",
+  "date_of_birth": "1992-08-20",
+  "gender": "female",
+  "status": "active",
+  "previous_version_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
+  "created_at": "2026-04-12T11:00:00Z",
+  "last_modified_at": "2026-04-12T11:00:00Z"
+}
+```
+</CodeGroup>
+
+<CodeGroup>
+```bash List active dependants
+curl http://localhost:8080/dependants \
+  -H 'Authorization: Bearer eyJhbGci...'
+```
+
+```json Response 200
+{
+  "data": [
+    {
+      "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60002",
+      "primary_user_id": "usr_7Hq4nMdKpRsXwYzA1b",
+      "relationship": "spouse",
+      "first_name": "Priya",
+      "last_name": "Sharma",
+      "status": "active",
+      ...
+    },
+    {
+      "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60010",
+      "primary_user_id": "usr_7Hq4nMdKpRsXwYzA1b",
+      "relationship": "self",
+      "first_name": "Ravi",
+      "last_name": "Kumar",
+      "status": "active",
+      ...
+    }
+  ],
+  "total": 2,
+  "limit": 20,
+  "offset": 0
+}
+```
+</CodeGroup>
+
+---
+
+## Version history
+
+To retrieve the full history of a dependant (all past versions), list with
+`status = discarded` and filter by `primary_user_id`, then follow
+`previous_version_id` links. Each `active` row is the current head of its
+version chain.

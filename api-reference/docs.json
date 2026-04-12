@@ -122,6 +122,26 @@
                 ]
               },
               {
+                "group": "Account Providers",
+                "pages": [
+                  "api/endpoints/account_providers/create",
+                  "api/endpoints/account_providers/list",
+                  "api/endpoints/account_providers/get",
+                  "api/endpoints/account_providers/update",
+                  "api/endpoints/account_providers/delete"
+                ]
+              },
+              {
+                "group": "Accounts",
+                "pages": [
+                  "api/endpoints/accounts/create",
+                  "api/endpoints/accounts/list",
+                  "api/endpoints/accounts/get",
+                  "api/endpoints/accounts/update",
+                  "api/endpoints/accounts/delete"
+                ]
+              },
+              {
                 "group": "Health",
                 "pages": [
                   "api/endpoints/health/health-check"

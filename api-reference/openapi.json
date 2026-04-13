@@ -87,7 +87,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       },
@@ -126,7 +126,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       }
@@ -168,7 +168,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       },
@@ -211,7 +211,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       },
@@ -264,7 +264,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       }
@@ -389,7 +389,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       },
@@ -428,7 +428,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       }
@@ -470,7 +470,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       },
@@ -513,7 +513,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       },
@@ -566,7 +566,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       }
@@ -679,6 +679,9 @@
             "Bearer": []
           },
           {
+            "AdminApiKey": []
+          },
+          {
             "ApiKey": []
           }
         ]
@@ -724,7 +727,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       }
@@ -769,6 +772,9 @@
             "Bearer": []
           },
           {
+            "AdminApiKey": []
+          },
+          {
             "ApiKey": []
           }
         ]
@@ -809,7 +815,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       },
@@ -862,7 +868,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       }
@@ -885,6 +891,170 @@
             }
           }
         }
+      }
+    },
+    "/insurance_policies": {
+      "get": {
+        "tags": [
+          "Insurance Policy (Admin)"
+        ],
+        "operationId": "admin_list_insurance_policies",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/PolicyStatus"
+                }
+              ]
+            }
+          },
+          {
+            "name": "primary_user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "benefit_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of all insurance policies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsurancePolicyListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "AdminApiKey": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/insurance_policies/{insurance_policy_id}": {
+      "patch": {
+        "tags": [
+          "Insurance Policy (Admin)"
+        ],
+        "operationId": "admin_update_insurance_policy",
+        "parameters": [
+          {
+            "name": "insurance_policy_id",
+            "in": "path",
+            "description": "Insurance Policy ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUpdateInsurancePolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Insurance policy updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsurancePolicyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Insurance policy not found"
+          }
+        },
+        "security": [
+          {
+            "AdminApiKey": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
       }
     },
     "/mrns": {
@@ -1119,7 +1289,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       }
@@ -1203,7 +1373,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       },
@@ -1242,7 +1412,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       }
@@ -1284,7 +1454,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       },
@@ -1324,7 +1494,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       },
@@ -1377,7 +1547,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       }
@@ -1461,6 +1631,9 @@
         },
         "security": [
           {
+            "AdminApiKey": []
+          },
+          {
             "ApiKey": []
           }
         ]
@@ -1509,6 +1682,9 @@
             "Bearer": []
           },
           {
+            "AdminApiKey": []
+          },
+          {
             "ApiKey": []
           }
         ]
@@ -1549,7 +1725,7 @@
         },
         "security": [
           {
-            "ApiKey": []
+            "AdminApiKey": []
           }
         ]
       },
@@ -2133,6 +2309,64 @@
         ]
       }
     },
+    "/users/{user_id}/dependants/bulk": {
+      "post": {
+        "tags": [
+          "Dependant"
+        ],
+        "operationId": "bulk_create_dependants",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkCreateDependantsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Dependants created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkCreateDependantsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error, empty list, exceeds limit, or SELF relationship not allowed"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
     "/users/{user_id}/dependants/{dependant_id}": {
       "get": {
         "tags": [
@@ -2312,6 +2546,260 @@
           },
           {
             "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/users/{user_id}/insurance_policies": {
+      "get": {
+        "tags": [
+          "Insurance Policy"
+        ],
+        "operationId": "list_user_insurance_policies",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/PolicyStatus"
+                }
+              ]
+            }
+          },
+          {
+            "name": "benefit_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of insurance policies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsurancePolicyListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Insurance Policy"
+        ],
+        "operationId": "create_insurance_policy",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInsurancePolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Insurance policy created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsurancePolicyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Benefit or dependant not found"
+          },
+          "409": {
+            "description": "Active policy already exists"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/users/{user_id}/insurance_policies/preview": {
+      "post": {
+        "tags": [
+          "Insurance Policy"
+        ],
+        "operationId": "preview_premium",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsurancePolicyPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Premium preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsurancePolicyPreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Benefit or dependant not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/users/{user_id}/insurance_policies/{insurance_policy_id}": {
+      "get": {
+        "tags": [
+          "Insurance Policy"
+        ],
+        "operationId": "get_insurance_policy_by_id",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "insurance_policy_id",
+            "in": "path",
+            "description": "Insurance Policy ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Insurance policy found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsurancePolicyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Insurance policy not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
           }
         ]
       }
@@ -2540,6 +3028,111 @@
           }
         }
       },
+      "AdminListInsurancePoliciesRequest": {
+        "allOf": [
+          {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TimeRange"
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "benefit_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32"
+              },
+              "offset": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32"
+              },
+              "primary_user_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PolicyStatus"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "AdminUpdateInsurancePolicyRequest": {
+        "type": "object",
+        "properties": {
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2027-01-15"
+          },
+          "external_policy_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2026-01-15"
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PolicyStatus"
+              }
+            ]
+          }
+        }
+      },
+      "AmountResponse": {
+        "type": "object",
+        "required": [
+          "value",
+          "currency"
+        ],
+        "properties": {
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "value": {
+            "$ref": "#/components/schemas/FloatMajorUnit"
+          }
+        }
+      },
       "BenefitDetails": {
         "oneOf": [
           {
@@ -2743,6 +3336,34 @@
           "insurance_policy"
         ]
       },
+      "BulkCreateDependantsRequest": {
+        "type": "object",
+        "required": [
+          "dependants"
+        ],
+        "properties": {
+          "dependants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateDependantRequest"
+            }
+          }
+        }
+      },
+      "BulkCreateDependantsResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DependantResponse"
+            }
+          }
+        }
+      },
       "CompleteOnboardingRequest": {
         "type": "object",
         "required": [
@@ -2913,6 +3534,28 @@
           }
         }
       },
+      "CreateInsurancePolicyRequest": {
+        "type": "object",
+        "required": [
+          "benefit_id",
+          "dependant_ids",
+          "nominee_dependant_id"
+        ],
+        "properties": {
+          "benefit_id": {
+            "type": "string"
+          },
+          "dependant_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "nominee_dependant_id": {
+            "type": "string"
+          }
+        }
+      },
       "CreateMrnRequest": {
         "type": "object",
         "required": [
@@ -2942,6 +3585,13 @@
             "type": "string"
           }
         }
+      },
+      "Currency": {
+        "type": "string",
+        "description": "ISO 4217 three-letter currency codes.\n\nCurrently INR only; add variants as the product expands.",
+        "enum": [
+          "INR"
+        ]
       },
       "DeleteAccountProviderResponse": {
         "type": "object",
@@ -3063,6 +3713,34 @@
           }
         }
       },
+      "DependantDetail": {
+        "type": "object",
+        "required": [
+          "dependant_id",
+          "first_name",
+          "last_name",
+          "age",
+          "gender"
+        ],
+        "properties": {
+          "age": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dependant_id": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "last_name": {
+            "type": "string"
+          }
+        }
+      },
       "DependantListResponse": {
         "type": "object",
         "required": [
@@ -3154,6 +3832,11 @@
           "discarded"
         ]
       },
+      "FloatMajorUnit": {
+        "type": "number",
+        "format": "double",
+        "description": "Connector specific types to send"
+      },
       "Gender": {
         "type": "string",
         "description": "User gender.",
@@ -3226,14 +3909,283 @@
       },
       "InsurancePolicyBenefitDetails": {
         "type": "object",
-        "description": "Details for an insurance-policy-type benefit.\n\nFields will be expanded in the `insurance_policies` module PR.",
+        "description": "Details for an insurance-policy-type benefit.\n\nDefines the insurance plan parameters: coverage amount, duration,\ngrace period, and currency. Premium rates are calculated externally\n(hardcoded function for now, rate table module later).\n\nAll new fields use `#[serde(default)]` for backward compatibility\nwith existing JSONB rows that only have `description`. Presence of\nrequired fields is validated at the application layer when purchasing.",
         "properties": {
+          "coverage_amount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Total sum insured in minor units (e.g., 20000000 = 2,00,000 INR)."
+          },
+          "currency": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Currency",
+                "description": "Currency for all monetary values in this plan."
+              }
+            ]
+          },
           "description": {
             "type": [
               "string",
               "null"
             ],
             "description": "Human-readable description of the policy coverage."
+          },
+          "duration_months": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Policy duration in months (e.g., 12 for annual)."
+          },
+          "grace_period_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Number of days after policy expiry during which renewal is still possible."
+          },
+          "max_dependants": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum number of dependants (including SELF) that can be covered."
+          }
+        }
+      },
+      "InsurancePolicyListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InsurancePolicyResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "InsurancePolicyMetadata": {
+        "type": "object",
+        "description": "Auxiliary metadata for an insurance policy.",
+        "properties": {
+          "dependant_mrn_map": {
+            "type": "object",
+            "description": "Maps dependant UUID (as string) → MRN UUID (as string) at the\nbenefit provider. Populated from the `mrns` table at policy creation.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "InsurancePolicyPreviewRequest": {
+        "type": "object",
+        "required": [
+          "benefit_id",
+          "dependant_ids"
+        ],
+        "properties": {
+          "benefit_id": {
+            "type": "string"
+          },
+          "dependant_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "InsurancePolicyPreviewResponse": {
+        "type": "object",
+        "required": [
+          "benefit_name",
+          "coverage_amount",
+          "duration_months",
+          "primary_member",
+          "dependants",
+          "total_monthly_premium",
+          "total_daily_premium"
+        ],
+        "properties": {
+          "benefit_name": {
+            "type": "string"
+          },
+          "coverage_amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "dependants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DependantDetail"
+            }
+          },
+          "duration_months": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "primary_member": {
+            "$ref": "#/components/schemas/PrimaryMemberDetail"
+          },
+          "total_daily_premium": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "total_monthly_premium": {
+            "$ref": "#/components/schemas/AmountResponse"
+          }
+        }
+      },
+      "InsurancePolicyResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "primary_user_id",
+          "benefit_id",
+          "benefit_name",
+          "dependant_ids",
+          "grace_period_days",
+          "daily_premium_amount",
+          "monthly_premium_amount",
+          "status",
+          "nominee_dependant_id",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "benefit_id": {
+            "type": "string"
+          },
+          "benefit_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "daily_premium_amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "dependant_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2027-01-15"
+          },
+          "external_policy_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "grace_period_days": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/InsurancePolicyMetadata"
+              }
+            ]
+          },
+          "monthly_premium_amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "nominee_dependant_id": {
+            "type": "string"
+          },
+          "primary_user_id": {
+            "type": "string"
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2026-01-15"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PolicyStatus"
+          }
+        }
+      },
+      "ListUserInsurancePoliciesRequest": {
+        "type": "object",
+        "properties": {
+          "benefit_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PolicyStatus"
+              }
+            ]
           }
         }
       },
@@ -3377,6 +4329,58 @@
           "inactive"
         ]
       },
+      "PolicyStatus": {
+        "type": "string",
+        "description": "Insurance policy lifecycle status.",
+        "enum": [
+          "pending",
+          "active",
+          "requires_customer_renewal_in_grace",
+          "requires_policy_reissuance",
+          "requires_customer_renewal",
+          "expired"
+        ]
+      },
+      "PrimaryMemberDetail": {
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "properties": {
+          "age": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Gender"
+              }
+            ]
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_id": {
+            "type": "string"
+          }
+        }
+      },
       "Relationship": {
         "type": "string",
         "description": "Relationship of a dependant to the primary user.",
@@ -3390,6 +4394,28 @@
           "mother_in_law",
           "sibling"
         ]
+      },
+      "TimeRange": {
+        "type": "object",
+        "description": "A half-open time range, with a mandatory start and an optional end.\nDesigned to be embedded in list/filter query params via `#[serde(flatten)]`.\n\n`Deserialize` runs [`TimeRange::validate`] as part of deserialization, so\ncallers never receive a [`TimeRange`] that violates `start_time <= end_time`.",
+        "required": [
+          "start_time"
+        ],
+        "properties": {
+          "end_time": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Inclusive end time; defaults to \"now\" when omitted.",
+            "example": "2024-12-31T23:59:59Z"
+          },
+          "start_time": {
+            "type": "string",
+            "description": "Inclusive start time.",
+            "example": "2024-01-01T00:00:00Z"
+          }
+        }
       },
       "UpdateAccountProviderRequest": {
         "type": "object",
@@ -3663,6 +4689,11 @@
       }
     },
     "securitySchemes": {
+      "AdminApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "admin-api-key"
+      },
       "ApiKey": {
         "type": "apiKey",
         "in": "header",
@@ -3716,6 +4747,14 @@
     {
       "name": "Account",
       "description": "Account management endpoints"
+    },
+    {
+      "name": "Insurance Policy",
+      "description": "User-scoped insurance policy endpoints"
+    },
+    {
+      "name": "Insurance Policy (Admin)",
+      "description": "Admin insurance policy endpoints"
     }
   ]
 }

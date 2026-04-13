@@ -50,7 +50,8 @@
               "modules/dependant",
               "modules/account_provider",
               "modules/account",
-              "modules/mrn"
+              "modules/mrn",
+              "modules/insurance_policy"
             ]
           }
         ]
@@ -153,6 +154,17 @@
                   "api/endpoints/mrns/list",
                   "api/endpoints/mrns/get",
                   "api/endpoints/mrns/delete"
+                ]
+              },
+              {
+                "group": "Insurance Policies",
+                "pages": [
+                  "api/endpoints/insurance_policies/preview",
+                  "api/endpoints/insurance_policies/create",
+                  "api/endpoints/insurance_policies/get",
+                  "api/endpoints/insurance_policies/list",
+                  "api/endpoints/insurance_policies/admin_list",
+                  "api/endpoints/insurance_policies/admin_update"
                 ]
               },
               {

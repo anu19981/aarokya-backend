@@ -1,0 +1,134 @@
+---
+title: "Mandate Module"
+description: "Recurring-debit mandate registration via Juspay/Euler. Two user-scoped endpoints: open a payment session, and poll for mandate status."
+---
+
+<Info>
+  **Auth guard:** JWT self-access (`jwt.sub == user_id`). Admin key and partner keys are not accepted.
+</Info>
+
+## Overview
+
+The mandate module lets an authenticated user set up a recurring debit on a card or bank account via [Juspay](https://juspay.in)'s payment page. The flow is two-step:
+
+1. **Register** — backend opens a Juspay `/session` and persists a pending `mandate_orders` row. The response includes the **verbatim full Juspay response** as `payload`, which the frontend hands to Juspay's SDK (native) or uses for a redirect (`payment_links.web`).
+2. **Poll status** — after the user finishes the payment flow on Juspay, the frontend polls `/mandate/order_status/{order_id}`. Every call hits Juspay's `/orders/{order_id}` and syncs the row with the latest state. Frontend controls polling cadence.
+
+Autopay execution (`/txns`), webhooks, and pause/revoke flows are **not part of this module yet** — they ship in a later milestone.
+
+---
+
+## Endpoints
+
+<CardGroup cols={2}>
+  <Card title="POST /users/{user_id}/mandate/register" icon="plus" color="#16a34a" href="/api/endpoints/mandate/register">
+    Open a Juspay session. Returns `payload` with `sdk_payload` + `payment_links` for the frontend to consume.
+  </Card>
+  <Card title="GET /users/{user_id}/mandate/order_status/{order_id}" icon="magnifying-glass" color="#16a34a" href="/api/endpoints/mandate/order-status">
+    Poll for the latest mandate status. Always queries Juspay — no server-side caching.
+  </Card>
+</CardGroup>
+
+---
+
+## Identifiers
+
+Three IDs are easy to confuse. This is what each one is:
+
+| Identifier | Shape | Where it comes from | Where it's used |
+|---|---|---|---|
+| `id` (primary key) | UUID v7 | Generated server-side on register | Internal DB only. Never exposed in URL paths. |
+| `order_id` | `<user_id>_<unix_ms>` | Generated server-side on register | Sent to Juspay as their `order_id`. Used as the **URL path param** for the status endpoint. |
+| `customer_id` | `<user_id>` | Derived server-side on register | Sent to Juspay as their `customer_id`. Stored for audit. |
+| `mandate_id` | Juspay-issued string | Returned by Juspay after the user completes the SDK flow | Stored on the row once known. Required for future autopay execution. |
+| `start_date` / `end_date` | ISO-8601 string (nullable) | Populated by Juspay after mandate is active | Null until Juspay returns them in the order-status response. |
+
+---
+
+## Amount Unit Convention
+
+- The API accepts and returns `amount` and `max_amount` in **rupees** (integer, minimum `1`).
+- The backend converts to paise (`amount_paise = amount * 100`) only at the Juspay client boundary.
+- Juspay's wire format is a decimal rupee string — e.g. `amount: 10` (rupees) becomes `"10.00"` on the Juspay request.
+- `max_amount` is fixed at **₹100** per debit; `frequency` is fixed at `as_presented`. Both are applied server-side; they cannot be overridden per request.
+
+---
+
+## Mandate Status
+
+| Value | Meaning |
+|---|---|
+| `pending` | Default on creation. Awaiting user completion on Juspay's page. |
+| `active` | User authorized successfully; Juspay returned `mandate_status = ACTIVE`. |
+| `failed` | Juspay returned `FAILURE` / `FAILED`. |
+| `paused` | Juspay returned `PAUSED`. |
+| `cancelled` | Juspay returned `REVOKED` / `CANCELLED`, or we soft-cancelled via `MandateOrderUpdate::Cancel`. |
+
+Unknown Juspay statuses map to `pending` — we wait for the next poll rather than committing to `failed` on an ambiguous response.
+
+---
+
+## Frontend Flow
+
+```mermaid
+sequenceDiagram
+    participant App as Frontend
+    participant Aarokya as Aarokya API
+    participant Juspay as Juspay
+
+    App->>Aarokya: POST /mandate/register { amount }
+    Aarokya->>Juspay: POST /session (amount="10.00", options.create_mandate=REQUIRED)
+    Juspay-->>Aarokya: { sdk_payload, payment_links, ... }
+    Aarokya-->>App: 201 { order_id, payload, mandate_status: pending }
+
+    Note over App,Juspay: User authorizes mandate on Juspay's payment page
+
+    loop Poll until terminal
+        App->>Aarokya: GET /mandate/order_status/{order_id}
+        Aarokya->>Juspay: GET /orders/{order_id}
+        Juspay-->>Aarokya: { status, mandate: { mandate_id, mandate_status, ... } }
+        Aarokya-->>App: 200 { mandate_status, mandate_id, txn_id, ... }
+    end
+```
+
+---
+
+## Request Validation
+
+| Field | Rule |
+|---|---|
+| `amount` | Required. Integer rupees, `>= 1`. |
+| `account_id` | Optional. If present, must be a valid UUID. |
+| path `user_id` | Must equal `jwt.sub` (enforced by `JwtSelfAuth::strict()`). |
+| path `order_id` (status) | The string we sent to Juspay, not the internal UUID. |
+
+Also: the user row must have a non-null `email` — registration requires it for Juspay's session call. Registration returns `400 ValidationError` if missing.
+
+---
+
+## Error Responses
+
+| Code | Status | Error | Situation |
+|---|---|---|---|
+| `ME 1200` | 500 | Internal error | Unexpected failure |
+| `ME 1201` | 404 | Mandate order not found | `order_id` doesn't exist or doesn't belong to `user_id` |
+| `ME 1202` | 404 | User not found | JWT is valid but user row was deleted |
+| `ME 1203` | 404 | Account not found | `account_id` (if passed) doesn't exist |
+| `ME 1204` | 400 | Validation error | `amount < 1`, invalid `account_id`, missing user email |
+| `ME 1205` | 500 | Provider unavailable | Juspay returned 5xx or network timed out |
+
+---
+
+## Gotchas
+
+<Warning>
+  The path param for status polling is the **Juspay `order_id`** (format `<user_id>_<unix_ms>`), **not** the internal UUID `id`. Mixing them up returns a 404 / path-parse error.
+</Warning>
+
+<Warning>
+  `/mandate/order_status/{order_id}` **always** hits Juspay. There is no server-side short-circuit once `mandate_status` becomes `active`. The frontend is responsible for stopping polling at a terminal status.
+</Warning>
+
+<Info>
+  The `payload` field on the register response is a **verbatim pass-through** of Juspay's `/session` body. Backend does not interpret its shape, so frontend can freely consume `sdk_payload`, `payment_links.web`, or any new fields Juspay adds later without a backend change.
+</Info>

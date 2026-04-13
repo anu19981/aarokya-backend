@@ -51,7 +51,8 @@
               "modules/account_provider",
               "modules/account",
               "modules/mrn",
-              "modules/insurance_policy"
+              "modules/insurance_policy",
+              "modules/mandate"
             ]
           }
         ]
@@ -165,6 +166,11 @@
                   "api/endpoints/insurance_policies/list",
                   "api/endpoints/insurance_policies/admin_list",
                   "api/endpoints/insurance_policies/admin_update"
+                ],
+                "group": "Mandate",
+                "pages": [
+                  "api/endpoints/mandate/register",
+                  "api/endpoints/mandate/order-status"
                 ]
               },
               {

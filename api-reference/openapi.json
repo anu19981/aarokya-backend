@@ -2803,6 +2803,102 @@
           }
         ]
       }
+    },
+    "/users/{user_id}/mandate/order_status/{order_id}": {
+      "get": {
+        "tags": [
+          "Mandate"
+        ],
+        "operationId": "get_mandate_order_status",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order_id",
+            "in": "path",
+            "description": "Juspay order_id (format: <user_id>_<unix_ms>)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current mandate status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateOrderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Mandate order not found"
+          }
+        }
+      }
+    },
+    "/users/{user_id}/mandate/register": {
+      "post": {
+        "tags": [
+          "Mandate"
+        ],
+        "operationId": "register_mandate",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterMandateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Mandate registration initiated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterMandateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4189,6 +4285,141 @@
           }
         }
       },
+      "MandateFrequency": {
+        "type": "string",
+        "description": "Debit frequency for a mandate. Mirrors Juspay's wire enum.",
+        "enum": [
+          "as_presented",
+          "daily",
+          "weekly",
+          "monthly",
+          "bimonthly",
+          "quarterly",
+          "half_yearly",
+          "yearly",
+          "one_time"
+        ]
+      },
+      "MandateOrderResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "order_id",
+          "customer_id",
+          "user_id",
+          "amount",
+          "max_amount",
+          "frequency",
+          "mandate_status",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "amount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "frequency": {
+            "$ref": "#/components/schemas/MandateFrequency"
+          },
+          "id": {
+            "type": "string"
+          },
+          "juspay_order_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "mandate_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mandate_status": {
+            "$ref": "#/components/schemas/MandateStatus"
+          },
+          "mandate_token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "max_amount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "payment_method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payment_method_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "txn_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "txn_uuid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "MandateStatus": {
+        "type": "string",
+        "description": "Mandate lifecycle status. Starts at pending; transitions via Juspay status poll/webhook.",
+        "enum": [
+          "pending",
+          "active",
+          "failed",
+          "paused",
+          "cancelled"
+        ]
+      },
       "MrnListResponse": {
         "type": "object",
         "required": [
@@ -4376,6 +4607,81 @@
               "null"
             ]
           },
+          "user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "RegisterMandateRequest": {
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "properties": {
+          "account_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "amount": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RegisterMandateResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "order_id",
+          "customer_id",
+          "user_id",
+          "amount",
+          "max_amount",
+          "frequency",
+          "mandate_status",
+          "payload",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "amount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "frequency": {
+            "$ref": "#/components/schemas/MandateFrequency"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "mandate_status": {
+            "$ref": "#/components/schemas/MandateStatus"
+          },
+          "max_amount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "payload": {},
           "user_id": {
             "type": "string"
           }
@@ -4755,6 +5061,10 @@
     {
       "name": "Insurance Policy (Admin)",
       "description": "Admin insurance policy endpoints"
+    },
+    {
+      "name": "Mandate",
+      "description": "Mandate registration and status"
     }
   ]
 }

@@ -166,7 +166,9 @@
                   "api/endpoints/insurance_policies/list",
                   "api/endpoints/insurance_policies/admin_list",
                   "api/endpoints/insurance_policies/admin_update"
-                ],
+                ]
+              },
+              {
                 "group": "Mandate",
                 "pages": [
                   "api/endpoints/mandate/register",

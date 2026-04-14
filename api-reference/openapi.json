@@ -4006,25 +4006,18 @@
       "InsurancePolicyBenefitDetails": {
         "type": "object",
         "description": "Details for an insurance-policy-type benefit.\n\nDefines the insurance plan parameters: coverage amount, duration,\ngrace period, and currency. Premium rates are calculated externally\n(hardcoded function for now, rate table module later).\n\nAll new fields use `#[serde(default)]` for backward compatibility\nwith existing JSONB rows that only have `description`. Presence of\nrequired fields is validated at the application layer when purchasing.",
+        "required": [
+          "coverage_amount",
+          "currency"
+        ],
         "properties": {
           "coverage_amount": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "Total sum insured in minor units (e.g., 20000000 = 2,00,000 INR)."
+            "$ref": "#/components/schemas/FloatMajorUnit",
+            "description": "Total sum insured in major units (e.g., 200000.00 for 2,00,000 INR)."
           },
           "currency": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/Currency",
-                "description": "Currency for all monetary values in this plan."
-              }
-            ]
+            "$ref": "#/components/schemas/Currency",
+            "description": "Currency for all monetary values in this plan."
           },
           "description": {
             "type": [

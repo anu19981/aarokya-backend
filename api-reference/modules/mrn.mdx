@@ -9,9 +9,15 @@ description: "Link dependants to benefit providers with an external Medical Reco
 
 ## Overview
 
-An MRN (Medical Record Number) links a **dependant** to a **benefit provider** with an external string identifier. Each MRN is uniquely scoped to one `(dependant_id, benefit_provider_id)` pair — only one active MRN per dependant per provider is allowed.
+An MRN (Medical Record Number) links a **dependant** to a **benefit provider** with an external identifier. Each MRN is uniquely scoped to one `(dependant_id, benefit_provider_id)` pair — only one active MRN per dependant per provider is allowed.
+
+The external identifier is stored as a JSONB object (`external_mrn`) with two optional fields: `temp_number` (a temporary registration number) and `mrn` (the final medical record number). Both may be null initially and populated as the provider assigns them.
 
 Routes are flat at `/mrns` (no user nesting). The `primary_user_id` is derived server-side from the dependant row — callers never supply it.
+
+<Note>
+  MRN records are also **auto-created** during insurance policy creation — one per covered dependant at the benefit's provider. See the [Insurance Policy module](/api-reference/modules/insurance_policy) for details.
+</Note>
 
 ---
 
@@ -23,7 +29,7 @@ sequenceDiagram
     participant API as Aarokya API
     participant DB as Database
 
-    C->>API: POST /mrns<br/>{dependant_id, benefit_provider_id, mrn}
+    C->>API: POST /mrns<br/>{dependant_id, benefit_provider_id, external_mrn?}
     API->>DB: Find active dependant
     DB-->>API: dependant row (primary_user_id)
     alt JWT caller
@@ -61,7 +67,7 @@ sequenceDiagram
     Create an MRN linking a dependant to a benefit provider.
   </Card>
   <Card title="GET /mrns" icon="list" color="#3b82f6" href="/api/endpoints/mrns/list">
-    List MRNs. Filter by `dependant_id`, `benefit_provider_id`, `primary_user_id`, or `mrn` string.
+    List MRNs. Filter by `dependant_id`, `benefit_provider_id`, or `primary_user_id`.
   </Card>
   <Card title="GET /mrns/{id}" icon="id-card" color="#3b82f6" href="/api/endpoints/mrns/get">
     Fetch a single active MRN by its internal UUID.
@@ -76,14 +82,27 @@ sequenceDiagram
 ## Request / Response Examples
 
 <CodeGroup>
-```bash Create an MRN
+```bash Create an MRN (with external identifiers)
 curl -X POST http://localhost:8080/mrns \
   -H 'Authorization: Bearer eyJhbGci...' \
   -H 'Content-Type: application/json' \
   -d '{
     "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
     "benefit_provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
-    "mrn": "MRN-12345"
+    "external_mrn": {
+      "temp_number": "TMP-98765",
+      "mrn": "MRN-12345"
+    }
+  }'
+```
+
+```bash Create an MRN (no external identifiers yet)
+curl -X POST http://localhost:8080/mrns \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
+    "benefit_provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b"
   }'
 ```
 
@@ -93,13 +112,25 @@ curl -X POST http://localhost:8080/mrns \
   "primary_user_id": "047382910564",
   "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
   "benefit_provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
-  "mrn": "MRN-12345",
+  "external_mrn": {
+    "temp_number": "TMP-98765",
+    "mrn": "MRN-12345"
+  },
   "status": "active",
   "created_at": "2026-04-12T10:00:00Z",
   "last_modified_at": "2026-04-12T10:00:00Z"
 }
 ```
 </CodeGroup>
+
+### `external_mrn` Object
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `temp_number` | string | no | Temporary registration number assigned by the provider |
+| `mrn` | string | no | Final medical record number assigned by the provider |
+
+Both fields are optional. The `external_mrn` field itself is also optional on create — an MRN record can exist without external identifiers (e.g., when auto-created during policy purchase).
 
 ---
 

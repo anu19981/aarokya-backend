@@ -44,7 +44,7 @@ When you `PATCH /dependants/{id}`, the server:
 
 ## SELF Dependant
 
-Every user has exactly one active `relationship = self` dependant. It is created automatically on `POST /users/{user_id}/complete_onboarding` and re-versioned when `PATCH /users/{user_id}` changes `first_name`, `last_name`, `dob`, or `gender`. Attempting to create, update, or delete SELF via the dependants API returns `400 DE-603`.
+Every user has exactly one active `relationship = self` dependant. It is created automatically on `POST /users/{user_id}/complete_onboarding` (which also accepts an optional `salutation` field) and re-versioned when `PATCH /users/{user_id}` changes `first_name`, `last_name`, `dob`, or `gender`. Attempting to create, update, or delete SELF via the dependants API returns `400 DE-603`.
 
 ---
 
@@ -60,6 +60,19 @@ Every user has exactly one active `relationship = self` dependant. It is created
 | `father_in_law` | Father-in-law |
 | `mother_in_law` | Mother-in-law |
 | `sibling` | Brother or sister |
+
+---
+
+## Salutation Values
+
+An optional `salutation` field is available on create, update, and response objects:
+
+| Value | Description |
+|-------|-------------|
+| `mr` | Mr |
+| `mrs` | Mrs |
+| `ms` | Ms |
+| `master` | Master (typically for young males) |
 
 ---
 
@@ -100,7 +113,8 @@ curl -X POST http://localhost:8080/users/047382910564/dependants \
     "first_name": "Priya",
     "last_name": "Kumar",
     "date_of_birth": "1992-08-20",
-    "gender": "female"
+    "gender": "female",
+    "salutation": "mrs"
   }'
 ```
 
@@ -113,6 +127,7 @@ curl -X POST http://localhost:8080/users/047382910564/dependants \
   "last_name": "Kumar",
   "date_of_birth": "1992-08-20",
   "gender": "female",
+  "salutation": "mrs",
   "status": "active",
   "previous_version_id": null,
   "created_at": "2026-04-12T10:00:00Z",
@@ -131,14 +146,16 @@ curl -X POST http://localhost:8080/users/047382910564/dependants/bulk \
         "first_name": "Priya",
         "last_name": "Kumar",
         "date_of_birth": "1992-08-20",
-        "gender": "female"
+        "gender": "female",
+        "salutation": "mrs"
       },
       {
         "relationship": "child",
         "first_name": "Arjun",
         "last_name": "Kumar",
         "date_of_birth": "2015-03-10",
-        "gender": "male"
+        "gender": "male",
+        "salutation": "master"
       }
     ]
   }'
@@ -155,6 +172,7 @@ curl -X POST http://localhost:8080/users/047382910564/dependants/bulk \
       "last_name": "Kumar",
       "date_of_birth": "1992-08-20",
       "gender": "female",
+      "salutation": "mrs",
       "status": "active",
       "previous_version_id": null,
       "created_at": "2026-04-12T10:00:00Z",
@@ -168,6 +186,7 @@ curl -X POST http://localhost:8080/users/047382910564/dependants/bulk \
       "last_name": "Kumar",
       "date_of_birth": "2015-03-10",
       "gender": "male",
+      "salutation": "master",
       "status": "active",
       "previous_version_id": null,
       "created_at": "2026-04-12T10:00:00Z",

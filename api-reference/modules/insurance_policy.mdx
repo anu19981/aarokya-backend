@@ -9,12 +9,14 @@ description: "Preview premiums, purchase policies, and manage lifecycle — user
 
 ## Overview
 
-An insurance policy ties a **primary user** to an **insurance-type benefit** and a set of **dependants** to be covered. Premiums are calculated per-dependant based on age and gender, stored in minor units (INR paise).
+An insurance policy ties a **primary user** to an **insurance-type benefit** and a set of **dependants** to be covered. The SELF dependant (the primary user themselves) is always auto-included in the covered members — you do not need to add it manually to `dependant_ids`. Premiums are calculated per member (including SELF) based on age and gender, stored in minor units (INR paise).
 
 The purchase flow has two steps:
 
 1. **Preview** — compute the premium breakdown without creating a record
 2. **Create** — purchase the policy; status starts as `pending`
+
+At creation time, the server also **auto-creates MRN records** for each covered dependant at the benefit's provider. The resulting mapping is stored in the policy's `metadata.dependant_mrn_map`.
 
 Activation (`status → active`) is done by an admin once the external insurer issues a policy number.
 
@@ -29,12 +31,12 @@ sequenceDiagram
     participant DB as Database
 
     C->>API: POST .../preview {benefit_id, dependant_ids}
-    API->>DB: Fetch benefit + dependants
-    DB-->>API: benefit details + DOB/gender per dependant
-    API->>API: Calculate per-dependant premiums + trust subsidy eligibility
-    API-->>C: 200 InsurancePolicyPreviewResponse
+    API->>DB: Fetch benefit + dependants (SELF auto-included)
+    DB-->>API: benefit details + DOB/gender per member
+    API->>API: Calculate per-member premiums
+    API-->>C: 200 InsurancePolicyPreviewResponse (members array)
 
-    C->>API: POST .../insurance_policies {benefit_id, dependant_ids, nominee_dependant_id}
+    C->>API: POST .../insurance_policies {benefit_id, dependant_ids, nominee_details}
     API->>DB: Validate benefit, dependants, nominee
     API->>DB: Check for existing non-expired policy (partial unique index)
     alt Duplicate
@@ -42,7 +44,8 @@ sequenceDiagram
         API-->>C: 409 IP-908
     else First purchase
         API->>DB: INSERT insurance_policy (status=pending)
-        DB-->>API: policy row
+        API->>DB: CREATE MRN per dependant at benefit provider
+        DB-->>API: policy row + MRN map
         API-->>C: 201 InsurancePolicyResponse
     end
 ```
@@ -135,29 +138,62 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies/preview \
   "benefit_name": "Narayana Health Shield",
   "coverage_amount": { "amount": 500000, "currency": "INR" },
   "duration_months": 12,
-  "dependant_premiums": [
+  "members": [
     {
-      "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
+      "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60099",
       "first_name": "Ravi",
       "last_name": "Kumar",
+      "salutation": "mr",
       "age": 31,
       "gender": "male",
+      "relationship": "self",
       "monthly_premium": { "amount": 250, "currency": "INR" }
+    },
+    {
+      "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
+      "first_name": "Priya",
+      "last_name": "Kumar",
+      "salutation": "mrs",
+      "age": 33,
+      "gender": "female",
+      "relationship": "spouse",
+      "monthly_premium": { "amount": 238, "currency": "INR" }
     }
   ],
-  "total_monthly_premium": { "amount": 250, "currency": "INR" },
-  "total_daily_premium": { "amount": 9, "currency": "INR" }
+  "total_monthly_premium": { "amount": 488, "currency": "INR" },
+  "total_daily_premium": { "amount": 17, "currency": "INR" }
 }
 ```
 
-```bash Create Policy
+```bash Create Policy (nominee is an existing dependant)
 curl -X POST http://localhost:8080/users/USER_ID/insurance_policies \
   -H 'Authorization: Bearer eyJhbGci...' \
   -H 'Content-Type: application/json' \
   -d '{
     "benefit_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
     "dependant_ids": ["01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001"],
-    "nominee_dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001"
+    "nominee_details": {
+      "type": "dependant",
+      "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001"
+    }
+  }'
+```
+
+```bash Create Policy (nominee is an external person)
+curl -X POST http://localhost:8080/users/USER_ID/insurance_policies \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "benefit_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
+    "dependant_ids": ["01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001"],
+    "nominee_details": {
+      "type": "external",
+      "name": "Anita Sharma",
+      "relationship": "mother",
+      "date_of_birth": "1960-05-15",
+      "gender": "female",
+      "phone": "+919876543210"
+    }
   }'
 ```
 
@@ -168,17 +204,61 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies \
   "benefit_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
   "benefit_name": "Narayana Health Shield",
   "external_policy_id": null,
-  "dependant_ids": ["01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001"],
-  "nominee_dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
+  "dependant_ids": [
+    "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60099",
+    "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001"
+  ],
+  "nominee_details": {
+    "type": "dependant",
+    "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001"
+  },
   "grace_period_days": 30,
-  "daily_premium_amount": { "amount": 9, "currency": "INR" },
-  "monthly_premium_amount": { "amount": 250, "currency": "INR" },
+  "daily_premium_amount": { "amount": 17, "currency": "INR" },
+  "monthly_premium_amount": { "amount": 488, "currency": "INR" },
+  "metadata": {
+    "dependant_mrn_map": {
+      "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60099": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60020",
+      "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60021"
+    }
+  },
   "status": "pending",
   "created_at": "2026-04-13T10:00:00",
   "last_modified_at": "2026-04-13T10:00:00"
 }
 ```
 </CodeGroup>
+
+<Note>
+  The SELF dependant is **always auto-included** in `dependant_ids` — you do not need to add it. The `members` array in the preview response and `dependant_ids` in the create response will both include SELF automatically.
+</Note>
+
+### `nominee_details` — Tagged Union
+
+The `nominee_details` field is a JSONB tagged union. Use one of two variants:
+
+| Variant | Fields | Description |
+|---------|--------|-------------|
+| `dependant` | `type`, `dependant_id` | Nominee is an existing dependant on the user's profile |
+| `external` | `type`, `name`, `relationship`, `date_of_birth`, `gender`, `phone` | Nominee is a person not registered as a dependant |
+
+### Preview `members` Array
+
+The preview response returns a unified `members` array of `MemberDetail` objects instead of separate `primary_member` and `dependants` fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `dependant_id` | uuid | The dependant's internal ID |
+| `first_name` | string | First name |
+| `last_name` | string | Last name |
+| `salutation` | string | Title (mr, mrs, ms, master) |
+| `age` | integer | Age computed from date of birth |
+| `gender` | string | male or female |
+| `relationship` | string | Relationship to the primary user (self, spouse, child, etc.) |
+| `monthly_premium` | Money | Per-member monthly premium in minor units |
+
+### MRN Auto-Creation
+
+When a policy is created, the server automatically creates one MRN record per covered dependant at the benefit's provider. The `metadata.dependant_mrn_map` field maps each dependant ID to its newly created MRN ID.
 
 ---
 

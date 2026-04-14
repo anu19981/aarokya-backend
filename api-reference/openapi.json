@@ -1098,17 +1098,6 @@
             }
           },
           {
-            "name": "mrn",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -3463,6 +3452,7 @@
       "CompleteOnboardingRequest": {
         "type": "object",
         "required": [
+          "salutation",
           "first_name",
           "last_name",
           "dob",
@@ -3501,6 +3491,9 @@
           },
           "last_name": {
             "type": "string"
+          },
+          "salutation": {
+            "$ref": "#/components/schemas/Salutation"
           }
         }
       },
@@ -3606,6 +3599,7 @@
         "type": "object",
         "required": [
           "relationship",
+          "salutation",
           "first_name",
           "last_name",
           "date_of_birth",
@@ -3627,6 +3621,9 @@
           },
           "relationship": {
             "$ref": "#/components/schemas/Relationship"
+          },
+          "salutation": {
+            "$ref": "#/components/schemas/Salutation"
           }
         }
       },
@@ -3635,7 +3632,7 @@
         "required": [
           "benefit_id",
           "dependant_ids",
-          "nominee_dependant_id"
+          "nominee_details"
         ],
         "properties": {
           "benefit_id": {
@@ -3647,16 +3644,13 @@
               "type": "string"
             }
           },
-          "nominee_dependant_id": {
-            "type": "string"
-          }
+          "nominee_details": {}
         }
       },
       "CreateMrnRequest": {
         "type": "object",
         "required": [
           "dependant_id",
-          "mrn",
           "benefit_provider_id"
         ],
         "properties": {
@@ -3666,9 +3660,7 @@
           "dependant_id": {
             "type": "string"
           },
-          "mrn": {
-            "type": "string"
-          }
+          "external_mrn": {}
         }
       },
       "CreatePlatformRequest": {
@@ -3809,34 +3801,6 @@
           }
         }
       },
-      "DependantDetail": {
-        "type": "object",
-        "required": [
-          "dependant_id",
-          "first_name",
-          "last_name",
-          "age",
-          "gender"
-        ],
-        "properties": {
-          "age": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "dependant_id": {
-            "type": "string"
-          },
-          "first_name": {
-            "type": "string"
-          },
-          "gender": {
-            "$ref": "#/components/schemas/Gender"
-          },
-          "last_name": {
-            "type": "string"
-          }
-        }
-      },
       "DependantListResponse": {
         "type": "object",
         "required": [
@@ -3872,6 +3836,7 @@
           "id",
           "primary_user_id",
           "relationship",
+          "salutation",
           "first_name",
           "last_name",
           "date_of_birth",
@@ -3914,6 +3879,9 @@
           },
           "relationship": {
             "$ref": "#/components/schemas/Relationship"
+          },
+          "salutation": {
+            "$ref": "#/components/schemas/Salutation"
           },
           "status": {
             "$ref": "#/components/schemas/DependantStatus"
@@ -4121,8 +4089,7 @@
           "benefit_name",
           "coverage_amount",
           "duration_months",
-          "primary_member",
-          "dependants",
+          "members",
           "total_monthly_premium",
           "total_daily_premium"
         ],
@@ -4133,18 +4100,15 @@
           "coverage_amount": {
             "$ref": "#/components/schemas/AmountResponse"
           },
-          "dependants": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DependantDetail"
-            }
-          },
           "duration_months": {
             "type": "integer",
             "format": "int32"
           },
-          "primary_member": {
-            "$ref": "#/components/schemas/PrimaryMemberDetail"
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberDetail"
+            }
           },
           "total_daily_premium": {
             "$ref": "#/components/schemas/AmountResponse"
@@ -4166,7 +4130,7 @@
           "daily_premium_amount",
           "monthly_premium_amount",
           "status",
-          "nominee_dependant_id",
+          "nominee_details",
           "created_at",
           "last_modified_at"
         ],
@@ -4225,9 +4189,7 @@
           "monthly_premium_amount": {
             "$ref": "#/components/schemas/AmountResponse"
           },
-          "nominee_dependant_id": {
-            "type": "string"
-          },
+          "nominee_details": {},
           "primary_user_id": {
             "type": "string"
           },
@@ -4413,6 +4375,42 @@
           "cancelled"
         ]
       },
+      "MemberDetail": {
+        "type": "object",
+        "required": [
+          "dependant_id",
+          "first_name",
+          "last_name",
+          "salutation",
+          "age",
+          "gender",
+          "relationship"
+        ],
+        "properties": {
+          "age": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dependant_id": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/Relationship"
+          },
+          "salutation": {
+            "$ref": "#/components/schemas/Salutation"
+          }
+        }
+      },
       "MrnListResponse": {
         "type": "object",
         "required": [
@@ -4448,7 +4446,7 @@
           "id",
           "primary_user_id",
           "dependant_id",
-          "mrn",
+          "external_mrn",
           "benefit_provider_id",
           "status",
           "created_at",
@@ -4464,13 +4462,11 @@
           "dependant_id": {
             "type": "string"
           },
+          "external_mrn": {},
           "id": {
             "type": "string"
           },
           "last_modified_at": {
-            "type": "string"
-          },
-          "mrn": {
             "type": "string"
           },
           "primary_user_id": {
@@ -4565,46 +4561,6 @@
           "expired"
         ]
       },
-      "PrimaryMemberDetail": {
-        "type": "object",
-        "required": [
-          "user_id"
-        ],
-        "properties": {
-          "age": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32"
-          },
-          "first_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "gender": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/Gender"
-              }
-            ]
-          },
-          "last_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "user_id": {
-            "type": "string"
-          }
-        }
-      },
       "RegisterMandateRequest": {
         "type": "object",
         "required": [
@@ -4692,6 +4648,16 @@
           "father_in_law",
           "mother_in_law",
           "sibling"
+        ]
+      },
+      "Salutation": {
+        "type": "string",
+        "description": "Title or honorific for a person.",
+        "enum": [
+          "mr",
+          "mrs",
+          "ms",
+          "master"
         ]
       },
       "TimeRange": {
@@ -4814,6 +4780,16 @@
             "type": [
               "string",
               "null"
+            ]
+          },
+          "salutation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Salutation"
+              }
             ]
           }
         }

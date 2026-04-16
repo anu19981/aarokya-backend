@@ -24,6 +24,7 @@
             "pages": [
               "architecture/system-overview",
               "architecture/screen-flows",
+              "architecture/money-flow",
               "architecture/codegen-pipeline",
               "architecture/smithy-codegen-guide",
               "architecture/data-model"

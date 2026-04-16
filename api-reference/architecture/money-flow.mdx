@@ -1,0 +1,397 @@
+---
+title: "Money Flow"
+sidebarTitle: "Money Flow"
+description: "End-to-end money movement — from mandate setup through recurring debit. Shows the interplay between the driver app, Aarokya Backend, Juspay Kronos, the upstream payment rails, and the Partner Backend (PBA) ledger."
+---
+
+## Actors
+
+| Actor | Description |
+|-------|-------------|
+| **App** | Driver's mobile app — initiates autopay setup directly against Aarokya Backend and hosts the Juspay SDK for mandate signing. |
+| **Aarokya Backend** | **Aarokya Autopay Backend** (this repository, `money-flows`) — orchestrates mandate registration, schedules debits, reconciles transactions, and emits ledger events. |
+| **DB** | Aarokya Backend's PostgreSQL — stores mandate, transaction, and job state. |
+| **Payment Servers** | Juspay Payment Gateway — handles session creation, SDK payloads, UPI mandate consent, order status polling, and mandate-activation webhooks. Involved in steps 1–19. |
+| **Kronos** | Juspay Kronos — recurring job scheduler. Only involved from step 20 onwards: schedules debit jobs, executes `/txn/s`, fires order settlement webhooks. |
+| **Dashboard** | Operator / ops dashboard used to kick off recurring debits. |
+| **PBA** | **Partner Backend API** — the partner's ledger. Aarokya Backend notifies it only at the **end** of a debit cycle (ledger pending → ledger completed). PBA is **not** involved in mandate setup or activation. |
+
+---
+
+## High-Level Architecture
+
+```mermaid
+flowchart LR
+    subgraph ClientLayer["📱 Client"]
+        APP["Driver App"]
+        SDK["Juspay SDK"]
+        DASH["🖥️ Dashboard"]
+    end
+
+    subgraph AarokyaLayer["⚙️ Aarokya Backend"]
+        direction TB
+        API["Mandate + Autopay<br/>APIs"]
+        WORKER["Job / Webhook<br/>Handler"]
+        DB[("🗄️ PostgreSQL<br/>mandates · txns")]
+    end
+
+    subgraph JuspayLayer["💳 Juspay"]
+        KRONOS["Kronos<br/>Payment Orchestrator"]
+        PG["Payment Servers<br/>(UPI / Bank)"]
+    end
+
+    subgraph PartnerLayer["🤝 Partner"]
+        PBA["PBA<br/>Partner Ledger"]
+    end
+
+    APP -->|"/register/mandate<br/>/mandate-order/status"| API
+    DASH -->|"/start-autopay"| API
+    API --> DB
+    WORKER --> DB
+    API -->|"/session · /order/status"| PG
+    WORKER -->|"schedule · /txn/s"| KRONOS
+    PG -.->|"MANDATE_ACTIVE webhook"| WORKER
+    KRONOS -.->|"ORDER webhook"| WORKER
+    SDK -.->|"UPI consent"| PG
+    KRONOS --> PG
+    WORKER -.->|"ledger pending<br/>ledger completed"| PBA
+```
+
+<Info>
+  The **App** and **Dashboard** talk directly to **Aarokya Backend**. **PBA is only
+  contacted at the tail end of a debit cycle** — once to record the pending
+  ledger entry when the debit is dispatched, and again to mark it completed
+  after the settlement webhook arrives. Mandate setup, activation, and
+  scheduling do **not** touch PBA.
+</Info>
+
+---
+
+## End-to-End Sequence
+
+The complete journey — setup, activation, scheduling, and debit — in one view.
+
+```mermaid
+sequenceDiagram
+    actor U as Driver
+    participant App
+    participant SDK as Juspay SDK<br/>(Payment Page)
+    participant UPI as UPI App<br/>(GPay / PhonePe / …)
+    participant AAB as Aarokya Backend
+    participant DB
+    participant K as Kronos
+    participant PS as Payment Servers
+    actor Ops as Dashboard
+    participant PBA
+
+    rect rgba(34, 197, 94, 0.12)
+        Note over U,K: ① Setup Autopay — Mandate Registration
+        U->>App: Tap "Setup Autopay"
+        App->>AAB: 1. /register/mandate
+        AAB->>DB: 2. Write mandate + execution history
+        DB-->>AAB: 3. OK
+        AAB->>PS: 4. /session { mandate, amount }
+        PS-->>AAB: 5. SDK payload
+        AAB-->>App: 6. SDK payload
+    end
+
+    rect rgba(14, 165, 233, 0.12)
+        Note over U,UPI: ② Payment Page → UPI Autopay Consent
+        App->>SDK: 7. open payment page<br/>(SDK payload)
+        SDK-->>U: show payment methods
+        U->>SDK: 8. select UPI app
+        SDK->>UPI: 9. deep-link to UPI app<br/>(autopay consent intent)
+        U->>UPI: 10. approve autopay mandate
+        UPI-->>SDK: 11. consent result
+        SDK-->>App: 12. return to app
+    end
+
+    rect rgba(59, 130, 246, 0.12)
+        Note over App,K: ③ Mandate Activation — Status Poll
+        App->>AAB: 13. /mandate-order/status
+        AAB->>PS: 14. /order/status (poll)
+        PS-->>AAB: 15. status
+        AAB->>DB: 16. store order data
+        AAB-->>App: 17. status response
+    end
+
+    rect rgba(99, 102, 241, 0.12)
+        Note over PS,AAB: ④ Mandate Activation — Webhook
+        PS-->>AAB: 18. MANDATE ACTIVE webhook
+        AAB->>DB: 19. UPDATE mandate status = ACTIVE
+    end
+
+    rect rgba(245, 158, 11, 0.12)
+        Note over Ops,K: ⑤ Start Autopay — Schedule Recurring Job
+        Ops->>AAB: 20. /start-autopay
+        AAB->>DB: 21. Update mandate internal status
+        AAB->>K: 22. schedule a job
+        K-->>AAB: 23. job_id
+        AAB->>DB: 24. Update job_id on mandate table
+    end
+
+    rect rgba(168, 85, 247, 0.12)
+        Note over AAB,PBA: ⑥ Recurring Debit — Job Fires
+        K->>AAB: 25. JOB CALL (debit due)
+        AAB->>DB: 26. GET mandate data
+        DB-->>AAB: 27. mandate data
+        AAB->>DB: 28. CREATE mandate txn entry
+        DB-->>AAB: 29. txn data
+        AAB->>PS: 30. /TXN/{order_id}
+        PS-->>AAB: 31. resp: PDN (mandate scheduled, debit initiated)
+        AAB->>DB: 32. Update txn data
+        AAB->>PBA: 33. LEDGER — PENDING
+    end
+
+    rect rgba(220, 38, 38, 0.12)
+        Note over PS,PBA: ⑦ Settlement & Ledger Completion
+        PS->>AAB: 34. ORDER webhook (mandate success)
+        AAB->>DB: 35. Update txn data
+        AAB->>PBA: 36. LEDGER — COMPLETED
+    end
+```
+
+---
+
+## Flow ① — Mandate Registration (Setup Autopay)
+
+The driver opts into autopay. Aarokya Backend persists the mandate shell, creates a Juspay session scoped to the mandate amount, and returns an SDK payload that the app will hand to the Juspay SDK in the next step.
+
+```mermaid
+sequenceDiagram
+    actor U as Driver
+    participant App
+    participant AAB as Aarokya Backend
+    participant DB
+    participant PS as Payment Servers
+
+    U->>App: Tap "Setup Autopay"
+    App->>AAB: POST /register/mandate
+    AAB->>DB: INSERT mandate + execution history
+    DB-->>AAB: OK
+    AAB->>PS: POST /session { mandate, amount, max_amount }
+    PS-->>AAB: { sdk_payload, order_id }
+    AAB-->>App: { sdk_payload, order_id }
+```
+
+**Key writes on Aarokya Backend side:** a `mandates` row in `PENDING` state with the `order_id` returned by Payment Servers.
+
+---
+
+## Flow ② — Payment Page → UPI Autopay Consent
+
+With the SDK payload in hand, the app opens the Juspay SDK's payment page. The user picks their UPI app; the SDK deep-links into it with an autopay consent intent; the user approves the mandate inside their UPI app; control returns to Aarokya. **Aarokya Backend is not called during this phase** — all interactions are between the app, the SDK, and the UPI app / rails.
+
+```mermaid
+sequenceDiagram
+    actor U as Driver
+    participant App
+    participant SDK as Juspay SDK<br/>(Payment Page)
+    participant UPI as UPI App<br/>(GPay / PhonePe / …)
+    participant PS as Payment Servers
+
+    App->>SDK: launch payment page (sdk_payload)
+    SDK-->>U: render payment methods
+    U->>SDK: select UPI app
+    SDK->>UPI: deep-link with autopay<br/>consent intent
+    U->>UPI: review mandate details<br/>(amount, max_amount, frequency)
+    U->>UPI: approve + enter UPI PIN
+    UPI-->>PS: consent submitted
+    UPI-->>SDK: return (success / cancelled)
+    SDK-->>App: return control to app
+    Note over App: App proceeds to poll<br/>mandate status → Flow ③
+```
+
+<Info>
+  The UPI app talks to Payment Servers (not to Aarokya) when the user approves. Aarokya Backend
+  only learns that the mandate is active via the status poll and/or the Payment Servers
+  `MANDATE_ACTIVE` webhook in the next flow.
+</Info>
+
+---
+
+## Flow ③ — Mandate Activation — Status Poll
+
+After returning from the UPI app, the app polls Aarokya Backend for the mandate status. Aarokya Backend queries Payment Servers, stores the order data, and returns the status to the app.
+
+```mermaid
+sequenceDiagram
+    actor U as Driver
+    participant App
+    participant AAB as Aarokya Backend
+    participant DB
+    participant PS as Payment Servers
+
+    U->>App: Returns from UPI app
+    App->>AAB: GET /mandate-order/status
+    AAB->>PS: GET /order/status (poll)
+    PS-->>AAB: { status: ACTIVE }
+    AAB->>DB: store order data
+    AAB-->>App: { status: ACTIVE }
+    App-->>U: ✅ Autopay is live
+```
+
+---
+
+## Flow ④ — Mandate Activation — Webhook
+
+Independently of the poll, Payment Servers fire a `MANDATE_ACTIVE` webhook to Aarokya Backend, which writes the final mandate status to DB.
+
+```mermaid
+sequenceDiagram
+    participant PS as Payment Servers
+    participant AAB as Aarokya Backend
+    participant DB
+
+    PS->>AAB: POST /webhook (MANDATE_ACTIVE)
+    AAB->>DB: UPDATE mandates SET status = ACTIVE
+```
+
+<Warning>
+  Both the poll (Flow ③) and this webhook can arrive in either order — both
+  paths are idempotent. Use `order_id` + `status` as the idempotency key when
+  writing `mandates.status`.
+</Warning>
+
+---
+
+## Flow ⑤ — Start Autopay (Schedule Recurring Job)
+
+Ops (or an automated upstream) flips a mandate from "active" to "actively debiting" by scheduling a job on Kronos. Kronos owns the cron; Aarokya Backend owns the state.
+
+```mermaid
+sequenceDiagram
+    actor Ops as Dashboard Operator
+    participant Dash as Dashboard
+    participant AAB as Aarokya Backend
+    participant DB
+    participant K as Kronos
+
+    Ops->>Dash: Enable autopay for user
+    Dash->>AAB: POST /start-autopay
+    AAB->>DB: Update mandates SET internal_status = SCHEDULING
+    AAB->>K: POST /schedule { mandate_id, cadence }
+    K-->>AAB: { job_id }
+    AAB->>DB: Update mandates SET job_id, internal_status = SCHEDULED
+    AAB-->>Dash: ✅ Scheduled
+```
+
+**State transitions:** `ACTIVE → SCHEDULING → SCHEDULED`. The intermediate `SCHEDULING` state lets us recover if the Kronos call fails — a retry worker can re-issue the schedule without double-booking.
+
+---
+
+## Flow ⑥ — Recurring Debit — Job Fires
+
+Kronos fires the scheduled job. Aarokya Backend fetches mandate data, creates a txn entry, calls Payment Servers with the mandate txn order ID, and records a pending ledger entry with PBA.
+
+```mermaid
+sequenceDiagram
+    participant K as Kronos
+    participant AAB as Aarokya Backend
+    participant DB
+    participant PS as Payment Servers
+    participant PBA
+
+    K->>AAB: POST /job-callback (debit due)
+    AAB->>DB: GET mandate data
+    DB-->>AAB: mandate row
+    AAB->>DB: CREATE mandate txn entry
+    DB-->>AAB: txn row
+    AAB->>PS: POST /TXN/{order_id}
+    PS-->>AAB: resp: PDN (mandate scheduled, debit initiated)
+    AAB->>DB: Update mandate_txn
+    AAB->>PBA: POST /ledger { PENDING, amount, txn_id }
+```
+
+---
+
+## Flow ⑦ — Settlement & Ledger Completion
+
+Payment Servers fire an ORDER webhook once the debit settles. Aarokya Backend updates the txn and closes the ledger entry with PBA.
+
+```mermaid
+sequenceDiagram
+    participant PS as Payment Servers
+    participant AAB as Aarokya Backend
+    participant DB
+    participant PBA
+
+    PS->>AAB: POST /webhook (ORDER — mandate success)
+    AAB->>DB: Update mandate_txn
+    AAB->>PBA: POST /ledger { COMPLETED, txn_id }
+```
+
+<Info>
+  **Why two ledger calls?** The `PENDING` call (Flow ⑥) gives the partner a
+  real-time hold on funds the moment we dispatch to Payment Servers. The
+  `COMPLETED` call only fires after the ORDER webhook confirms money has moved.
+  If the webhook reports a failure, Aarokya Backend calls PBA with `FAILED`
+  instead — the partner never sees a phantom settlement.
+</Info>
+
+---
+
+## State Machine — Mandate
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PENDING: /register/mandate
+    PENDING --> ACTIVE: MANDATE_ACTIVE webhook<br/>or status poll
+    PENDING --> FAILED: user declines /<br/>timeout
+    ACTIVE --> SCHEDULING: /start-autopay
+    SCHEDULING --> SCHEDULED: Kronos returns job_id
+    SCHEDULING --> ACTIVE: schedule failure<br/>(retry possible)
+    SCHEDULED --> PAUSED: ops pause
+    PAUSED --> SCHEDULED: ops resume
+    SCHEDULED --> REVOKED: user revokes UPI mandate
+    FAILED --> [*]
+    REVOKED --> [*]
+```
+
+---
+
+## State Machine — Debit Transaction
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> CREATED: job fires<br/>INSERT mandate_txn
+    CREATED --> PENDING: /TXN accepted by<br/>Payment Servers
+    CREATED --> FAILED: Payment Servers rejects
+    PENDING --> CHARGED: ORDER webhook (success)
+    PENDING --> FAILED: ORDER webhook (failure)
+    CHARGED --> [*]
+    FAILED --> [*]
+
+    note right of CHARGED
+        PBA ledger call:
+        PENDING → COMPLETED
+    end note
+    note right of FAILED
+        PBA ledger call:
+        PENDING → FAILED
+    end note
+```
+
+---
+
+## Idempotency & Recovery
+
+| Scenario | Guard |
+|----------|-------|
+| Duplicate `MANDATE_ACTIVE` webhook | `UPDATE ... WHERE status = 'PENDING'` — a second write is a no-op. |
+| Status poll lands before webhook | Same row keyed by `order_id`; first writer wins, second is a no-op. |
+| `/schedule` times out after Kronos accepted | Mandate is stuck in `SCHEDULING`; reconciler compares Aarokya Backend state against Kronos `GET /jobs/:id` and heals. |
+| Poll and webhook both report ACTIVE | Idempotent — state transition is `PENDING → ACTIVE` only; duplicate `ACTIVE` signals from Payment Servers are ignored. |
+| Duplicate `ORDER` webhook | `mandate_txn` transitions are one-way (`PENDING → CHARGED` / `PENDING → FAILED`); re-delivery is a no-op. |
+| Duplicate PBA ledger call | PBA keys ledger entries by `txn_id`; both `PENDING` and `COMPLETED` calls are idempotent on re-delivery. |
+
+---
+
+## Related
+
+- [System Architecture](./system-overview) — broader system context across all Aarokya modules.
+- [Mandate Module](../modules/mandate) — schema and endpoint details.
+- [Register Mandate API](../api/endpoints/mandate/register) — request / response shape.
+- [Mandate Order Status API](../api/endpoints/mandate/order-status) — polling contract.

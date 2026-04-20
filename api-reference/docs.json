@@ -164,6 +164,7 @@
                   "api/endpoints/insurance_policies/preview",
                   "api/endpoints/insurance_policies/create",
                   "api/endpoints/insurance_policies/get",
+                  "api/endpoints/insurance_policies/get_with_benefit_details",
                   "api/endpoints/insurance_policies/list",
                   "api/endpoints/insurance_policies/admin_list",
                   "api/endpoints/insurance_policies/admin_update"

@@ -59,6 +59,7 @@ sequenceDiagram
 | `POST /users/{id}/insurance_policies/preview` | ✓ | — | Dependants must belong to the token user |
 | `POST /users/{id}/insurance_policies` | ✓ | — | One active policy per user+benefit |
 | `GET /users/{id}/insurance_policies/{pid}` | ✓ | — | Returns 404 for wrong user |
+| `GET /users/{id}/insurance_policies/{pid}/details` | ✓ | — | Wrapper response including the linked benefit summary |
 | `GET /users/{id}/insurance_policies` | ✓ | — | Filters by status, benefit_id |
 | `GET /insurance_policies` | — | ✓ | Filter by user, benefit, status, time range |
 | `PATCH /insurance_policies/{pid}` | — | ✓ | Set status, external_policy_id, dates |
@@ -106,6 +107,9 @@ pending → active → requires_customer_renewal_in_grace
   </Card>
   <Card title="GET .../insurance_policies/{id}" icon="id-card" color="#3b82f6" href="/api/endpoints/insurance_policies/get">
     Fetch a single policy by its internal UUID.
+  </Card>
+  <Card title="GET .../insurance_policies/{id}/details" icon="layer-group" color="#3b82f6" href="/api/endpoints/insurance_policies/get_with_benefit_details">
+    Fetch a single policy bundled with its linked benefit summary (name, type, provider, benefit_details).
   </Card>
   <Card title="GET .../insurance_policies" icon="list" color="#3b82f6" href="/api/endpoints/insurance_policies/list">
     List the authenticated user's policies. Filter by `status` or `benefit_id`.

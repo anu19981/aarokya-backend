@@ -1002,6 +1002,81 @@
         ]
       }
     },
+    "/insurance_policies/bulk_update": {
+      "post": {
+        "tags": [
+          "Insurance Policy (Admin)"
+        ],
+        "operationId": "admin_bulk_update_insurance_policies",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminBulkUpdateInsurancePoliciesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Per-row bulk update results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBulkUpdateInsurancePoliciesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "AdminApiKey": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
+    "/insurance_policies/export": {
+      "get": {
+        "tags": [
+          "Insurance Policy (Admin)"
+        ],
+        "operationId": "admin_export_insurance_policies",
+        "responses": {
+          "200": {
+            "description": "Joined onboarding rows (one per policy x dependant) for pending and requires_policy_reissuance policies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminExportInsurancePoliciesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "AdminApiKey": []
+          },
+          {
+            "ApiKey": []
+          }
+        ]
+      }
+    },
     "/insurance_policies/{insurance_policy_id}": {
       "patch": {
         "tags": [
@@ -2844,6 +2919,62 @@
         ]
       }
     },
+    "/users/{user_id}/insurance_policies/{insurance_policy_id}/documents/{document_type}": {
+      "get": {
+        "tags": [
+          "Insurance Policy"
+        ],
+        "operationId": "download_insurance_policy_document",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "insurance_policy_id",
+            "in": "path",
+            "description": "Insurance Policy ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "document_type",
+            "in": "path",
+            "description": "Document type",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/InsurancePolicyDocumentType"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF document",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Insurance policy not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
     "/users/{user_id}/mandate/order_status/{order_id}": {
       "get": {
         "tags": [
@@ -3161,6 +3292,52 @@
             "description": "State or union territory.",
             "example": "Karnataka",
             "maxLength": 50
+          }
+        }
+      },
+      "AdminBulkUpdateInsurancePoliciesRequest": {
+        "type": "object",
+        "required": [
+          "updates"
+        ],
+        "properties": {
+          "updates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkUpdateRow"
+            }
+          }
+        }
+      },
+      "AdminBulkUpdateInsurancePoliciesResponse": {
+        "type": "object",
+        "required": [
+          "results",
+          "summary"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkUpdateResult"
+            }
+          },
+          "summary": {
+            "$ref": "#/components/schemas/BulkUpdateSummary"
+          }
+        }
+      },
+      "AdminExportInsurancePoliciesResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PolicyOnboardingRow"
+            }
           }
         }
       },
@@ -3497,6 +3674,93 @@
             "items": {
               "$ref": "#/components/schemas/DependantResponse"
             }
+          }
+        }
+      },
+      "BulkUpdateOutcome": {
+        "type": "string",
+        "enum": [
+          "updated",
+          "skipped",
+          "failed"
+        ]
+      },
+      "BulkUpdateResult": {
+        "type": "object",
+        "required": [
+          "insurance_policy_id",
+          "outcome"
+        ],
+        "properties": {
+          "insurance_policy_id": {
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/BulkUpdateOutcome"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "BulkUpdateRow": {
+        "type": "object",
+        "required": [
+          "insurance_policy_id",
+          "external_policy_id",
+          "start_date",
+          "end_date"
+        ],
+        "properties": {
+          "end_date": {
+            "type": "string",
+            "example": "2027-01-15"
+          },
+          "external_policy_id": {
+            "type": "string"
+          },
+          "insurance_policy_id": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "start_date": {
+            "type": "string",
+            "example": "2026-01-15"
+          }
+        }
+      },
+      "BulkUpdateSummary": {
+        "type": "object",
+        "required": [
+          "total",
+          "updated",
+          "skipped",
+          "failed"
+        ],
+        "properties": {
+          "failed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -4131,15 +4395,12 @@
         "type": "object",
         "description": "Auxiliary metadata for an insurance policy.",
         "properties": {
-          "dependant_mrn_map": {
-            "type": "object",
-            "description": "Maps dependant UUID (as string) → MRN UUID (as string) at the\nbenefit provider. Populated from the `mrns` table at policy creation.",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "propertyNames": {
-              "type": "string"
-            }
+          "provider_metadata": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Free-form provider data captured during admin bulk update\n(e.g. from insurance provider reconciliation CSVs). Any columns not\nmapped to the structured update fields are stored here verbatim."
           }
         }
       },
@@ -4641,6 +4902,112 @@
           "active",
           "inactive"
         ]
+      },
+      "PolicyOnboardingNominee": {
+        "type": "object",
+        "required": [
+          "salutation",
+          "first_name",
+          "last_name",
+          "date_of_birth",
+          "relationship",
+          "address"
+        ],
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/AddressDetails"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "example": "1995-08-22"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/Relationship"
+          },
+          "salutation": {
+            "$ref": "#/components/schemas/Salutation"
+          }
+        }
+      },
+      "PolicyOnboardingRow": {
+        "type": "object",
+        "required": [
+          "insurance_policy_id",
+          "salutation",
+          "member_first_name",
+          "member_last_name",
+          "relationship",
+          "date_of_birth",
+          "gender",
+          "address",
+          "phone_number",
+          "phone_country_code"
+        ],
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/AddressDetails"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "example": "1990-05-10"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "id_proof": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IdProof"
+              }
+            ]
+          },
+          "insurance_policy_id": {
+            "type": "string"
+          },
+          "member_first_name": {
+            "type": "string"
+          },
+          "member_last_name": {
+            "type": "string"
+          },
+          "nominee": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PolicyOnboardingNominee"
+              }
+            ]
+          },
+          "phone_country_code": {
+            "type": "string"
+          },
+          "phone_number": {
+            "type": "string"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/Relationship"
+          },
+          "salutation": {
+            "$ref": "#/components/schemas/Salutation"
+          }
+        }
       },
       "PolicyStatus": {
         "type": "string",

@@ -1,6 +1,6 @@
 ---
 title: "Modules Overview"
-description: "Aarokya is composed of nine domains: Auth, Platform, User, Benefit Provider, Benefit, Dependant, Account Provider, Account, and MRN. Each owns its own tables, business logic, and error types."
+description: "Aarokya is composed of eight domains: Auth, Platform, User, Benefit Provider, Benefit, Dependant, Account, and MRN. Each owns its own tables, business logic, and error types."
 ---
 
 ## Module Map
@@ -11,7 +11,6 @@ flowchart TD
         PLAT[Platform]
         BP[Benefit Provider]
         BEN[Benefit]
-        AP[Account Provider]
     end
     subgraph Partner["Partner API Key"]
         AUTH[Auth]
@@ -27,7 +26,6 @@ flowchart TD
     AUTH -->|find-or-create| USR
     USR -->|owns| DEP
     USR -->|owns| ACC
-    AP -->|provider_id| ACC
     BP -->|provider_id| BEN
     DEP -->|dependant_id| MRN
     BP -->|benefit_provider_id| MRN
@@ -80,17 +78,10 @@ flowchart TD
 
     **Tables:** `benefits`
   </Card>
-  <Card title="Account Provider" icon="building-columns" color="#f59e0b" href="/modules/account_provider">
-    **Admin-only**
-
-    Financial institutions (banks, HSA custodians) that back user accounts. Delete guarded by child accounts.
-
-    **Tables:** `account_providers`
-  </Card>
   <Card title="Account" icon="credit-card" color="#16a34a" href="/modules/account">
     **JWT self + Partner key**
 
-    Links a user to an account provider with an external account ID. Responses include denormalized provider fields via JOIN.
+    Stores a user's external account references (e.g. bank account number).
 
     **Tables:** `accounts`
   </Card>

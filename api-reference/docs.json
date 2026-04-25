@@ -49,7 +49,6 @@
               "modules/benefit_provider",
               "modules/benefit",
               "modules/dependant",
-              "modules/account_provider",
               "modules/account",
               "modules/mrn",
               "modules/insurance_policy",
@@ -127,16 +126,6 @@
                   "api/endpoints/dependants/get",
                   "api/endpoints/dependants/update",
                   "api/endpoints/dependants/delete"
-                ]
-              },
-              {
-                "group": "Account Providers",
-                "pages": [
-                  "api/endpoints/account_providers/create",
-                  "api/endpoints/account_providers/list",
-                  "api/endpoints/account_providers/get",
-                  "api/endpoints/account_providers/update",
-                  "api/endpoints/account_providers/delete"
                 ]
               },
               {

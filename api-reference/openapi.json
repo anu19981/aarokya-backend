@@ -23,6 +23,121 @@
     }
   ],
   "paths": {
+    "/admin/users": {
+      "get": {
+        "tags": [
+          "AdminUser"
+        ],
+        "operationId": "list_admin_users",
+        "responses": {
+          "200": {
+            "description": "List of admin dashboard users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUserListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "AdminUser"
+        ],
+        "operationId": "create_admin_user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDashboardUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Admin user provisioned — temporary_password shown once, store it now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUserCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "409": {
+            "description": "A user with the given email already exists"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/users/{keycloak_user_id}": {
+      "delete": {
+        "tags": [
+          "AdminUser"
+        ],
+        "operationId": "disable_admin_user",
+        "parameters": [
+          {
+            "name": "keycloak_user_id",
+            "in": "path",
+            "description": "Keycloak user UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disable result — `disabled: true` if a matching user was disabled, `false` if no such user existed (idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisableDashboardUserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/auth/token": {
       "post": {
         "tags": [
@@ -54,12 +169,15 @@
             "description": "Platform not found or inactive"
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a provider"
           }
         },
         "security": [
           {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -138,12 +256,15 @@
             }
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
           }
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -177,12 +298,15 @@
             "description": "Benefit provider name already exists"
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
           }
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -216,7 +340,10 @@
             }
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
           },
           "404": {
             "description": "Benefit provider not found"
@@ -224,7 +351,7 @@
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -256,7 +383,10 @@
             }
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
           },
           "404": {
             "description": "Benefit provider not found"
@@ -267,7 +397,7 @@
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -312,7 +442,10 @@
             "description": "Benefit provider name already exists"
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
           },
           "404": {
             "description": "Benefit provider not found"
@@ -320,7 +453,301 @@
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/benefit_providers/{benefit_provider_id}/credentials": {
+      "get": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "list_benefit_provider_credentials",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of credential ids provisioned for this benefit provider. Never includes secrets — `basic_token` is only returned by `POST /credentials` and is not retrievable afterwards.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListBenefitProviderCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "404": {
+            "description": "Benefit provider not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "create_benefit_provider_credentials",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credentials provisioned — basic_token shown once, store it now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitProviderCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "404": {
+            "description": "Benefit provider not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/benefit_providers/{benefit_provider_id}/credentials/{credential_id}": {
+      "delete": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "revoke_benefit_provider_credentials",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "credential_id",
+            "in": "path",
+            "description": "Credential ID returned by POST /credentials",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoke result — `revoked: true` if a matching credential was deleted, `false` if no such credential existed under this benefit provider (idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeBenefitProviderCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "404": {
+            "description": "Benefit provider not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/benefit_providers/{benefit_provider_id}/users": {
+      "get": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "list_benefit_provider_users",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of dashboard users scoped to this benefit provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUserListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is neither admin nor a benefit-provider user scoped to this BP"
+          },
+          "404": {
+            "description": "Benefit provider not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "create_benefit_provider_user",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDashboardUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Benefit-provider dashboard user provisioned — temporary_password shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUserCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is neither admin nor a benefit-provider user scoped to this BP"
+          },
+          "404": {
+            "description": "Benefit provider not found"
+          },
+          "409": {
+            "description": "A user with the given email already exists"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/benefit_providers/{benefit_provider_id}/users/{keycloak_user_id}": {
+      "delete": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "disable_benefit_provider_user",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "keycloak_user_id",
+            "in": "path",
+            "description": "Keycloak user UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disable result — `disabled: true` if a matching user was disabled, `false` otherwise (idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisableDashboardUserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is neither admin nor a benefit-provider user scoped to this BP"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
           }
         ]
       }
@@ -425,18 +852,12 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           }
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "AdminApiKey": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -470,7 +891,10 @@
             "description": "Validation error or benefit type mismatch"
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
           },
           "404": {
             "description": "Benefit provider not found"
@@ -481,7 +905,7 @@
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -515,7 +939,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           },
           "404": {
             "description": "Benefit not found"
@@ -523,13 +947,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "AdminApiKey": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -561,7 +979,10 @@
             }
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
           },
           "404": {
             "description": "Benefit not found"
@@ -569,7 +990,7 @@
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -614,7 +1035,10 @@
             "description": "Validation error"
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
           },
           "404": {
             "description": "Benefit not found"
@@ -622,7 +1046,7 @@
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -743,15 +1167,15 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
           }
         },
         "security": [
           {
-            "AdminApiKey": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -787,15 +1211,15 @@
             "description": "Validation error"
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
           }
         },
         "security": [
           {
-            "AdminApiKey": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -818,15 +1242,15 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
           }
         },
         "security": [
           {
-            "AdminApiKey": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -870,7 +1294,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
           },
           "404": {
             "description": "Insurance policy not found"
@@ -878,10 +1305,7 @@
         },
         "security": [
           {
-            "AdminApiKey": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -963,15 +1387,12 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           }
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -1005,7 +1426,7 @@
             "description": "Validation error or invalid UUID"
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           },
           "403": {
             "description": "Forbidden — JWT user does not own the dependant"
@@ -1019,10 +1440,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -1056,7 +1474,7 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           },
           "404": {
             "description": "MRN not found"
@@ -1064,10 +1482,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -1099,7 +1514,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
           },
           "404": {
             "description": "MRN not found"
@@ -1107,7 +1525,7 @@
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -1186,12 +1604,15 @@
             }
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
           }
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -1212,7 +1633,7 @@
         },
         "responses": {
           "201": {
-            "description": "Platform created",
+            "description": "Platform created (no credentials yet — call POST /platforms/{id}/credentials to provision)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1225,12 +1646,15 @@
             "description": "Platform name already exists"
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
           }
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -1264,7 +1688,10 @@
             }
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
           },
           "404": {
             "description": "Platform not found"
@@ -1272,7 +1699,7 @@
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -1304,7 +1731,10 @@
             }
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
           },
           "404": {
             "description": "Platform not found"
@@ -1312,7 +1742,7 @@
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -1357,7 +1787,10 @@
             "description": "Platform name already exists"
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
           },
           "404": {
             "description": "Platform not found"
@@ -1365,7 +1798,301 @@
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/platforms/{platform_id}/credentials": {
+      "get": {
+        "tags": [
+          "Platform"
+        ],
+        "operationId": "list_platform_credentials",
+        "parameters": [
+          {
+            "name": "platform_id",
+            "in": "path",
+            "description": "Platform ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of credential ids provisioned for this platform. Never includes secrets — `basic_token` is only returned by `POST /credentials` and is not retrievable afterwards.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListPlatformCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
+          },
+          "404": {
+            "description": "Platform not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Platform"
+        ],
+        "operationId": "create_platform_credentials",
+        "parameters": [
+          {
+            "name": "platform_id",
+            "in": "path",
+            "description": "Platform ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credentials provisioned — basic_token shown once, store it now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
+          },
+          "404": {
+            "description": "Platform not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/platforms/{platform_id}/credentials/{credential_id}": {
+      "delete": {
+        "tags": [
+          "Platform"
+        ],
+        "operationId": "revoke_platform_credentials",
+        "parameters": [
+          {
+            "name": "platform_id",
+            "in": "path",
+            "description": "Platform ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "credential_id",
+            "in": "path",
+            "description": "Credential ID returned by POST /credentials",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoke result — `revoked: true` if a matching credential was deleted, `false` if no such credential existed under this platform (idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokePlatformCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
+          },
+          "404": {
+            "description": "Platform not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/platforms/{platform_id}/users": {
+      "get": {
+        "tags": [
+          "Platform"
+        ],
+        "operationId": "list_platform_users",
+        "parameters": [
+          {
+            "name": "platform_id",
+            "in": "path",
+            "description": "Platform ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of dashboard users scoped to this platform",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUserListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is neither admin nor a platform user scoped to this platform"
+          },
+          "404": {
+            "description": "Platform not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Platform"
+        ],
+        "operationId": "create_platform_user",
+        "parameters": [
+          {
+            "name": "platform_id",
+            "in": "path",
+            "description": "Platform ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDashboardUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Platform dashboard user provisioned — temporary_password shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUserCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is neither admin nor a platform user scoped to this platform"
+          },
+          "404": {
+            "description": "Platform not found"
+          },
+          "409": {
+            "description": "A user with the given email already exists"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/platforms/{platform_id}/users/{keycloak_user_id}": {
+      "delete": {
+        "tags": [
+          "Platform"
+        ],
+        "operationId": "disable_platform_user",
+        "parameters": [
+          {
+            "name": "platform_id",
+            "in": "path",
+            "description": "Platform ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "keycloak_user_id",
+            "in": "path",
+            "description": "Keycloak user UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disable result — `disabled: true` if a matching user was disabled, `false` otherwise (idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisableDashboardUserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is neither admin nor a platform user scoped to this platform"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
           }
         ]
       }
@@ -1444,15 +2171,15 @@
             }
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
           }
         },
         "security": [
           {
-            "AdminApiKey": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -1486,10 +2213,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           },
           "403": {
-            "description": "Forbidden — cannot access another user's data"
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "User not found"
@@ -1497,13 +2224,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "AdminApiKey": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -1535,7 +2256,10 @@
             }
           },
           "401": {
-            "description": "Invalid API key"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user"
           },
           "404": {
             "description": "User not found"
@@ -1543,7 +2267,7 @@
         },
         "security": [
           {
-            "AdminApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -1585,10 +2309,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           },
           "403": {
-            "description": "Forbidden — cannot update another user's data"
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "User not found"
@@ -1596,10 +2320,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -1687,15 +2408,15 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           }
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -1740,15 +2461,15 @@
             "description": "Validation error"
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           }
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -1791,7 +2512,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "Account not found"
@@ -1799,10 +2523,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -1843,7 +2564,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "Account not found"
@@ -1851,10 +2575,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -1905,7 +2626,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "Account not found"
@@ -1913,10 +2637,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -1960,10 +2681,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           },
           "403": {
-            "description": "Forbidden — cannot complete another user's onboarding"
+            "description": "Not owner or not in onboarding status"
           },
           "404": {
             "description": "User not found"
@@ -1971,7 +2692,7 @@
         },
         "security": [
           {
-            "Bearer": []
+            "BearerAuth": []
           }
         ]
       }
@@ -2044,15 +2765,15 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           }
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -2097,18 +2818,15 @@
             "description": "Validation error or SELF relationship not allowed"
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           },
           "403": {
-            "description": "Forbidden"
+            "description": "Not owner or dashboard user"
           }
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -2155,18 +2873,15 @@
             "description": "Validation error, empty list, exceeds limit, or SELF relationship not allowed"
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           },
           "403": {
-            "description": "Forbidden"
+            "description": "Not owner or dashboard user"
           }
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -2209,10 +2924,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           },
           "403": {
-            "description": "Forbidden"
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "Dependant not found"
@@ -2220,10 +2935,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -2267,10 +2979,10 @@
             "description": "Cannot delete a SELF dependant via this endpoint"
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           },
           "403": {
-            "description": "Forbidden"
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "Dependant not found"
@@ -2278,10 +2990,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       },
@@ -2335,10 +3044,10 @@
             "description": "Validation error, no fields to update, or SELF not allowed"
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
           },
           "403": {
-            "description": "Forbidden"
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "Dependant not found"
@@ -2346,10 +3055,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -2433,12 +3139,15 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           }
         },
         "security": [
           {
-            "Bearer": []
+            "BearerAuth": []
           }
         ]
       },
@@ -2483,7 +3192,10 @@
             "description": "Validation error"
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "Benefit or dependant not found"
@@ -2494,7 +3206,7 @@
         },
         "security": [
           {
-            "Bearer": []
+            "BearerAuth": []
           }
         ]
       }
@@ -2541,7 +3253,10 @@
             "description": "Validation error"
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "Benefit or dependant not found"
@@ -2549,10 +3264,7 @@
         },
         "security": [
           {
-            "Bearer": []
-          },
-          {
-            "ApiKey": []
+            "BearerAuth": []
           }
         ]
       }
@@ -2595,7 +3307,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "Insurance policy not found"
@@ -2603,7 +3318,7 @@
         },
         "security": [
           {
-            "Bearer": []
+            "BearerAuth": []
           }
         ]
       }
@@ -2646,7 +3361,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "Insurance policy not found"
@@ -2654,7 +3372,7 @@
         },
         "security": [
           {
-            "Bearer": []
+            "BearerAuth": []
           }
         ]
       }
@@ -2702,7 +3420,10 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
           },
           "404": {
             "description": "Insurance policy not found"
@@ -2710,7 +3431,7 @@
         },
         "security": [
           {
-            "Bearer": []
+            "BearerAuth": []
           }
         ]
       }
@@ -3184,6 +3905,32 @@
           }
         }
       },
+      "BenefitProviderCredentialSummary": {
+        "type": "object",
+        "required": [
+          "credential_id"
+        ],
+        "properties": {
+          "credential_id": {
+            "type": "string"
+          }
+        }
+      },
+      "BenefitProviderCredentialsResponse": {
+        "type": "object",
+        "required": [
+          "credential_id",
+          "basic_token"
+        ],
+        "properties": {
+          "basic_token": {
+            "type": "string"
+          },
+          "credential_id": {
+            "type": "string"
+          }
+        }
+      },
       "BenefitProviderListResponse": {
         "type": "object",
         "required": [
@@ -3547,6 +4294,17 @@
           }
         }
       },
+      "CreateDashboardUserRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        }
+      },
       "CreateDependantRequest": {
         "type": "object",
         "required": [
@@ -3632,6 +4390,63 @@
         "enum": [
           "INR"
         ]
+      },
+      "DashboardUserCredentialsResponse": {
+        "type": "object",
+        "required": [
+          "keycloak_user_id",
+          "email",
+          "temporary_password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "keycloak_user_id": {
+            "type": "string"
+          },
+          "temporary_password": {
+            "type": "string"
+          }
+        }
+      },
+      "DashboardUserListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardUserResponse"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DashboardUserResponse": {
+        "type": "object",
+        "required": [
+          "keycloak_user_id",
+          "email",
+          "enabled"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "keycloak_user_id": {
+            "type": "string"
+          }
+        }
       },
       "DeleteAccountResponse": {
         "type": "object",
@@ -3832,6 +4647,17 @@
           "active",
           "discarded"
         ]
+      },
+      "DisableDashboardUserResponse": {
+        "type": "object",
+        "required": [
+          "disabled"
+        ],
+        "properties": {
+          "disabled": {
+            "type": "boolean"
+          }
+        }
       },
       "FloatMajorUnit": {
         "type": "number",
@@ -4181,6 +5007,34 @@
           }
         }
       },
+      "ListBenefitProviderCredentialsResponse": {
+        "type": "object",
+        "required": [
+          "credentials"
+        ],
+        "properties": {
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BenefitProviderCredentialSummary"
+            }
+          }
+        }
+      },
+      "ListPlatformCredentialsResponse": {
+        "type": "object",
+        "required": [
+          "credentials"
+        ],
+        "properties": {
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformCredentialSummary"
+            }
+          }
+        }
+      },
       "ListUserInsurancePoliciesRequest": {
         "type": "object",
         "properties": {
@@ -4461,6 +5315,32 @@
           "inactive"
         ]
       },
+      "PlatformCredentialSummary": {
+        "type": "object",
+        "required": [
+          "credential_id"
+        ],
+        "properties": {
+          "credential_id": {
+            "type": "string"
+          }
+        }
+      },
+      "PlatformCredentialsResponse": {
+        "type": "object",
+        "required": [
+          "credential_id",
+          "basic_token"
+        ],
+        "properties": {
+          "basic_token": {
+            "type": "string"
+          },
+          "credential_id": {
+            "type": "string"
+          }
+        }
+      },
       "PlatformListResponse": {
         "type": "object",
         "required": [
@@ -4731,6 +5611,28 @@
           "mother_in_law",
           "sibling"
         ]
+      },
+      "RevokeBenefitProviderCredentialsResponse": {
+        "type": "object",
+        "required": [
+          "revoked"
+        ],
+        "properties": {
+          "revoked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RevokePlatformCredentialsResponse": {
+        "type": "object",
+        "required": [
+          "revoked"
+        ],
+        "properties": {
+          "revoked": {
+            "type": "boolean"
+          }
+        }
       },
       "Salutation": {
         "type": "string",
@@ -5101,6 +6003,10 @@
     {
       "name": "Mandate",
       "description": "Mandate registration and status"
+    },
+    {
+      "name": "AdminUser",
+      "description": "Admin dashboard user management"
     }
   ]
 }

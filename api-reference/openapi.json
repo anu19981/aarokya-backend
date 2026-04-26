@@ -792,12 +792,9 @@
           {
             "name": "provider_id",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
@@ -1107,12 +1104,9 @@
           {
             "name": "benefit_id",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
@@ -1331,23 +1325,17 @@
           {
             "name": "dependant_id",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "benefit_provider_id",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
@@ -3094,12 +3082,9 @@
           {
             "name": "benefit_id",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
@@ -3734,12 +3719,12 @@
           },
           {
             "type": "object",
+            "required": [
+              "benefit_id"
+            ],
             "properties": {
               "benefit_id": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": "string"
               },
               "limit": {
                 "type": [
@@ -4594,6 +4579,7 @@
           "date_of_birth",
           "gender",
           "status",
+          "previous_version_id",
           "created_at",
           "last_modified_at"
         ],
@@ -4621,10 +4607,7 @@
             "type": "string"
           },
           "previous_version_id": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "primary_user_id": {
             "type": "string"
@@ -4677,8 +4660,7 @@
         "type": "object",
         "required": [
           "phone_number",
-          "phone_country_code",
-          "platform_id"
+          "phone_country_code"
         ],
         "properties": {
           "phone_country_code": {
@@ -4686,9 +4668,6 @@
             "example": "+91"
           },
           "phone_number": {
-            "type": "string"
-          },
-          "platform_id": {
             "type": "string"
           }
         }
@@ -5037,12 +5016,12 @@
       },
       "ListUserInsurancePoliciesRequest": {
         "type": "object",
+        "required": [
+          "benefit_id"
+        ],
         "properties": {
           "benefit_id": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "limit": {
             "type": [
@@ -5091,6 +5070,7 @@
           "id",
           "order_id",
           "customer_id",
+          "account_id",
           "user_id",
           "amount",
           "max_amount",
@@ -5101,10 +5081,7 @@
         ],
         "properties": {
           "account_id": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "amount": {
             "type": "integer",
@@ -5526,14 +5503,12 @@
       "RegisterMandateRequest": {
         "type": "object",
         "required": [
+          "account_id",
           "amount"
         ],
         "properties": {
           "account_id": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "amount": {
             "type": "integer",
@@ -5547,6 +5522,7 @@
           "id",
           "order_id",
           "customer_id",
+          "account_id",
           "user_id",
           "amount",
           "max_amount",
@@ -5558,10 +5534,7 @@
         ],
         "properties": {
           "account_id": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "amount": {
             "type": "integer",

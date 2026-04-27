@@ -21,7 +21,7 @@ sequenceDiagram
     participant API as Aarokya API
     participant DB as Database
 
-    PartnerBE->>API: POST /auth/token<br/>{phone_number, phone_country_code, platform_id}<br/>api-key: partner_key
+    PartnerBE->>API: POST /auth/token<br/>{phone_number, phone_country_code, id_proof}<br/>api-key: partner_key
     API->>DB: Validate platform_id
     DB-->>API: platform row
     API->>DB: Find user by (platform_id, phone_number)
@@ -86,7 +86,10 @@ curl -X POST http://localhost:8080/auth/token \
   -d '{
     "phone_number": "9876543210",
     "phone_country_code": "+91",
-    "platform_id": "platform_3Xk9mNpQrBvLwJtY2c"
+    "id_proof": {
+      "proof_type": "AADHAAR",
+      "number": "123456789012"
+    }
   }'
 ```
 

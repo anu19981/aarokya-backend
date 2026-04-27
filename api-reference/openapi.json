@@ -4364,16 +4364,6 @@
           "gender": {
             "$ref": "#/components/schemas/Gender"
           },
-          "id_proof": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/IdProof"
-              }
-            ]
-          },
           "last_name": {
             "type": "string"
           },
@@ -4909,9 +4899,13 @@
         "type": "object",
         "required": [
           "phone_number",
-          "phone_country_code"
+          "phone_country_code",
+          "id_proof"
         ],
         "properties": {
+          "id_proof": {
+            "$ref": "#/components/schemas/IdProof"
+          },
           "phone_country_code": {
             "type": "string",
             "example": "+91"
@@ -4955,11 +4949,11 @@
         "type": "string",
         "description": "Government-issued identity document type.",
         "enum": [
-          "aadhaar",
-          "pan",
-          "passport",
-          "driving_license",
-          "voter_id"
+          "AADHAAR",
+          "PAN",
+          "PASSPORT",
+          "DRIVING_LICENSE",
+          "VOTER_ID"
         ]
       },
       "InsurancePolicyBenefitDetails": {

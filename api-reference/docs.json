@@ -144,6 +144,7 @@
                   "api/endpoints/mrns/create",
                   "api/endpoints/mrns/list",
                   "api/endpoints/mrns/get",
+                  "api/endpoints/mrns/update",
                   "api/endpoints/mrns/delete"
                 ]
               },

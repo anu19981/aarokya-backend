@@ -1643,6 +1643,59 @@
             "BearerAuth": []
           }
         ]
+      },
+      "patch": {
+        "tags": [
+          "Mrn"
+        ],
+        "operationId": "update_mrn",
+        "parameters": [
+          {
+            "name": "mrn_id",
+            "in": "path",
+            "description": "Internal MRN record ID (UUID)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMrnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "MRN updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MrnResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin or benefit provider, or does not own this MRN's provider"
+          },
+          "404": {
+            "description": "MRN not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
       }
     },
     "/platforms": {
@@ -5441,9 +5494,9 @@
         "type": "object",
         "required": [
           "dependant_id",
+          "salutation",
           "first_name",
           "last_name",
-          "salutation",
           "age",
           "gender",
           "relationship"
@@ -5993,6 +6046,15 @@
               }
             ]
           }
+        }
+      },
+      "UpdateMrnRequest": {
+        "type": "object",
+        "required": [
+          "external_mrn"
+        ],
+        "properties": {
+          "external_mrn": {}
         }
       },
       "UpdatePlatformRequest": {

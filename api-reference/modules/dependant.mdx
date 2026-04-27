@@ -48,6 +48,17 @@ Every user has exactly one active `relationship = self` dependant. It is created
 
 ---
 
+## Exact-Duplicate Skip on Create
+
+`POST /users/{user_id}/dependants` and `POST /users/{user_id}/dependants/bulk` both check, before inserting, whether an active row already exists with **every** field of the payload identical (`relationship`, `salutation`, `first_name`, `last_name`, `date_of_birth`, `gender`).
+
+- **Exact match found** → no row is inserted. The response (still **201**) carries the existing row.
+- **Any field differs (including `date_of_birth`)** → a new row is inserted.
+
+This makes draft re-submissions and network retries idempotent without requiring the client to handle a 4xx. Two SPOUSE entries with different DOBs are treated as two distinct dependants and both inserted.
+
+---
+
 ## Relationship Values
 
 | Value | Description |

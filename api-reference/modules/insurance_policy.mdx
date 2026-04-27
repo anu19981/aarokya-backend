@@ -265,6 +265,12 @@ The preview response returns a unified `members` array of `MemberDetail` objects
 
 When a policy is created, the server automatically creates one MRN record per covered dependant at the benefit's provider. The `metadata.dependant_mrn_map` field maps each dependant ID to its newly created MRN ID.
 
+For each member without an existing MRN at this provider, the server calls the upstream insurance provider (currently **Narayana Health**) to look up the patient by name + DOB; if not found, it registers a new patient under the primary user's phone. The returned `external_mrn` (`temp_number` and/or `mrn`) is persisted on the new MRN row. If a member already has an MRN row at this provider it is reused as-is, with no upstream call.
+
+<Warning>
+  Narayana only accepts `Male` / `Female` for patient gender. Members with `gender = other` cause policy creation to fail with **400 IP-1013** — update the dependant's gender before retrying. Upstream registration failures (timeout, 5xx) surface as **502 IP-1014** and the entire policy creation is rolled back.
+</Warning>
+
 ---
 
 ## Error Codes
@@ -284,3 +290,5 @@ When a policy is created, the server automatically creates one MRN record per co
 | `IP-1010` | 400 | Validation error |
 | `IP-1011` | 400 | Invalid UUID in request |
 | `IP-1012` | 403 | Forbidden |
+| `IP-1013` | 400 | Member gender is `other` — Narayana requires `male` or `female` |
+| `IP-1014` | 502 | Upstream insurance-provider patient registration failed |

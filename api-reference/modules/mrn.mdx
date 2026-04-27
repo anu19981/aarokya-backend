@@ -56,6 +56,7 @@ sequenceDiagram
 | `POST /mrns` | ✓ | ✓ | — | JWT: dependant must belong to token user |
 | `GET /mrns` | ✓ | ✓ | — | All filters optional |
 | `GET /mrns/{id}` | ✓ | ✓ | — | Returns 404 if inactive |
+| `PATCH /mrns/{id}` | — | — | ✓ | Replaces `external_mrn` only — backfill `mrn` once provider issues it |
 | `DELETE /mrns/{id}` | — | — | ✓ | Sets `status → inactive` |
 
 ---
@@ -71,6 +72,9 @@ sequenceDiagram
   </Card>
   <Card title="GET /mrns/{id}" icon="id-card" color="#3b82f6" href="/api/endpoints/mrns/get">
     Fetch a single active MRN by its internal UUID.
+  </Card>
+  <Card title="PATCH /mrns/{id}" icon="pen-to-square" color="#0ea5e9" href="/api/endpoints/mrns/update">
+    Update the `external_mrn` JSONB (admin only). Used to backfill `mrn` once the provider issues it.
   </Card>
   <Card title="DELETE /mrns/{id}" icon="trash" color="#dc2626" href="/api/endpoints/mrns/delete">
     Soft-delete (`status → inactive`). Admin key required.

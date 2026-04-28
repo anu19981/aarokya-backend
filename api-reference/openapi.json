@@ -1237,6 +1237,14 @@
             }
           },
           {
+            "name": "benefit_provider_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "time_range",
             "in": "query",
             "required": false,
@@ -3268,6 +3276,14 @@
             }
           },
           {
+            "name": "benefit_provider_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -3696,6 +3712,40 @@
           }
         }
       }
+    },
+    "/users/{user_id}/mandate_orders": {
+      "get": {
+        "tags": [
+          "Mandate"
+        ],
+        "operationId": "list_user_mandate_orders",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All mandate orders for the user (most-recent first)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListUserMandateOrdersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3900,10 +3950,14 @@
           {
             "type": "object",
             "required": [
-              "benefit_id"
+              "benefit_id",
+              "benefit_provider_id"
             ],
             "properties": {
               "benefit_id": {
+                "type": "string"
+              },
+              "benefit_provider_id": {
                 "type": "string"
               },
               "limit": {
@@ -4130,6 +4184,7 @@
         "required": [
           "id",
           "name",
+          "slug",
           "status",
           "created_at",
           "last_modified_at"
@@ -4145,6 +4200,9 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          },
+          "slug": {
             "type": "string"
           },
           "status": {
@@ -4418,10 +4476,14 @@
       "CreateBenefitProviderRequest": {
         "type": "object",
         "required": [
-          "name"
+          "name",
+          "slug"
         ],
         "properties": {
           "name": {
+            "type": "string"
+          },
+          "slug": {
             "type": "string"
           }
         }
@@ -4531,10 +4593,14 @@
       "CreatePlatformRequest": {
         "type": "object",
         "required": [
-          "name"
+          "name",
+          "slug"
         ],
         "properties": {
           "name": {
+            "type": "string"
+          },
+          "slug": {
             "type": "string"
           }
         }
@@ -5319,10 +5385,14 @@
       "ListUserInsurancePoliciesRequest": {
         "type": "object",
         "required": [
-          "benefit_id"
+          "benefit_id",
+          "benefit_provider_id"
         ],
         "properties": {
           "benefit_id": {
+            "type": "string"
+          },
+          "benefit_provider_id": {
             "type": "string"
           },
           "limit": {
@@ -5348,6 +5418,20 @@
                 "$ref": "#/components/schemas/PolicyStatus"
               }
             ]
+          }
+        }
+      },
+      "ListUserMandateOrdersResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MandateOrderResponse"
+            }
           }
         }
       },
@@ -5654,6 +5738,7 @@
         "required": [
           "id",
           "name",
+          "slug",
           "status",
           "created_at",
           "last_modified_at"
@@ -5669,6 +5754,9 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          },
+          "slug": {
             "type": "string"
           },
           "status": {

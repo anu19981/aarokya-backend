@@ -74,7 +74,7 @@ curl -X POST http://localhost:8080/users/047382910564/complete_onboarding \
     "first_name": "Ravi",
     "last_name": "Kumar",
     "dob": "1990-05-15",
-    "gender": "male",
+    "gender": "MALE",
     "address": {
       "line1": "42 MG Road",
       "city": "Bengaluru",
@@ -87,7 +87,7 @@ curl -X POST http://localhost:8080/users/047382910564/complete_onboarding \
 
 ```json Response 201
 {
-  "user": { "user_id": "047382910564", "status": "active", "..." : "..." },
+  "user": { "user_id": "047382910564", "status": "ACTIVE", "..." : "..." },
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```

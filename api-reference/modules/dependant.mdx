@@ -120,12 +120,12 @@ curl -X POST http://localhost:8080/users/047382910564/dependants \
   -H 'Authorization: Bearer eyJhbGci...' \
   -H 'Content-Type: application/json' \
   -d '{
-    "relationship": "spouse",
+    "relationship": "SPOUSE",
     "first_name": "Priya",
     "last_name": "Kumar",
     "date_of_birth": "1992-08-20",
-    "gender": "female",
-    "salutation": "mrs"
+    "gender": "FEMALE",
+    "salutation": "MRS"
   }'
 ```
 
@@ -133,13 +133,13 @@ curl -X POST http://localhost:8080/users/047382910564/dependants \
 {
   "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
   "primary_user_id": "047382910564",
-  "relationship": "spouse",
+  "relationship": "SPOUSE",
   "first_name": "Priya",
   "last_name": "Kumar",
   "date_of_birth": "1992-08-20",
-  "gender": "female",
-  "salutation": "mrs",
-  "status": "active",
+  "gender": "FEMALE",
+  "salutation": "MRS",
+  "status": "ACTIVE",
   "previous_version_id": null,
   "created_at": "2026-04-12T10:00:00Z",
   "last_modified_at": "2026-04-12T10:00:00Z"
@@ -153,20 +153,20 @@ curl -X POST http://localhost:8080/users/047382910564/dependants/bulk \
   -d '{
     "dependants": [
       {
-        "relationship": "spouse",
+        "relationship": "SPOUSE",
         "first_name": "Priya",
         "last_name": "Kumar",
         "date_of_birth": "1992-08-20",
-        "gender": "female",
-        "salutation": "mrs"
+        "gender": "FEMALE",
+        "salutation": "MRS"
       },
       {
-        "relationship": "child",
+        "relationship": "CHILD",
         "first_name": "Arjun",
         "last_name": "Kumar",
         "date_of_birth": "2015-03-10",
-        "gender": "male",
-        "salutation": "master"
+        "gender": "MALE",
+        "salutation": "MASTER"
       }
     ]
   }'
@@ -178,13 +178,13 @@ curl -X POST http://localhost:8080/users/047382910564/dependants/bulk \
     {
       "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
       "primary_user_id": "047382910564",
-      "relationship": "spouse",
+      "relationship": "SPOUSE",
       "first_name": "Priya",
       "last_name": "Kumar",
       "date_of_birth": "1992-08-20",
-      "gender": "female",
-      "salutation": "mrs",
-      "status": "active",
+      "gender": "FEMALE",
+      "salutation": "MRS",
+      "status": "ACTIVE",
       "previous_version_id": null,
       "created_at": "2026-04-12T10:00:00Z",
       "last_modified_at": "2026-04-12T10:00:00Z"
@@ -192,13 +192,13 @@ curl -X POST http://localhost:8080/users/047382910564/dependants/bulk \
     {
       "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60002",
       "primary_user_id": "047382910564",
-      "relationship": "child",
+      "relationship": "CHILD",
       "first_name": "Arjun",
       "last_name": "Kumar",
       "date_of_birth": "2015-03-10",
-      "gender": "male",
-      "salutation": "master",
-      "status": "active",
+      "gender": "MALE",
+      "salutation": "MASTER",
+      "status": "ACTIVE",
       "previous_version_id": null,
       "created_at": "2026-04-12T10:00:00Z",
       "last_modified_at": "2026-04-12T10:00:00Z"

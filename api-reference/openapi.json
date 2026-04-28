@@ -3818,18 +3818,18 @@
         "type": "string",
         "description": "Account lifecycle status.",
         "enum": [
-          "active",
-          "inactive",
-          "pending"
+          "ACTIVE",
+          "INACTIVE",
+          "PENDING"
         ]
       },
       "AccountType": {
         "type": "string",
         "description": "Type of financial or health account.",
         "enum": [
-          "s_a_v_i_n_g_s",
-          "h_s_a",
-          "e_d_u_c_a_t_i_o_n"
+          "SAVINGS",
+          "HSA",
+          "EDUCATION"
         ]
       },
       "AddressDetails": {
@@ -4061,7 +4061,7 @@
                   "benefit_type": {
                     "type": "string",
                     "enum": [
-                      "consultation"
+                      "CONSULTATION"
                     ]
                   }
                 }
@@ -4084,7 +4084,7 @@
                   "benefit_type": {
                     "type": "string",
                     "enum": [
-                      "insurance_policy"
+                      "INSURANCE_POLICY"
                     ]
                   }
                 }
@@ -4214,8 +4214,8 @@
         "type": "string",
         "description": "Benefit provider lifecycle status.",
         "enum": [
-          "active",
-          "inactive"
+          "ACTIVE",
+          "INACTIVE"
         ]
       },
       "BenefitResponse": {
@@ -4265,16 +4265,16 @@
         "type": "string",
         "description": "Benefit lifecycle status.",
         "enum": [
-          "active",
-          "inactive"
+          "ACTIVE",
+          "INACTIVE"
         ]
       },
       "BenefitType": {
         "type": "string",
         "description": "Kind of benefit offered by a provider.",
         "enum": [
-          "consultation",
-          "insurance_policy"
+          "CONSULTATION",
+          "INSURANCE_POLICY"
         ]
       },
       "BulkCreateDependantsRequest": {
@@ -4571,7 +4571,9 @@
               "type": "string"
             }
           },
-          "nominee_details": {}
+          "nominee_details": {
+            "$ref": "#/components/schemas/NomineeDetails"
+          }
         }
       },
       "CreateMrnRequest": {
@@ -4803,6 +4805,18 @@
           }
         }
       },
+      "DependantNominee": {
+        "type": "object",
+        "description": "A nominee who is an existing dependant in the system.",
+        "required": [
+          "dependant_id"
+        ],
+        "properties": {
+          "dependant_id": {
+            "type": "string"
+          }
+        }
+      },
       "DependantResponse": {
         "type": "object",
         "required": [
@@ -4863,8 +4877,8 @@
         "type": "string",
         "description": "Dependant row lifecycle status.",
         "enum": [
-          "active",
-          "discarded"
+          "ACTIVE",
+          "DISCARDED"
         ]
       },
       "DisableDashboardUserResponse": {
@@ -4947,6 +4961,40 @@
           "desc"
         ]
       },
+      "ExternalNominee": {
+        "type": "object",
+        "description": "A nominee who is an external person not registered as a dependant.",
+        "required": [
+          "salutation",
+          "name",
+          "relationship",
+          "date_of_birth",
+          "gender",
+          "phone"
+        ],
+        "properties": {
+          "date_of_birth": {
+            "type": "string",
+            "example": "1990-05-20"
+          },
+          "gender": {
+            "type": "string",
+            "example": "male"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/Relationship"
+          },
+          "salutation": {
+            "$ref": "#/components/schemas/Salutation"
+          }
+        }
+      },
       "FloatMajorUnit": {
         "type": "number",
         "format": "double",
@@ -4956,9 +5004,9 @@
         "type": "string",
         "description": "User gender.",
         "enum": [
-          "male",
-          "female",
-          "other"
+          "MALE",
+          "FEMALE",
+          "OTHER"
         ]
       },
       "GenerateTokenRequest": {
@@ -5264,7 +5312,9 @@
           "monthly_premium_amount": {
             "$ref": "#/components/schemas/AmountResponse"
           },
-          "nominee_details": {},
+          "nominee_details": {
+            "$ref": "#/components/schemas/NomineeDetails"
+          },
           "primary_user_id": {
             "type": "string"
           },
@@ -5439,15 +5489,15 @@
         "type": "string",
         "description": "Debit frequency for a mandate. Mirrors Juspay's wire enum.",
         "enum": [
-          "as_presented",
-          "daily",
-          "weekly",
-          "monthly",
-          "bimonthly",
-          "quarterly",
-          "half_yearly",
-          "yearly",
-          "one_time"
+          "AS_PRESENTED",
+          "DAILY",
+          "WEEKLY",
+          "MONTHLY",
+          "BIMONTHLY",
+          "QUARTERLY",
+          "HALF_YEARLY",
+          "YEARLY",
+          "ONE_TIME"
         ]
       },
       "MandateOrderResponse": {
@@ -5561,11 +5611,11 @@
         "type": "string",
         "description": "Mandate lifecycle status. Starts at pending; transitions via Juspay status poll/webhook.",
         "enum": [
-          "pending",
-          "active",
-          "failed",
-          "paused",
-          "cancelled"
+          "PENDING",
+          "ACTIVE",
+          "FAILED",
+          "PAUSED",
+          "CANCELLED"
         ]
       },
       "MemberDetail": {
@@ -5674,9 +5724,60 @@
         "type": "string",
         "description": "MRN record lifecycle status.",
         "enum": [
-          "active",
-          "inactive"
+          "ACTIVE",
+          "INACTIVE"
         ]
+      },
+      "NomineeDetails": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DependantNominee",
+                "description": "The nominee is an existing dependant."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "nominee_type"
+                ],
+                "properties": {
+                  "nominee_type": {
+                    "type": "string",
+                    "enum": [
+                      "DEPENDANT"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "The nominee is an existing dependant."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ExternalNominee",
+                "description": "The nominee is an external person not registered as a dependant."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "nominee_type"
+                ],
+                "properties": {
+                  "nominee_type": {
+                    "type": "string",
+                    "enum": [
+                      "EXTERNAL"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "The nominee is an external person not registered as a dependant."
+          }
+        ],
+        "description": "Nominee for an insurance policy — either a registered dependant or an\nexternal person whose details are captured inline."
       },
       "PlatformCredentialSummary": {
         "type": "object",
@@ -5768,8 +5869,8 @@
         "type": "string",
         "description": "Platform lifecycle status.",
         "enum": [
-          "active",
-          "inactive"
+          "ACTIVE",
+          "INACTIVE"
         ]
       },
       "PolicyOnboardingNominee": {
@@ -5882,12 +5983,12 @@
         "type": "string",
         "description": "Insurance policy lifecycle status.",
         "enum": [
-          "pending",
-          "active",
-          "requires_customer_renewal_in_grace",
-          "requires_policy_reissuance",
-          "requires_customer_renewal",
-          "expired"
+          "PENDING",
+          "ACTIVE",
+          "REQUIRES_CUSTOMER_RENEWAL_IN_GRACE",
+          "REQUIRES_POLICY_REISSUANCE",
+          "REQUIRES_CUSTOMER_RENEWAL",
+          "EXPIRED"
         ]
       },
       "RegisterMandateRequest": {
@@ -5965,14 +6066,14 @@
         "type": "string",
         "description": "Relationship of a dependant to the primary user.",
         "enum": [
-          "self",
-          "spouse",
-          "mother",
-          "father",
-          "child",
-          "father_in_law",
-          "mother_in_law",
-          "sibling"
+          "SELF",
+          "SPOUSE",
+          "MOTHER",
+          "FATHER",
+          "CHILD",
+          "FATHER_IN_LAW",
+          "MOTHER_IN_LAW",
+          "SIBLING"
         ]
       },
       "RevokeBenefitProviderCredentialsResponse": {
@@ -6001,10 +6102,10 @@
         "type": "string",
         "description": "Title or honorific for a person.",
         "enum": [
-          "mr",
-          "mrs",
-          "ms",
-          "master"
+          "MR",
+          "MRS",
+          "MS",
+          "MASTER"
         ]
       },
       "TimeRange": {
@@ -6302,9 +6403,9 @@
         "type": "string",
         "description": "User lifecycle status.",
         "enum": [
-          "onboarding",
-          "active",
-          "deactivated"
+          "ONBOARDING",
+          "ACTIVE",
+          "DEACTIVATED"
         ]
       }
     },

@@ -9,7 +9,9 @@ description: "Preview premiums, purchase policies, and manage lifecycle — user
 
 ## Overview
 
-An insurance policy ties a **primary user** to an **insurance-type benefit** and a set of **dependants** to be covered. The SELF dependant (the primary user themselves) is always auto-included in the covered members — you do not need to add it manually to `dependant_ids`. Premiums are calculated per member (including SELF) based on age and gender, stored in minor units (INR paise).
+An insurance policy ties a **primary user** to an **insurance-type benefit** and a set of **dependants** to be covered. The SELF dependant (the primary user themselves) is always auto-included in the covered members — you do not need to add it manually to `dependant_ids`.
+
+Premium amounts are **read directly from the matched plan variant** in the benefit's `benefit_details.plans` map. The server derives a `plan_code` (e.g. `1A`, `2A`, `2A1C`, `2A2C`) from the resolved member list and looks up the variant's `daily_premium_amount`, `annual_premium_amount`, `coverage_amount`, `currency`, and optional `grace_period_days`. There is no per-dependant age/gender bracket computation anymore.
 
 The purchase flow has two steps:
 
@@ -69,19 +71,30 @@ sequenceDiagram
 
 ## Key Concepts
 
-### Premium Calculation
+### Plan code derivation
 
-Premiums are calculated per dependant based on age bracket and gender:
+The server derives a `plan_code` for each preview/purchase request from the resolved member list (SELF + selected dependants):
 
-| Age bracket | Monthly (INR) |
-|-------------|--------------|
-| 0–18 | ₹150 |
-| 19–35 | ₹250 |
-| 36–50 | ₹350 |
-| 51–65 | ₹500 |
-| 66+ | ₹650 |
+- **Adult vs child cutoff**: members with `age < 25` count as Children, `age ≥ 25` as Adults.
+- **Code format**: `{adult_count}A` when there are no children, otherwise `{adult_count}A{child_count}C`.
+- **Examples**: `1A` (self only), `2A` (self + spouse), `2A1C` (self + spouse + 1 child), `2A2C` (self + spouse + 2 children).
 
-Female dependants receive a 5% discount. Daily premium = ⌈monthly × 12 / 365⌉.
+The benefit's `benefit_details.plans` map is a free-form dictionary of `plan_code → PlanVariant`. If the derived code is not a key in that map (e.g. `3A`, `1A2C`, or any combination the provider has not priced), the request is rejected with **400 `IP-1009 PlanVariantNotAvailable`**. The benefit's `plans` map is the single source of truth for which combinations are sellable.
+
+### Premium amounts
+
+Each `PlanVariant` carries:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `description` | string (optional) | Variant copy (e.g. "Self + Spouse + 1 Child") |
+| `daily_premium_amount` | integer (minor units) | Daily premium |
+| `annual_premium_amount` | integer (minor units) | Annual premium (replaces the old `monthly_premium_amount`) |
+| `coverage_amount` | integer (minor units) | Sum insured |
+| `currency` | string | ISO 4217 (currently `INR`) |
+| `grace_period_days` | integer (optional) | Days after expiry during which renewal is still possible |
+
+The persisted policy carries a single `premium_amounts` JSONB column with shape `{ daily, annual, currency }` — one common currency for both daily and annual amounts. Coverage and grace period are not snapshotted on the policy row; they are re-derived from the matched variant when needed (e.g. by the document renderer).
 
 ### Policy Status Lifecycle
 
@@ -130,10 +143,10 @@ sequenceDiagram
 
 - Loads the benefit + provider, asserts it is `Active` and of type `InsurancePolicy`.
 - Resolves the caller-supplied dependant ids (ownership-checked) and **auto-includes the SELF dependant** at the head of the member list.
-- Enforces `max_dependants` (excluding SELF).
-- Validates the nominee is the policyholder's spouse.
-- Computes the daily and monthly premium for the resolved member set.
-- Builds an **in-memory synthetic** `InsurancePolicyApiResponse` (`id = 00000000-0000-0000-0000-000000000000`, `status = pending`, no dates, no `external_policy_id`, no metadata) and renders the enrollment-form PDF directly.
+- Derives the `plan_code` from the member list (adults/children) and looks up the matching `PlanVariant` in the benefit. Unsupported combinations return **400 `IP-1009 PlanVariantNotAvailable`**.
+- Validates the nominee per plan: required when `plan_code != "1A"`. Missing returns **400 `IP-1015 NomineeRequiredForPlan`**. When present, it must still be the policyholder's spouse.
+- Reads `daily_premium_amount` / `annual_premium_amount` / `coverage_amount` / `currency` / `grace_period_days` from the matched variant (no on-the-fly bracket calc).
+- Renders the enrollment-form PDF directly from the resolved data.
 - **No** `INSERT` / `UPDATE` against `insurance_policies` or `mrns`. **No** Narayana `find_or_register_patients` call.
 
 **Request body**
@@ -146,8 +159,8 @@ sequenceDiagram
   Caller-supplied dependants to cover. SELF is auto-included if absent — you may pass an empty array.
 </ParamField>
 
-<ParamField body="nominee_details" type="object" required>
-  Nominee details — either `Dependant` (existing dependant id, must be a SPOUSE) or `External` (inline name + DOB + relationship, relationship must be `spouse`).
+<ParamField body="nominee_details" type="object">
+  Nominee details — either `Dependant` (existing dependant id, must be a SPOUSE) or `External` (inline name + DOB + relationship, relationship must be `spouse`). **Optional**: omit when the derived plan is `1A` (self only). Required for every other plan; missing → 400 `IP-1015`.
 </ParamField>
 
 **Example**
@@ -243,8 +256,10 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies/preview \
 ```json Preview Response 200
 {
   "benefit_name": "Narayana Health Shield",
-  "coverage_amount": { "amount": 500000, "currency": "INR" },
-  "duration_months": 12,
+  "plan_code": "2A",
+  "coverage_amount": { "value": 5000.00, "currency": "INR" },
+  "duration": { "years": 1 },
+  "grace_period_days": 30,
   "members": [
     {
       "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60099",
@@ -253,8 +268,7 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies/preview \
       "salutation": "MR",
       "age": 31,
       "gender": "MALE",
-      "relationship": "SELF",
-      "monthly_premium": { "amount": 250, "currency": "INR" }
+      "relationship": "SELF"
     },
     {
       "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
@@ -263,12 +277,11 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies/preview \
       "salutation": "MRS",
       "age": 33,
       "gender": "FEMALE",
-      "relationship": "SPOUSE",
-      "monthly_premium": { "amount": 238, "currency": "INR" }
+      "relationship": "SPOUSE"
     }
   ],
-  "total_monthly_premium": { "amount": 488, "currency": "INR" },
-  "total_daily_premium": { "amount": 17, "currency": "INR" }
+  "premium_amounts": { "daily": 1000, "annual": 360000, "currency": "INR" },
+  "nominee_required": true
 }
 ```
 

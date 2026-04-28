@@ -4295,6 +4295,12 @@
           "created_at": {
             "type": "string"
           },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "id": {
             "type": "string"
           },
@@ -4501,7 +4507,7 @@
       },
       "ConsultationBenefitDetails": {
         "type": "object",
-        "description": "Details for a consultation-type benefit.\n\nFields will be expanded in the `consultations` module PR.",
+        "description": "Details for a consultation-type benefit.",
         "properties": {
           "description": {
             "type": [
@@ -4556,6 +4562,12 @@
           },
           "benefit_type": {
             "$ref": "#/components/schemas/BenefitType"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -4612,8 +4624,7 @@
         "type": "object",
         "required": [
           "benefit_id",
-          "dependant_ids",
-          "nominee_details"
+          "dependant_ids"
         ],
         "properties": {
           "benefit_id": {
@@ -4626,7 +4637,14 @@
             }
           },
           "nominee_details": {
-            "$ref": "#/components/schemas/NomineeDetails"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NomineeDetails"
+              }
+            ]
           }
         }
       },
@@ -4946,6 +4964,68 @@
           }
         }
       },
+      "Duration": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "value",
+              "unit"
+            ],
+            "properties": {
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "DAYS"
+                ]
+              },
+              "value": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "value",
+              "unit"
+            ],
+            "properties": {
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "MONTHS"
+                ]
+              },
+              "value": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "value",
+              "unit"
+            ],
+            "properties": {
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "YEARS"
+                ]
+              },
+              "value": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          }
+        ],
+        "description": "A length of time expressed in a single unit.\n\nWire format: tagged union with `unit` discriminator and `value` payload.\nExample: `{\"unit\": \"MONTHS\", \"value\": 12}`."
+      },
       "EventLogListResponse": {
         "type": "object",
         "required": [
@@ -5126,50 +5206,32 @@
       },
       "InsurancePolicyBenefitDetails": {
         "type": "object",
-        "description": "Details for an insurance-policy-type benefit.\n\nDefines the insurance plan parameters: coverage amount, duration,\ngrace period, and currency. Premium rates are calculated externally\n(hardcoded function for now, rate table module later).\n\nAll new fields use `#[serde(default)]` for backward compatibility\nwith existing JSONB rows that only have `description`. Presence of\nrequired fields is validated at the application layer when purchasing.",
+        "description": "Details for an insurance-policy-type benefit.\n\nOne `duration` applies to the whole benefit; pricing and coverage terms vary\nper `plan_code` inside `plans` (provider-supplied free-form keys such as\n`\"1A\"`, `\"2A\"`, `\"2A1C\"`, `\"2A2C\"`).",
         "required": [
-          "coverage_amount",
-          "currency"
+          "duration",
+          "plans"
         ],
         "properties": {
-          "coverage_amount": {
-            "$ref": "#/components/schemas/FloatMajorUnit",
-            "description": "Total sum insured in major units (e.g., 200000.00 for 2,00,000 INR)."
-          },
-          "currency": {
-            "$ref": "#/components/schemas/Currency",
-            "description": "Currency for all monetary values in this plan."
-          },
           "description": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Human-readable description of the policy coverage."
+            "description": "Human-readable description of the policy."
           },
-          "duration_months": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32",
-            "description": "Policy duration in months (e.g., 12 for annual)."
+          "duration": {
+            "$ref": "#/components/schemas/Duration",
+            "description": "Length of the policy (e.g. 1 year, 6 months)."
           },
-          "grace_period_days": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32",
-            "description": "Number of days after policy expiry during which renewal is still possible."
-          },
-          "max_dependants": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32",
-            "description": "Maximum number of dependants (including SELF) that can be covered."
+          "plans": {
+            "type": "object",
+            "description": "Available plan variants keyed by provider-defined `plan_code`.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PlanVariant"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           }
         }
       },
@@ -5284,11 +5346,12 @@
         "type": "object",
         "required": [
           "benefit_name",
+          "plan_code",
           "coverage_amount",
-          "duration_months",
+          "duration",
           "members",
-          "total_monthly_premium",
-          "total_daily_premium"
+          "premium_amounts",
+          "nominee_required"
         ],
         "properties": {
           "benefit_name": {
@@ -5297,8 +5360,14 @@
           "coverage_amount": {
             "$ref": "#/components/schemas/AmountResponse"
           },
-          "duration_months": {
-            "type": "integer",
+          "duration": {
+            "$ref": "#/components/schemas/Duration"
+          },
+          "grace_period_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32"
           },
           "members": {
@@ -5307,11 +5376,14 @@
               "$ref": "#/components/schemas/MemberDetail"
             }
           },
-          "total_daily_premium": {
-            "$ref": "#/components/schemas/AmountResponse"
+          "nominee_required": {
+            "type": "boolean"
           },
-          "total_monthly_premium": {
-            "$ref": "#/components/schemas/AmountResponse"
+          "plan_code": {
+            "type": "string"
+          },
+          "premium_amounts": {
+            "$ref": "#/components/schemas/PremiumAmounts"
           }
         }
       },
@@ -5323,11 +5395,9 @@
           "benefit_id",
           "benefit_name",
           "dependant_ids",
-          "grace_period_days",
-          "daily_premium_amount",
-          "monthly_premium_amount",
+          "plan_code",
+          "premium_amounts",
           "status",
-          "nominee_details",
           "created_at",
           "last_modified_at"
         ],
@@ -5340,9 +5410,6 @@
           },
           "created_at": {
             "type": "string"
-          },
-          "daily_premium_amount": {
-            "$ref": "#/components/schemas/AmountResponse"
           },
           "dependant_ids": {
             "type": "array",
@@ -5363,10 +5430,6 @@
               "null"
             ]
           },
-          "grace_period_days": {
-            "type": "integer",
-            "format": "int32"
-          },
           "id": {
             "type": "string"
           },
@@ -5383,11 +5446,21 @@
               }
             ]
           },
-          "monthly_premium_amount": {
-            "$ref": "#/components/schemas/AmountResponse"
-          },
           "nominee_details": {
-            "$ref": "#/components/schemas/NomineeDetails"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NomineeDetails"
+              }
+            ]
+          },
+          "plan_code": {
+            "type": "string"
+          },
+          "premium_amounts": {
+            "$ref": "#/components/schemas/PremiumAmounts"
           },
           "primary_user_id": {
             "type": "string"
@@ -5728,6 +5801,11 @@
           }
         }
       },
+      "MinorUnit": {
+        "type": "integer",
+        "format": "int64",
+        "description": "This Unit struct represents MinorUnit in which core amount works"
+      },
       "MrnListResponse": {
         "type": "object",
         "required": [
@@ -5852,6 +5930,49 @@
           }
         ],
         "description": "Nominee for an insurance policy — either a registered dependant or an\nexternal person whose details are captured inline."
+      },
+      "PlanVariant": {
+        "type": "object",
+        "description": "Pricing and coverage terms for one plan variant of an insurance benefit.",
+        "required": [
+          "daily_premium_amount",
+          "annual_premium_amount",
+          "coverage_amount",
+          "currency"
+        ],
+        "properties": {
+          "annual_premium_amount": {
+            "$ref": "#/components/schemas/MinorUnit",
+            "description": "Annual premium amount in minor units."
+          },
+          "coverage_amount": {
+            "$ref": "#/components/schemas/MinorUnit",
+            "description": "Sum insured / coverage amount in minor units."
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency",
+            "description": "Currency for all monetary values in this variant."
+          },
+          "daily_premium_amount": {
+            "$ref": "#/components/schemas/MinorUnit",
+            "description": "Daily premium amount in minor units."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Per-variant description (e.g. \"Self + Spouse + 1 Child\")."
+          },
+          "grace_period_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Number of days after policy expiry during which renewal is still possible."
+          }
+        }
       },
       "PlatformCredentialSummary": {
         "type": "object",
@@ -6065,6 +6186,26 @@
           "EXPIRED"
         ]
       },
+      "PremiumAmounts": {
+        "type": "object",
+        "description": "Daily and annual premiums for an insurance policy, sharing one currency.",
+        "required": [
+          "daily",
+          "annual",
+          "currency"
+        ],
+        "properties": {
+          "annual": {
+            "$ref": "#/components/schemas/MinorUnit"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "daily": {
+            "$ref": "#/components/schemas/MinorUnit"
+          }
+        }
+      },
       "RegisterMandateRequest": {
         "type": "object",
         "required": [
@@ -6241,6 +6382,12 @@
               {
                 "$ref": "#/components/schemas/BenefitDetails"
               }
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
             ]
           },
           "name": {

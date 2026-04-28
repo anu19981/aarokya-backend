@@ -57,6 +57,7 @@ sequenceDiagram
 | Endpoint | JWT user | Admin key | Notes |
 |----------|----------|-----------|-------|
 | `POST /users/{id}/insurance_policies/preview` | ✓ | — | Dependants must belong to the token user |
+| `POST /users/{id}/insurance_policies/preview_enrollment_form` | ✓ | — | Read-only — returns `application/pdf`. Zero DB writes, no Narayana calls |
 | `POST /users/{id}/insurance_policies` | ✓ | — | One active policy per user+benefit |
 | `GET /users/{id}/insurance_policies/{pid}` | ✓ | — | Returns 404 for wrong user |
 | `GET /users/{id}/insurance_policies/{pid}/details` | ✓ | — | Wrapper response including the linked benefit summary |
@@ -96,11 +97,113 @@ pending → active → requires_customer_renewal_in_grace
 
 ---
 
+## Pre-purchase confirmation
+
+Before creating a policy, the mobile/SDK frontend can render the **enrollment form PDF** for a prospective (not-yet-issued) policy and ask the user to verify their selected coverage, members, nominee, and computed premium. The endpoint is **read-only and idempotent** — it performs zero database writes, makes no Narayana calls, and creates no MRN rows. It is safe to re-call as the user adds or removes dependants, swaps the nominee, or switches plans.
+
+The rendered PDF carries a `PREVIEW — not yet issued` banner, a synthetic policy id of all zeros, and the same applicant / coverage / members / nominee blocks as the post-issuance enrollment form. After the user reviews and confirms in-app, the frontend submits `POST /users/{user_id}/insurance_policies` with the same payload to create the policy.
+
+```mermaid
+sequenceDiagram
+    participant App as Mobile App
+    participant API as Aarokya API
+
+    App->>API: POST .../preview_enrollment_form {benefit_id, dependant_ids, nominee_details}
+    API-->>App: 200 application/pdf (enrollment_form_preview.pdf)
+    App->>App: User reviews PDF in-app
+    Note over App,API: User edits selections — repeat preview as often as needed
+    App->>API: POST .../preview_enrollment_form {…updated payload}
+    API-->>App: 200 application/pdf
+    App->>API: POST .../insurance_policies {same payload}
+    API-->>App: 201 InsurancePolicyResponse (status=pending)
+```
+
+---
+
+### Preview Enrollment Form
+
+<Info>
+  **Authentication:** `Authorization: Bearer <access_token>`. Auth gate is `actor.require_self_or_trusted_backend(&user_id)` — same as `preview` and `create`.
+</Info>
+
+**What happens server-side**
+
+- Loads the benefit + provider, asserts it is `Active` and of type `InsurancePolicy`.
+- Resolves the caller-supplied dependant ids (ownership-checked) and **auto-includes the SELF dependant** at the head of the member list.
+- Enforces `max_dependants` (excluding SELF).
+- Validates the nominee is the policyholder's spouse.
+- Computes the daily and monthly premium for the resolved member set.
+- Builds an **in-memory synthetic** `InsurancePolicyApiResponse` (`id = 00000000-0000-0000-0000-000000000000`, `status = pending`, no dates, no `external_policy_id`, no metadata) and renders the enrollment-form PDF directly.
+- **No** `INSERT` / `UPDATE` against `insurance_policies` or `mrns`. **No** Narayana `find_or_register_patients` call.
+
+**Request body**
+
+<ParamField body="benefit_id" type="string (uuid)" required>
+  Benefit to preview against. Must be `Active` and of type `InsurancePolicy`.
+</ParamField>
+
+<ParamField body="dependant_ids" type="string (uuid)[]" required>
+  Caller-supplied dependants to cover. SELF is auto-included if absent — you may pass an empty array.
+</ParamField>
+
+<ParamField body="nominee_details" type="object" required>
+  Nominee details — either `Dependant` (existing dependant id, must be a SPOUSE) or `External` (inline name + DOB + relationship, relationship must be `spouse`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash curl
+curl -X POST http://localhost:8080/users/USER_ID/insurance_policies/preview_enrollment_form \
+  -H 'Authorization: Bearer eyJhbGci...' \
+  -H 'Content-Type: application/json' \
+  --output enrollment_form_preview.pdf \
+  -d '{
+    "benefit_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
+    "dependant_ids": [],
+    "nominee_details": {
+      "type": "external",
+      "salutation": "Mrs",
+      "name": "Spouse Name",
+      "date_of_birth": "1992-04-15",
+      "relationship": "spouse",
+      "gender": "female",
+      "phone": "+919999999999"
+    }
+  }'
+```
+
+```json Request body
+{
+  "benefit_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
+  "dependant_ids": [],
+  "nominee_details": {
+    "type": "external",
+    "salutation": "Mrs",
+    "name": "Spouse Name",
+    "date_of_birth": "1992-04-15",
+    "relationship": "spouse",
+    "gender": "female",
+    "phone": "+919999999999"
+  }
+}
+```
+</CodeGroup>
+
+**Response**
+
+`200 OK` with `Content-Type: application/pdf`. Body is the binary PDF (`enrollment_form_preview.pdf`).
+
+---
+
 ## Endpoints
 
 <CardGroup cols={2}>
   <Card title="POST .../preview" icon="calculator" color="#8b5cf6" href="/api/endpoints/insurance_policies/preview">
     Preview the premium breakdown for a set of dependants without creating a policy.
+  </Card>
+  <Card title="POST .../preview_enrollment_form" icon="file-pdf" color="#8b5cf6" href="/api/endpoints/insurance_policies/preview-enrollment-form">
+    Render the enrollment form PDF for a prospective policy. Read-only — safe to re-call as the user adjusts dependants/nominee.
   </Card>
   <Card title="POST .../insurance_policies" icon="plus" color="#16a34a" href="/api/endpoints/insurance_policies/create">
     Purchase an insurance policy. Status starts as `pending`.

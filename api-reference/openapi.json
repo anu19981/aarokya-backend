@@ -3450,6 +3450,60 @@
         ]
       }
     },
+    "/users/{user_id}/insurance_policies/preview_enrollment_form": {
+      "post": {
+        "tags": [
+          "Insurance Policy"
+        ],
+        "operationId": "preview_enrollment_form",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsurancePolicyEnrollmentFormPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Enrollment form PDF preview",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
+          },
+          "404": {
+            "description": "Benefit or dependant not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/users/{user_id}/insurance_policies/{insurance_policy_id}": {
       "get": {
         "tags": [
@@ -5144,6 +5198,26 @@
           "provider_name": {
             "type": "string"
           }
+        }
+      },
+      "InsurancePolicyEnrollmentFormPreviewRequest": {
+        "type": "object",
+        "required": [
+          "benefit_id",
+          "dependant_ids",
+          "nominee_details"
+        ],
+        "properties": {
+          "benefit_id": {
+            "type": "string"
+          },
+          "dependant_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "nominee_details": {}
         }
       },
       "InsurancePolicyListResponse": {

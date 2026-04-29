@@ -4482,6 +4482,19 @@
           }
         }
       },
+      "AnsweredQuestion": {
+        "type": "object",
+        "description": "A question paired with the user's boolean answer.\n\nUsed both as:\n- the request-side payload at policy create / preview time, and\n- the persisted snapshot on `insurance_policies.questionnaire`.\n\n`question` text must match the benefit's wording exactly — server rejects\nstale or mismatched questionnaires.",
+        "required": [
+          "question",
+          "answer"
+        ],
+        "properties": {
+          "answer": {
+            "type": "boolean"
+          },
+          "question": {
+            "type": "string"
       "BankDetails": {
         "type": "object",
         "description": "Origin-bank details required to open a purpose-bound account at PBA.",
@@ -5046,6 +5059,15 @@
                 "$ref": "#/components/schemas/NomineeDetails"
               }
             ]
+          },
+          "questionnaire_responses": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AnsweredQuestion"
+            }
           }
         }
       },
@@ -5645,6 +5667,16 @@
             "propertyNames": {
               "type": "string"
             }
+          },
+          "questionnaire": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Question"
+            },
+            "description": "Optional questionnaire the policyholder must answer at policy creation.\nTree of `Question`s with nested follow-ups gated by `show_when`."
           }
         }
       },
@@ -5692,7 +5724,16 @@
               "type": "string"
             }
           },
-          "nominee_details": {}
+          "nominee_details": {},
+          "questionnaire_responses": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AnsweredQuestion"
+            }
+          }
         }
       },
       "InsurancePolicyListResponse": {
@@ -5751,6 +5792,15 @@
             "type": "array",
             "items": {
               "type": "string"
+            }
+          },
+          "questionnaire_responses": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AnsweredQuestion"
             }
           }
         }
@@ -5877,6 +5927,16 @@
           },
           "primary_user_id": {
             "type": "string"
+          },
+          "questionnaire": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PolicyQuestionnaire"
+              }
+            ]
           },
           "start_date": {
             "type": [
@@ -6601,6 +6661,21 @@
           }
         }
       },
+      "PolicyQuestionnaire": {
+        "type": "object",
+        "description": "JSONB wrapper for `insurance_policies.questionnaire`.",
+        "required": [
+          "questions"
+        ],
+        "properties": {
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnsweredQuestion"
+            }
+          }
+        }
+      },
       "PolicyStatus": {
         "type": "string",
         "description": "Insurance policy lifecycle status.",
@@ -6627,6 +6702,18 @@
           },
           "daily": {
             "$ref": "#/components/schemas/AmountResponse"
+          }
+        }
+      },
+      "Question": {
+        "type": "object",
+        "description": "A single yes/no question definition (benefit side, no answer attached).",
+        "required": [
+          "question"
+        ],
+        "properties": {
+          "question": {
+            "type": "string"
           }
         }
       },

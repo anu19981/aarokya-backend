@@ -23,6 +23,149 @@
     }
   ],
   "paths": {
+    "/accounts": {
+      "get": {
+        "tags": [
+          "Account (Admin)"
+        ],
+        "operationId": "admin_list_accounts",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/AccountStatus"
+                }
+              ]
+            }
+          },
+          {
+            "name": "account_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/AccountType"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/accounts/{account_id}": {
+      "get": {
+        "tags": [
+          "Account (Admin)"
+        ],
+        "operationId": "admin_get_account_by_id",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "description": "Account ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "404": {
+            "description": "Account not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/admin/event_logs": {
       "get": {
         "tags": [
@@ -1439,6 +1582,61 @@
         ]
       }
     },
+    "/insurance_policies/{insurance_policy_id}/status": {
+      "patch": {
+        "tags": [
+          "Insurance Policy (Admin)"
+        ],
+        "operationId": "update_insurance_policy_status",
+        "parameters": [
+          {
+            "name": "insurance_policy_id",
+            "in": "path",
+            "description": "Insurance Policy ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateInsurancePolicyStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Insurance policy status updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsurancePolicyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin or benefit provider"
+          },
+          "404": {
+            "description": "Insurance policy not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/mrns": {
       "get": {
         "tags": [
@@ -2818,6 +3016,51 @@
         ]
       }
     },
+    "/users/{user_id}/balance": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "operationId": "get_account_balance",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account balance from PBA",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetBalanceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
+          },
+          "404": {
+            "description": "User has no PBA-backed account yet"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/users/{user_id}/complete_onboarding": {
       "post": {
         "tags": [
@@ -3671,6 +3914,102 @@
         ]
       }
     },
+    "/users/{user_id}/ledger": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "operationId": "get_account_ledger",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "from_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "2026-01-01T00:00:00Z"
+          },
+          {
+            "name": "to_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "2026-04-27T23:59:59Z"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account transaction ledger from PBA",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListTransactionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid date filter"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or dashboard user"
+          },
+          "404": {
+            "description": "User has no PBA-backed account yet"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/users/{user_id}/mandate/order_status/{order_id}": {
       "get": {
         "tags": [
@@ -3989,6 +4328,51 @@
           }
         }
       },
+      "AdminListAccountsRequest": {
+        "type": "object",
+        "properties": {
+          "account_type": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AccountType"
+              }
+            ]
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AccountStatus"
+              }
+            ]
+          },
+          "user_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "AdminListInsurancePoliciesRequest": {
         "allOf": [
           {
@@ -4095,6 +4479,26 @@
           },
           "value": {
             "$ref": "#/components/schemas/FloatMajorUnit"
+          }
+        }
+      },
+      "BankDetails": {
+        "type": "object",
+        "description": "Origin-bank details required to open a purpose-bound account at PBA.",
+        "required": [
+          "ifsc_code",
+          "account_number"
+        ],
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Origin bank account number. Sensitive — never logged in plaintext.",
+            "example": "50123456789"
+          },
+          "ifsc_code": {
+            "type": "string",
+            "description": "IFSC code of the origin bank branch (11 chars, e.g. \"HDFC0000001\").",
+            "example": "HDFC0000001"
           }
         }
       },
@@ -4455,11 +4859,15 @@
           "last_name",
           "dob",
           "gender",
-          "address"
+          "address",
+          "bank_details"
         ],
         "properties": {
           "address": {
             "$ref": "#/components/schemas/AddressDetails"
+          },
+          "bank_details": {
+            "$ref": "#/components/schemas/BankDetails"
           },
           "dob": {
             "type": "string",
@@ -5150,6 +5558,43 @@
           }
         }
       },
+      "GetBalanceResponse": {
+        "type": "object",
+        "description": "Response shape mirrors PBA's `GetBalanceOutput` byte-for-byte (snake_case\nfield names, no extra wrapping). All monetary amounts are in the smallest\ncurrency unit (e.g. paise for INR).",
+        "required": [
+          "account_id",
+          "self_contribution",
+          "others_contribution",
+          "total",
+          "pending_self",
+          "pending_others"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "others_contribution": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pending_others": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pending_self": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "self_contribution": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "IdProof": {
         "type": "object",
         "required": [
@@ -5543,6 +5988,36 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PlatformCredentialSummary"
+            }
+          }
+        }
+      },
+      "ListTransactionsResponse": {
+        "type": "object",
+        "description": "Response mirrors PBA's `ListTransactionsOutput` exactly.",
+        "required": [
+          "transactions",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransactionSummary"
             }
           }
         }
@@ -6131,11 +6606,13 @@
         "description": "Insurance policy lifecycle status.",
         "enum": [
           "PENDING",
-          "ACTIVE",
+          "APPROVED",
+          "ISSUED",
           "REQUIRES_CUSTOMER_RENEWAL_IN_GRACE",
           "REQUIRES_POLICY_REISSUANCE",
           "REQUIRES_CUSTOMER_RENEWAL",
-          "EXPIRED"
+          "EXPIRED",
+          "REJECTED"
         ]
       },
       "PremiumAmounts": {
@@ -6156,13 +6633,9 @@
       "RegisterMandateRequest": {
         "type": "object",
         "required": [
-          "account_id",
           "amount"
         ],
         "properties": {
-          "account_id": {
-            "type": "string"
-          },
           "amount": {
             "type": "integer",
             "format": "int64"
@@ -6292,6 +6765,90 @@
           }
         }
       },
+      "TransactionSummary": {
+        "type": "object",
+        "description": "Mirrors PBA's `TransactionSummary` field-for-field. Open-ended string\nfields (`type`, `status`, `pool`, `direction`) are passed through as\nstrings rather than re-typing as enums — keeps the wire format identical\neven if PBA adds a new variant we haven't seen yet.",
+        "required": [
+          "id",
+          "account_id",
+          "type",
+          "status",
+          "amount",
+          "pool",
+          "direction",
+          "created_at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "ISO 8601 date-time, e.g. `\"2026-04-27T10:30:00Z\"`."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direction": {
+            "type": "string"
+          },
+          "funding_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gateway_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "merchant_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "merchant_mcc": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pool": {
+            "type": "string"
+          },
+          "source_account": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_ifsc": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
       "UpdateAccountRequest": {
         "type": "object",
         "properties": {
@@ -6396,6 +6953,47 @@
                 "$ref": "#/components/schemas/Salutation"
               }
             ]
+          }
+        }
+      },
+      "UpdateInsurancePolicyStatusRequest": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2027-01-15"
+          },
+          "external_policy_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/InsurancePolicyMetadata"
+              }
+            ]
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2026-01-15"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PolicyStatus"
           }
         }
       },

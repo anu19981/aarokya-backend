@@ -4103,8 +4103,7 @@
           {
             "allOf": [
               {
-                "$ref": "#/components/schemas/ConsultationBenefitDetails",
-                "description": "Teleconsultation or in-person consultation benefit."
+                "$ref": "#/components/schemas/ConsultationBenefitDetails"
               },
               {
                 "type": "object",
@@ -4120,14 +4119,12 @@
                   }
                 }
               }
-            ],
-            "description": "Teleconsultation or in-person consultation benefit."
+            ]
           },
           {
             "allOf": [
               {
-                "$ref": "#/components/schemas/InsurancePolicyBenefitDetails",
-                "description": "Health, life, or accident insurance policy benefit."
+                "$ref": "#/components/schemas/InsurancePolicyBenefitDetails"
               },
               {
                 "type": "object",
@@ -4143,11 +4140,9 @@
                   }
                 }
               }
-            ],
-            "description": "Health, life, or accident insurance policy benefit."
+            ]
           }
-        ],
-        "description": "Typed payload stored in `benefits.benefit_details` (JSONB).\n\nDiscriminated by the `\"benefit_type\"` JSON key, matching `common_enums::BenefitType`."
+        ]
       },
       "BenefitListResponse": {
         "type": "object",
@@ -4507,14 +4502,12 @@
       },
       "ConsultationBenefitDetails": {
         "type": "object",
-        "description": "Details for a consultation-type benefit.",
         "properties": {
           "description": {
             "type": [
               "string",
               "null"
-            ],
-            "description": "Human-readable description of what the consultation covers."
+            ]
           }
         }
       },
@@ -4969,17 +4962,10 @@
           {
             "type": "object",
             "required": [
-              "value",
-              "unit"
+              "days"
             ],
             "properties": {
-              "unit": {
-                "type": "string",
-                "enum": [
-                  "DAYS"
-                ]
-              },
-              "value": {
+              "days": {
                 "type": "integer",
                 "format": "int32"
               }
@@ -4988,17 +4974,10 @@
           {
             "type": "object",
             "required": [
-              "value",
-              "unit"
+              "months"
             ],
             "properties": {
-              "unit": {
-                "type": "string",
-                "enum": [
-                  "MONTHS"
-                ]
-              },
-              "value": {
+              "months": {
                 "type": "integer",
                 "format": "int32"
               }
@@ -5007,24 +4986,17 @@
           {
             "type": "object",
             "required": [
-              "value",
-              "unit"
+              "years"
             ],
             "properties": {
-              "unit": {
-                "type": "string",
-                "enum": [
-                  "YEARS"
-                ]
-              },
-              "value": {
+              "years": {
                 "type": "integer",
                 "format": "int32"
               }
             }
           }
         ],
-        "description": "A length of time expressed in a single unit.\n\nWire format: tagged union with `unit` discriminator and `value` payload.\nExample: `{\"unit\": \"MONTHS\", \"value\": 12}`."
+        "description": "A length of time expressed in a single unit.\n\nWire format: externally-tagged union — single-key object whose key is the\nunit name (`days` / `months` / `years`) and whose value is the integer\ncount. Example: `{\"months\": 12}` or `{\"years\": 1}`."
       },
       "EventLogListResponse": {
         "type": "object",
@@ -5206,7 +5178,6 @@
       },
       "InsurancePolicyBenefitDetails": {
         "type": "object",
-        "description": "Details for an insurance-policy-type benefit.\n\nOne `duration` applies to the whole benefit; pricing and coverage terms vary\nper `plan_code` inside `plans` (provider-supplied free-form keys such as\n`\"1A\"`, `\"2A\"`, `\"2A1C\"`, `\"2A2C\"`).",
         "required": [
           "duration",
           "plans"
@@ -5216,16 +5187,13 @@
             "type": [
               "string",
               "null"
-            ],
-            "description": "Human-readable description of the policy."
+            ]
           },
           "duration": {
-            "$ref": "#/components/schemas/Duration",
-            "description": "Length of the policy (e.g. 1 year, 6 months)."
+            "$ref": "#/components/schemas/Duration"
           },
           "plans": {
             "type": "object",
-            "description": "Available plan variants keyed by provider-defined `plan_code`.",
             "additionalProperties": {
               "$ref": "#/components/schemas/PlanVariant"
             },
@@ -5801,11 +5769,6 @@
           }
         }
       },
-      "MinorUnit": {
-        "type": "integer",
-        "format": "int64",
-        "description": "This Unit struct represents MinorUnit in which core amount works"
-      },
       "MrnListResponse": {
         "type": "object",
         "required": [
@@ -5933,44 +5896,33 @@
       },
       "PlanVariant": {
         "type": "object",
-        "description": "Pricing and coverage terms for one plan variant of an insurance benefit.",
         "required": [
           "daily_premium_amount",
           "annual_premium_amount",
-          "coverage_amount",
-          "currency"
+          "coverage_amount"
         ],
         "properties": {
           "annual_premium_amount": {
-            "$ref": "#/components/schemas/MinorUnit",
-            "description": "Annual premium amount in minor units."
+            "$ref": "#/components/schemas/AmountResponse"
           },
           "coverage_amount": {
-            "$ref": "#/components/schemas/MinorUnit",
-            "description": "Sum insured / coverage amount in minor units."
-          },
-          "currency": {
-            "$ref": "#/components/schemas/Currency",
-            "description": "Currency for all monetary values in this variant."
+            "$ref": "#/components/schemas/AmountResponse"
           },
           "daily_premium_amount": {
-            "$ref": "#/components/schemas/MinorUnit",
-            "description": "Daily premium amount in minor units."
+            "$ref": "#/components/schemas/AmountResponse"
           },
           "description": {
             "type": [
               "string",
               "null"
-            ],
-            "description": "Per-variant description (e.g. \"Self + Spouse + 1 Child\")."
+            ]
           },
           "grace_period_days": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int32",
-            "description": "Number of days after policy expiry during which renewal is still possible."
+            "format": "int32"
           }
         }
       },
@@ -6188,21 +6140,16 @@
       },
       "PremiumAmounts": {
         "type": "object",
-        "description": "Daily and annual premiums for an insurance policy, sharing one currency.",
         "required": [
           "daily",
-          "annual",
-          "currency"
+          "annual"
         ],
         "properties": {
           "annual": {
-            "$ref": "#/components/schemas/MinorUnit"
-          },
-          "currency": {
-            "$ref": "#/components/schemas/Currency"
+            "$ref": "#/components/schemas/AmountResponse"
           },
           "daily": {
-            "$ref": "#/components/schemas/MinorUnit"
+            "$ref": "#/components/schemas/AmountResponse"
           }
         }
       },

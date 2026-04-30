@@ -4107,7 +4107,7 @@
         ]
       }
     },
-    "/users/{user_id}/mandate/order_status/{order_id}": {
+    "/users/{user_id}/mandate/order_status/{id}": {
       "get": {
         "tags": [
           "Mandate"
@@ -4124,9 +4124,9 @@
             }
           },
           {
-            "name": "order_id",
+            "name": "id",
             "in": "path",
-            "description": "Juspay order_id (format: <user_id>_<unix_ms>)",
+            "description": "Mandate UUID (also the value sent to Juspay as order_id)",
             "required": true,
             "schema": {
               "type": "string"
@@ -4148,7 +4148,7 @@
             "description": "Unauthorized"
           },
           "404": {
-            "description": "Mandate order not found"
+            "description": "Mandate not found"
           }
         }
       }
@@ -4170,16 +4170,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterMandateRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "201": {
             "description": "Mandate registration initiated",
@@ -6338,10 +6328,8 @@
         "type": "object",
         "required": [
           "id",
-          "order_id",
-          "customer_id",
-          "account_id",
           "user_id",
+          "account_id",
           "amount",
           "max_amount",
           "frequency",
@@ -6360,10 +6348,19 @@
           "created_at": {
             "type": "string"
           },
-          "customer_id": {
-            "type": "string"
-          },
           "end_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "external_mandate_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "external_order_status": {
             "type": [
               "string",
               "null"
@@ -6374,12 +6371,6 @@
           },
           "id": {
             "type": "string"
-          },
-          "juspay_order_status": {
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "last_modified_at": {
             "type": "string"
@@ -6393,18 +6384,9 @@
           "mandate_status": {
             "$ref": "#/components/schemas/MandateStatus"
           },
-          "mandate_token": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "max_amount": {
             "type": "integer",
             "format": "int64"
-          },
-          "order_id": {
-            "type": "string"
           },
           "payment_method": {
             "type": [
@@ -6424,18 +6406,6 @@
               "null"
             ]
           },
-          "txn_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "txn_uuid": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "user_id": {
             "type": "string"
           }
@@ -6443,7 +6413,7 @@
       },
       "MandateStatus": {
         "type": "string",
-        "description": "Mandate lifecycle status. Starts at pending; transitions via Juspay status poll/webhook.",
+        "description": "Internal mandate lifecycle status — coarse-grained view derived from the raw Juspay status string.",
         "enum": [
           "PENDING",
           "ACTIVE",
@@ -6901,26 +6871,12 @@
           }
         }
       },
-      "RegisterMandateRequest": {
-        "type": "object",
-        "required": [
-          "amount"
-        ],
-        "properties": {
-          "amount": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
       "RegisterMandateResponse": {
         "type": "object",
         "required": [
           "id",
-          "order_id",
-          "customer_id",
-          "account_id",
           "user_id",
+          "account_id",
           "amount",
           "max_amount",
           "frequency",
@@ -6940,9 +6896,6 @@
           "created_at": {
             "type": "string"
           },
-          "customer_id": {
-            "type": "string"
-          },
           "frequency": {
             "$ref": "#/components/schemas/MandateFrequency"
           },
@@ -6958,9 +6911,6 @@
           "max_amount": {
             "type": "integer",
             "format": "int64"
-          },
-          "order_id": {
-            "type": "string"
           },
           "payload": {},
           "user_id": {

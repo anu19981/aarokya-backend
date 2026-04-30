@@ -4143,6 +4143,60 @@
   },
   "components": {
     "schemas": {
+      "AccountDetails": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SavingsAccountDetails"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "account_type"
+                ],
+                "properties": {
+                  "account_type": {
+                    "type": "string",
+                    "enum": [
+                      "SAVINGS"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "account_type"
+            ],
+            "properties": {
+              "account_type": {
+                "type": "string",
+                "enum": [
+                  "HSA"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "account_type"
+            ],
+            "properties": {
+              "account_type": {
+                "type": "string",
+                "enum": [
+                  "EDUCATION"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Tagged JSONB blob persisted into `accounts.account_details`. Mirrors\n`accounts.account_type` — types that carry extra metadata (e.g.\n`SAVINGS` → IFSC) embed it; the rest are unit variants. Bank account\nnumbers / PBA UUIDs live in `accounts.external_account_id`."
+      },
       "AccountListResponse": {
         "type": "object",
         "required": [
@@ -4177,26 +4231,30 @@
         "required": [
           "id",
           "user_id",
-          "provider_account_id",
+          "external_account_id",
           "status",
           "account_type",
+          "account_details",
           "created_at",
           "last_modified_at"
         ],
         "properties": {
+          "account_details": {
+            "$ref": "#/components/schemas/AccountDetails"
+          },
           "account_type": {
             "$ref": "#/components/schemas/AccountType"
           },
           "created_at": {
             "type": "string"
           },
+          "external_account_id": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
           "last_modified_at": {
-            "type": "string"
-          },
-          "provider_account_id": {
             "type": "string"
           },
           "status": {
@@ -4495,6 +4553,9 @@
           },
           "question": {
             "type": "string"
+          }
+        }
+      },
       "BankDetails": {
         "type": "object",
         "description": "Origin-bank details required to open a purpose-bound account at PBA.",
@@ -4935,14 +4996,18 @@
       "CreateAccountRequest": {
         "type": "object",
         "required": [
-          "provider_account_id",
-          "account_type"
+          "external_account_id",
+          "account_type",
+          "account_details"
         ],
         "properties": {
+          "account_details": {
+            "$ref": "#/components/schemas/AccountDetails"
+          },
           "account_type": {
             "$ref": "#/components/schemas/AccountType"
           },
-          "provider_account_id": {
+          "external_account_id": {
             "type": "string"
           }
         }
@@ -5675,8 +5740,7 @@
             ],
             "items": {
               "$ref": "#/components/schemas/Question"
-            },
-            "description": "Optional questionnaire the policyholder must answer at policy creation.\nTree of `Question`s with nested follow-ups gated by `show_when`."
+            }
           }
         }
       },
@@ -5861,6 +5925,7 @@
           "plan_code",
           "premium_amounts",
           "status",
+          "questionnaire",
           "created_at",
           "last_modified_at"
         ],
@@ -5929,14 +5994,7 @@
             "type": "string"
           },
           "questionnaire": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/PolicyQuestionnaire"
-              }
-            ]
+            "$ref": "#/components/schemas/PolicyQuestionnaire"
           },
           "start_date": {
             "type": [
@@ -6829,6 +6887,17 @@
           "MS",
           "MASTER"
         ]
+      },
+      "SavingsAccountDetails": {
+        "type": "object",
+        "required": [
+          "ifsc_code"
+        ],
+        "properties": {
+          "ifsc_code": {
+            "type": "string"
+          }
+        }
       },
       "TimeRange": {
         "type": "object",

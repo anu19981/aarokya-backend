@@ -6588,7 +6588,8 @@
         "required": [
           "daily_premium_amount",
           "annual_premium_amount",
-          "coverage_amount"
+          "coverage_amount",
+          "nominee_required"
         ],
         "properties": {
           "annual_premium_amount": {
@@ -6612,6 +6613,9 @@
               "null"
             ],
             "format": "int32"
+          },
+          "nominee_required": {
+            "type": "boolean"
           }
         }
       },

@@ -1346,19 +1346,16 @@
         "operationId": "admin_list_insurance_policies",
         "parameters": [
           {
-            "name": "status",
+            "name": "statuses",
             "in": "query",
             "required": false,
             "schema": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/components/schemas/PolicyStatus"
-                }
+              "type": [
+                "string",
+                "null"
               ]
-            }
+            },
+            "example": "PENDING,ISSUED"
           },
           {
             "name": "primary_user_id",
@@ -1385,6 +1382,29 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "policy_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
             }
           },
           {
@@ -1669,6 +1689,44 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "ACTIVE,INACTIVE"
+          },
+          {
+            "name": "mrn",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
             }
           },
           {
@@ -2479,7 +2537,19 @@
         "operationId": "list_users",
         "parameters": [
           {
-            "name": "status",
+            "name": "statuses",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "ACTIVE,ONBOARDING"
+          },
+          {
+            "name": "sort",
             "in": "query",
             "required": false,
             "schema": {
@@ -2488,7 +2558,7 @@
                   "type": "null"
                 },
                 {
-                  "$ref": "#/components/schemas/UserStatus"
+                  "$ref": "#/components/schemas/Sort"
                 }
               ]
             }
@@ -4526,6 +4596,16 @@
                 "type": "null"
               },
               {
+                "$ref": "#/components/schemas/Sort"
+              }
+            ]
+          },
+          {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
                 "$ref": "#/components/schemas/TimeRange"
               }
             ]
@@ -4534,7 +4614,8 @@
             "type": "object",
             "required": [
               "benefit_id",
-              "benefit_provider_id"
+              "benefit_provider_id",
+              "policy_id"
             ],
             "properties": {
               "benefit_id": {
@@ -4557,21 +4638,21 @@
                 ],
                 "format": "int32"
               },
+              "policy_id": {
+                "type": "string"
+              },
               "primary_user_id": {
                 "type": [
                   "string",
                   "null"
                 ]
               },
-              "status": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "$ref": "#/components/schemas/PolicyStatus"
-                  }
-                ]
+              "statuses": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "example": "PENDING,ISSUED"
               }
             }
           }
@@ -6987,6 +7068,49 @@
           }
         }
       },
+      "Sort": {
+        "type": "object",
+        "description": "Sort specification for list endpoints. Field semantics match\nhyperswitch's `Order { on, by }` — read it as\n\"sort **on** `<column>` **by** `<direction>`\".",
+        "properties": {
+          "by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SortDirection",
+                "description": "Direction. `None` means \"use the endpoint default\" (`desc`)."
+              }
+            ]
+          },
+          "on": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SortOn",
+                "description": "Field / column to sort on. `None` means \"use the endpoint default\"\n(`created_at`)."
+              }
+            ]
+          }
+        }
+      },
+      "SortDirection": {
+        "type": "string",
+        "description": "Direction half of a [`Sort`].",
+        "enum": [
+          "asc",
+          "desc"
+        ]
+      },
+      "SortOn": {
+        "type": "string",
+        "description": "Field-name half of a [`Sort`]. Closed enum of the sortable columns\nacross the app — when a new sortable column is needed (e.g.\n`last_modified_at`), add a variant here. Storage layers exhaustively\nmatch on this so adding a variant forces a compile error at every call\nsite that needs to translate it.",
+        "enum": [
+          "created_at"
+        ]
+      },
       "TimeRange": {
         "type": "object",
         "description": "A half-open time range, with a mandatory start and an optional end.\nDesigned to be embedded in list/filter query params via `#[serde(flatten)]`.\n\n`Deserialize` runs [`TimeRange::validate`] as part of deserialization, so\ncallers never receive a [`TimeRange`] that violates `start_time <= end_time`.",
@@ -7346,7 +7470,8 @@
           "user_id",
           "phone_number",
           "phone_country_code",
-          "status"
+          "status",
+          "created_at"
         ],
         "properties": {
           "address": {
@@ -7358,6 +7483,11 @@
                 "$ref": "#/components/schemas/AddressDetails"
               }
             ]
+          },
+          "created_at": {
+            "type": "string",
+            "description": "User creation timestamp.",
+            "example": "2026-01-15T12:34:56"
           },
           "dob": {
             "type": [

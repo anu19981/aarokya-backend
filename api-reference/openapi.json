@@ -5146,10 +5146,18 @@
       "CreateDashboardUserRequest": {
         "type": "object",
         "required": [
-          "email"
+          "email",
+          "first_name",
+          "last_name"
         ],
         "properties": {
           "email": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
             "type": "string"
           }
         }

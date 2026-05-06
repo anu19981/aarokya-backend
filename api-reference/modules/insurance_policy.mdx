@@ -263,8 +263,8 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies/preview \
   "members": [
     {
       "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60099",
-      "first_name": "Ravi",
-      "last_name": "Kumar",
+      "first_name": "John",
+      "last_name": "Doe",
       "salutation": "MR",
       "age": 31,
       "gender": "MALE",
@@ -272,8 +272,8 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies/preview \
     },
     {
       "dependant_id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
-      "first_name": "Priya",
-      "last_name": "Kumar",
+      "first_name": "Mary",
+      "last_name": "Doe",
       "salutation": "MRS",
       "age": 33,
       "gender": "FEMALE",
@@ -321,6 +321,12 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies \
 ```json Create Response 201
 {
   "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60099",
+  "primary_member": {
+    "id": "047382910564",
+    "first_name": "John",
+    "last_name": "Doe",
+    "gender": "MALE"
+  },
   "primary_user_id": "047382910564",
   "benefit_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
   "benefit_name": "Narayana Health Shield",
@@ -328,6 +334,24 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies \
   "dependant_ids": [
     "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60099",
     "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001"
+  ],
+  "dependants": [
+    {
+      "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60099",
+      "salutation": "MR",
+      "first_name": "John",
+      "last_name": "Doe",
+      "relationship": "SELF",
+      "gender": "MALE"
+    },
+    {
+      "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
+      "salutation": "MRS",
+      "first_name": "Mary",
+      "last_name": "Doe",
+      "relationship": "SPOUSE",
+      "gender": "FEMALE"
+    }
   ],
   "plan_code": "2A",
   "premium_amounts": {
@@ -358,6 +382,31 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies \
 
 <Note>
   The SELF dependant is **always auto-included** in `dependant_ids` — you do not need to add it. The `members` array in the preview response and `dependant_ids` in the create response will both include SELF automatically.
+</Note>
+
+### Member fields — `primary_member` and `dependants`
+
+Policy responses carry the policyholder identity and full dependant roster as structured objects. Names are resolved at response build time (not snapshotted on the row), so renames flow through automatically — same model as `benefit_name`. **`primary_member.id` and `dependants[].id` are the canonical identifiers** going forward.
+
+<Warning>
+  The legacy fields `primary_user_id` and `dependant_ids` are still returned on every response for backwards compatibility with existing SDK/mobile clients, but are **deprecated** and will be removed in a future release. New integrations should rely on `primary_member` and `dependants` exclusively. The deprecated fields exactly mirror their structured counterparts (same id, same order).
+</Warning>
+
+| Field | Type | Notes |
+|---|---|---|
+| `primary_member.id` | string | Policyholder's user id. |
+| `primary_member.first_name` | string | Always populated — purchase requires a completed onboarding. |
+| `primary_member.last_name` | string | Always populated — purchase requires a completed onboarding. |
+| `primary_member.gender` | enum | `MALE`, `FEMALE`, `OTHER`. Always populated post-onboarding. |
+| `dependants[].id` | uuid | Dependant id. |
+| `dependants[].first_name` | string | Required (mirrors the `dependants` table). |
+| `dependants[].last_name` | string | Required. |
+| `dependants[].salutation` | enum | `MR`, `MRS`, `MS`, `MASTER`. Required. |
+| `dependants[].relationship` | enum | `SELF`, `SPOUSE`, `MOTHER`, `FATHER`, `CHILD`, `FATHER_IN_LAW`, `MOTHER_IN_LAW`, `SIBLING`. Required. |
+| `dependants[].gender` | enum | `MALE`, `FEMALE`, `OTHER`. Required. |
+
+<Note>
+  `dependants` includes the SELF entry (the policyholder represented as a dependant on the policy roster). UIs that want to surface only the *additional* covered family members should filter by `relationship !== "SELF"`.
 </Note>
 
 ### `nominee_details` — Tagged Union

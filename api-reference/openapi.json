@@ -5541,6 +5541,37 @@
           }
         }
       },
+      "DependantMember": {
+        "type": "object",
+        "required": [
+          "id",
+          "salutation",
+          "first_name",
+          "last_name",
+          "relationship",
+          "gender"
+        ],
+        "properties": {
+          "first_name": {
+            "type": "string"
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/Relationship"
+          },
+          "salutation": {
+            "$ref": "#/components/schemas/Salutation"
+          }
+        }
+      },
       "DependantNominee": {
         "type": "object",
         "description": "A nominee who is an existing dependant in the system.",
@@ -6123,9 +6154,11 @@
         "type": "object",
         "required": [
           "id",
+          "primary_member",
           "primary_user_id",
           "benefit_id",
           "benefit_name",
+          "dependants",
           "dependant_ids",
           "plan_code",
           "premium_amounts",
@@ -6148,6 +6181,12 @@
             "type": "array",
             "items": {
               "type": "string"
+            }
+          },
+          "dependants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DependantMember"
             }
           },
           "end_date": {
@@ -6194,6 +6233,9 @@
           },
           "premium_amounts": {
             "$ref": "#/components/schemas/PremiumAmounts"
+          },
+          "primary_member": {
+            "$ref": "#/components/schemas/PrimaryMember"
           },
           "primary_user_id": {
             "type": "string"
@@ -6949,6 +6991,29 @@
           },
           "daily": {
             "$ref": "#/components/schemas/AmountResponse"
+          }
+        }
+      },
+      "PrimaryMember": {
+        "type": "object",
+        "required": [
+          "id",
+          "first_name",
+          "last_name",
+          "gender"
+        ],
+        "properties": {
+          "first_name": {
+            "type": "string"
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
           }
         }
       },

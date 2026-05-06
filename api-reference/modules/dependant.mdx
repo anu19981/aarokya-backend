@@ -17,7 +17,7 @@ A dependant represents a family member linked to a primary user (spouse, child, 
 
 ```mermaid
 flowchart LR
-    A[id: uuid-A\nstatus: discarded\nfirst_name: Ravi] -->|previous_version_id| B[id: uuid-B\nstatus: active\nfirst_name: Ravi K]
+    A[id: uuid-A\nstatus: discarded\nfirst_name: Mary] -->|previous_version_id| B[id: uuid-B\nstatus: active\nfirst_name: Mary J]
     PATCH[PATCH /dependants/uuid-A] --> A
     PATCH --> B
 ```
@@ -121,8 +121,8 @@ curl -X POST http://localhost:8080/users/047382910564/dependants \
   -H 'Content-Type: application/json' \
   -d '{
     "relationship": "SPOUSE",
-    "first_name": "Priya",
-    "last_name": "Kumar",
+    "first_name": "Mary",
+    "last_name": "Doe",
     "date_of_birth": "1992-08-20",
     "gender": "FEMALE",
     "salutation": "MRS"
@@ -134,8 +134,8 @@ curl -X POST http://localhost:8080/users/047382910564/dependants \
   "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
   "primary_user_id": "047382910564",
   "relationship": "SPOUSE",
-  "first_name": "Priya",
-  "last_name": "Kumar",
+  "first_name": "Mary",
+  "last_name": "Doe",
   "date_of_birth": "1992-08-20",
   "gender": "FEMALE",
   "salutation": "MRS",
@@ -154,16 +154,16 @@ curl -X POST http://localhost:8080/users/047382910564/dependants/bulk \
     "dependants": [
       {
         "relationship": "SPOUSE",
-        "first_name": "Priya",
-        "last_name": "Kumar",
+        "first_name": "Mary",
+        "last_name": "Doe",
         "date_of_birth": "1992-08-20",
         "gender": "FEMALE",
         "salutation": "MRS"
       },
       {
         "relationship": "CHILD",
-        "first_name": "Arjun",
-        "last_name": "Kumar",
+        "first_name": "James",
+        "last_name": "Doe",
         "date_of_birth": "2015-03-10",
         "gender": "MALE",
         "salutation": "MASTER"
@@ -179,8 +179,8 @@ curl -X POST http://localhost:8080/users/047382910564/dependants/bulk \
       "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001",
       "primary_user_id": "047382910564",
       "relationship": "SPOUSE",
-      "first_name": "Priya",
-      "last_name": "Kumar",
+      "first_name": "Mary",
+      "last_name": "Doe",
       "date_of_birth": "1992-08-20",
       "gender": "FEMALE",
       "salutation": "MRS",
@@ -193,8 +193,8 @@ curl -X POST http://localhost:8080/users/047382910564/dependants/bulk \
       "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60002",
       "primary_user_id": "047382910564",
       "relationship": "CHILD",
-      "first_name": "Arjun",
-      "last_name": "Kumar",
+      "first_name": "James",
+      "last_name": "Doe",
       "date_of_birth": "2015-03-10",
       "gender": "MALE",
       "salutation": "MASTER",

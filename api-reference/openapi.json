@@ -1522,9 +1522,19 @@
           "Insurance Policy (Admin)"
         ],
         "operationId": "admin_export_insurance_policies",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PolicyStatus"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Joined onboarding rows (one per policy x dependant) for pending and requires_policy_reissuance policies",
+            "description": "Joined onboarding rows (one per policy x dependant) for the requested status",
             "content": {
               "application/json": {
                 "schema": {
@@ -4680,6 +4690,17 @@
           }
         }
       },
+      "AdminExportInsurancePoliciesRequest": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PolicyStatus"
+          }
+        }
+      },
       "AdminExportInsurancePoliciesResponse": {
         "type": "object",
         "required": [
@@ -4689,7 +4710,7 @@
           "data": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/PolicyOnboardingRow"
+              "$ref": "#/components/schemas/BulkIssuanceRow"
             }
           }
         }
@@ -5154,6 +5175,132 @@
             "items": {
               "$ref": "#/components/schemas/DependantResponse"
             }
+          }
+        }
+      },
+      "BulkIssuanceNominee": {
+        "type": "object",
+        "required": [
+          "salutation",
+          "first_name",
+          "last_name",
+          "date_of_birth",
+          "relationship",
+          "address"
+        ],
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/AddressDetails"
+          },
+          "bank": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EnrollerBank"
+              }
+            ]
+          },
+          "date_of_birth": {
+            "type": "string",
+            "example": "1995-08-22"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/Relationship"
+          },
+          "salutation": {
+            "$ref": "#/components/schemas/Salutation"
+          }
+        }
+      },
+      "BulkIssuanceRow": {
+        "type": "object",
+        "required": [
+          "insurance_policy_id",
+          "salutation",
+          "member_first_name",
+          "member_last_name",
+          "relationship",
+          "date_of_birth",
+          "gender",
+          "address",
+          "phone_number",
+          "phone_country_code"
+        ],
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/AddressDetails"
+          },
+          "bank": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EnrollerBank"
+              }
+            ]
+          },
+          "date_of_birth": {
+            "type": "string",
+            "example": "1990-05-10"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "id_proof": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IdProof"
+              }
+            ]
+          },
+          "insurance_policy_id": {
+            "type": "string"
+          },
+          "member_first_name": {
+            "type": "string"
+          },
+          "member_last_name": {
+            "type": "string"
+          },
+          "nominee": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BulkIssuanceNominee"
+              }
+            ]
+          },
+          "phone_country_code": {
+            "type": "string"
+          },
+          "phone_number": {
+            "type": "string"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/Relationship"
+          },
+          "salutation": {
+            "$ref": "#/components/schemas/Salutation"
           }
         }
       },
@@ -5850,6 +5997,29 @@
           }
         ],
         "description": "A length of time expressed in a single unit.\n\nWire format: externally-tagged union — single-key object whose key is the\nunit name (`days` / `months` / `years`) and whose value is the integer\ncount. Example: `{\"months\": 12}` or `{\"years\": 1}`."
+      },
+      "EnrollerBank": {
+        "type": "object",
+        "required": [
+          "account_number",
+          "ifsc",
+          "bank_name",
+          "bank_location"
+        ],
+        "properties": {
+          "account_number": {
+            "type": "string"
+          },
+          "bank_location": {
+            "type": "string"
+          },
+          "bank_name": {
+            "type": "string"
+          },
+          "ifsc": {
+            "type": "string"
+          }
+        }
       },
       "EventLogListResponse": {
         "type": "object",
@@ -7031,112 +7201,6 @@
           "ACTIVE",
           "INACTIVE"
         ]
-      },
-      "PolicyOnboardingNominee": {
-        "type": "object",
-        "required": [
-          "salutation",
-          "first_name",
-          "last_name",
-          "date_of_birth",
-          "relationship",
-          "address"
-        ],
-        "properties": {
-          "address": {
-            "$ref": "#/components/schemas/AddressDetails"
-          },
-          "date_of_birth": {
-            "type": "string",
-            "example": "1995-08-22"
-          },
-          "first_name": {
-            "type": "string"
-          },
-          "last_name": {
-            "type": "string"
-          },
-          "relationship": {
-            "$ref": "#/components/schemas/Relationship"
-          },
-          "salutation": {
-            "$ref": "#/components/schemas/Salutation"
-          }
-        }
-      },
-      "PolicyOnboardingRow": {
-        "type": "object",
-        "required": [
-          "insurance_policy_id",
-          "salutation",
-          "member_first_name",
-          "member_last_name",
-          "relationship",
-          "date_of_birth",
-          "gender",
-          "address",
-          "phone_number",
-          "phone_country_code"
-        ],
-        "properties": {
-          "address": {
-            "$ref": "#/components/schemas/AddressDetails"
-          },
-          "date_of_birth": {
-            "type": "string",
-            "example": "1990-05-10"
-          },
-          "email": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "gender": {
-            "$ref": "#/components/schemas/Gender"
-          },
-          "id_proof": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/IdProof"
-              }
-            ]
-          },
-          "insurance_policy_id": {
-            "type": "string"
-          },
-          "member_first_name": {
-            "type": "string"
-          },
-          "member_last_name": {
-            "type": "string"
-          },
-          "nominee": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/PolicyOnboardingNominee"
-              }
-            ]
-          },
-          "phone_country_code": {
-            "type": "string"
-          },
-          "phone_number": {
-            "type": "string"
-          },
-          "relationship": {
-            "$ref": "#/components/schemas/Relationship"
-          },
-          "salutation": {
-            "$ref": "#/components/schemas/Salutation"
-          }
-        }
       },
       "PolicyQuestionnaire": {
         "type": "object",

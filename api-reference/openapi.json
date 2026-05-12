@@ -7235,13 +7235,17 @@
         "type": "object",
         "required": [
           "daily",
-          "annual"
+          "annual",
+          "sponsor_contribution"
         ],
         "properties": {
           "annual": {
             "$ref": "#/components/schemas/AmountResponse"
           },
           "daily": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "sponsor_contribution": {
             "$ref": "#/components/schemas/AmountResponse"
           }
         }
@@ -7387,7 +7391,7 @@
       },
       "Sort": {
         "type": "object",
-        "description": "Sort specification for list endpoints. Field semantics match\nhyperswitch's `Order { on, by }` — read it as\n\"sort **on** `<column>` **by** `<direction>`\".",
+        "description": "Sort specification for list endpoints. Read the field names as\n\"sort **on** `<column>` **by** `<direction>`\".",
         "properties": {
           "by": {
             "oneOf": [

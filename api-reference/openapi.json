@@ -293,6 +293,314 @@
         ]
       }
     },
+    "/admin/narayana/auth_status": {
+      "get": {
+        "tags": [
+          "AdminNarayana"
+        ],
+        "operationId": "get_auth_status",
+        "responses": {
+          "200": {
+            "description": "Vendor auth probe result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NarayanaAuthStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/narayana/conversations": {
+      "get": {
+        "tags": [
+          "AdminNarayana"
+        ],
+        "operationId": "list_conversations",
+        "parameters": [
+          {
+            "name": "phone_prefix",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "phone_number",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/AdminNarayanaConversationStatus"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversations for the phone-scoped patient context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminNarayanaConversationsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "500": {
+            "description": "Upstream Narayana call failed"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/narayana/conversations/{chat_thread_id}/messages": {
+      "get": {
+        "tags": [
+          "AdminNarayana"
+        ],
+        "operationId": "list_messages",
+        "parameters": [
+          {
+            "name": "chat_thread_id",
+            "in": "path",
+            "description": "Narayana chat thread id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "phone_prefix",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "phone_number",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "participant_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated message history for the thread",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminNarayanaMessagesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "500": {
+            "description": "Upstream Narayana call failed"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/narayana/conversations/{chat_thread_id}/messages/{chat_message_id}/attachment": {
+      "get": {
+        "tags": [
+          "AdminNarayana"
+        ],
+        "operationId": "download_attachment",
+        "parameters": [
+          {
+            "name": "chat_thread_id",
+            "in": "path",
+            "description": "Narayana chat thread id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chat_message_id",
+            "in": "path",
+            "description": "Message id whose attachment is being downloaded",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "phone_prefix",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "phone_number",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attachment bytes — Content-Type mirrors upstream"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "500": {
+            "description": "Upstream Narayana call failed"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/narayana/patients": {
+      "get": {
+        "tags": [
+          "AdminNarayana"
+        ],
+        "operationId": "list_patients",
+        "parameters": [
+          {
+            "name": "phone_prefix",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "phone_number",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Patients linked to the phone-scoped user context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminNarayanaPatientsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "500": {
+            "description": "Upstream Narayana call failed"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/admin/users": {
       "get": {
         "tags": [
@@ -4830,6 +5138,270 @@
           }
         ]
       },
+      "AdminNarayanaChatStatusCategory": {
+        "type": "string",
+        "enum": [
+          "OPEN",
+          "DONE",
+          "CLOSED"
+        ]
+      },
+      "AdminNarayanaConversation": {
+        "type": "object",
+        "properties": {
+          "chat_status_category": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AdminNarayanaChatStatusCategory"
+              }
+            ]
+          },
+          "chat_thread_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "participant_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "patient": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AdminNarayanaPatient"
+              }
+            ]
+          },
+          "template_instance_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unread_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "AdminNarayanaConversationStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "CLOSED"
+        ]
+      },
+      "AdminNarayanaConversationsResponse": {
+        "type": "object",
+        "required": [
+          "conversations"
+        ],
+        "properties": {
+          "conversations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminNarayanaConversation"
+            }
+          }
+        }
+      },
+      "AdminNarayanaMessage": {
+        "type": "object",
+        "required": [
+          "metadata"
+        ],
+        "properties": {
+          "content": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_on": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deleted_on": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message_type": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AdminNarayanaMessageType"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "sender_display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sequence_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AdminNarayanaMessageType": {
+        "type": "string",
+        "enum": [
+          "TEXT",
+          "HTML",
+          "PARTICIPANT_ADDED",
+          "PARTICIPANT_REMOVED",
+          "TOPIC_UPDATED"
+        ]
+      },
+      "AdminNarayanaMessagesResponse": {
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminNarayanaMessage"
+            }
+          }
+        }
+      },
+      "AdminNarayanaPatient": {
+        "type": "object",
+        "properties": {
+          "birth_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mobile_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mobile_prefix": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mrn": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "patient_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "temp_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zip_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AdminNarayanaPatientsResponse": {
+        "type": "object",
+        "required": [
+          "patients"
+        ],
+        "properties": {
+          "patients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminNarayanaPatient"
+            }
+          }
+        }
+      },
       "AdminUpdateInsurancePolicyRequest": {
         "type": "object",
         "properties": {
@@ -6605,6 +7177,31 @@
           }
         }
       },
+      "ListConversationsQuery": {
+        "type": "object",
+        "required": [
+          "phone_prefix",
+          "phone_number"
+        ],
+        "properties": {
+          "phone_number": {
+            "type": "string"
+          },
+          "phone_prefix": {
+            "type": "string"
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AdminNarayanaConversationStatus"
+              }
+            ]
+          }
+        }
+      },
       "ListEventLogsRequest": {
         "type": "object",
         "properties": {
@@ -6661,6 +7258,41 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ListMessagesQuery": {
+        "type": "object",
+        "required": [
+          "phone_prefix",
+          "phone_number",
+          "participant_id"
+        ],
+        "properties": {
+          "page": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "participant_id": {
+            "type": "string"
+          },
+          "phone_number": {
+            "type": "string"
+          },
+          "phone_prefix": {
+            "type": "string"
+          },
+          "size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
           }
         }
       },
@@ -6984,6 +7616,34 @@
           "INACTIVE"
         ]
       },
+      "NarayanaAuthStatusResponse": {
+        "type": "object",
+        "required": [
+          "authenticated",
+          "mode"
+        ],
+        "properties": {
+          "authenticated": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mode": {
+            "$ref": "#/components/schemas/NarayanaMode"
+          }
+        }
+      },
+      "NarayanaMode": {
+        "type": "string",
+        "enum": [
+          "LIVE",
+          "MOCK"
+        ]
+      },
       "NomineeDetails": {
         "oneOf": [
           {
@@ -7068,6 +7728,21 @@
             ]
           },
           "user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "PhoneScopeQuery": {
+        "type": "object",
+        "required": [
+          "phone_prefix",
+          "phone_number"
+        ],
+        "properties": {
+          "phone_number": {
+            "type": "string"
+          },
+          "phone_prefix": {
             "type": "string"
           }
         }
@@ -7945,6 +8620,10 @@
     {
       "name": "AdminUser",
       "description": "Admin dashboard user management"
+    },
+    {
+      "name": "AdminNarayana",
+      "description": "Admin-only proxy to the Narayana Health Conversation Gateway"
     },
     {
       "name": "EventLog",

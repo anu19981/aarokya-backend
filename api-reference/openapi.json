@@ -8729,7 +8729,8 @@
           "phone_number",
           "phone_country_code",
           "status",
-          "created_at"
+          "created_at",
+          "last_modified_at"
         ],
         "properties": {
           "address": {
@@ -8776,6 +8777,11 @@
                 "$ref": "#/components/schemas/Gender"
               }
             ]
+          },
+          "last_modified_at": {
+            "type": "string",
+            "description": "Last user update timestamp.",
+            "example": "2026-01-15T12:34:56"
           },
           "last_name": {
             "type": [

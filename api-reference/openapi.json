@@ -35,9 +35,13 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
               ]
             }
           },
@@ -1670,9 +1674,13 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
               ]
             }
           },
@@ -1987,9 +1995,13 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
               ]
             }
           },
@@ -5009,7 +5021,7 @@
             "$ref": "#/components/schemas/AccountStatus"
           },
           "user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           }
         }
       },
@@ -5183,9 +5195,13 @@
             ]
           },
           "user_id": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
             ]
           }
         }
@@ -5244,9 +5260,13 @@
                 "type": "string"
               },
               "primary_user_id": {
-                "type": [
-                  "string",
-                  "null"
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UserId"
+                  }
                 ]
               },
               "statuses": {
@@ -5780,7 +5800,7 @@
             "type": "string"
           },
           "user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           },
           "wallet_txn_data": {
             "type": "string"
@@ -6571,7 +6591,7 @@
             "type": "boolean"
           },
           "user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           }
         }
       },
@@ -6690,7 +6710,7 @@
             "type": "string"
           },
           "primary_user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           },
           "relationship": {
             "$ref": "#/components/schemas/Relationship"
@@ -6934,7 +6954,7 @@
             "type": "string"
           },
           "user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           }
         }
       },
@@ -7324,7 +7344,7 @@
             "$ref": "#/components/schemas/PrimaryMember"
           },
           "primary_user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           },
           "questionnaire": {
             "$ref": "#/components/schemas/PolicyQuestionnaire"
@@ -7698,7 +7718,7 @@
             ]
           },
           "user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           }
         }
       },
@@ -7808,7 +7828,7 @@
             "type": "string"
           },
           "primary_user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           },
           "status": {
             "$ref": "#/components/schemas/MrnStatus"
@@ -7935,7 +7955,7 @@
             ]
           },
           "user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           }
         }
       },
@@ -8148,7 +8168,7 @@
             "$ref": "#/components/schemas/Gender"
           },
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           },
           "last_name": {
             "type": "string"
@@ -8210,7 +8230,7 @@
           },
           "payload": {},
           "user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           }
         }
       },
@@ -8322,7 +8342,7 @@
             ]
           },
           "user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           }
         }
       },
@@ -8693,6 +8713,11 @@
           }
         }
       },
+      "UserId": {
+        "type": "string",
+        "description": "A validated 12-digit numeric user identifier.\n\nEvery external entry point validates:\n- JSON `Deserialize` runs [`UserId::parse`] (outer whitespace trimmed,\n  length and digit-only enforced) via `#[serde(try_from = \"String\")]`.\n- DB `FromSql` runs [`UserId::parse`] on every row read.\n\n`Display` / `Deref<Target = str>` / `AsRef<str>` / `Into<String>` are\nderived via `derive_more` — the inner `String` is pass-through for\nevery read-only borrow, display, and move-out.",
+        "example": "012345678901"
+      },
       "UserListResponse": {
         "type": "object",
         "required": [
@@ -8799,7 +8824,7 @@
             "$ref": "#/components/schemas/UserStatus"
           },
           "user_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserId"
           }
         }
       },

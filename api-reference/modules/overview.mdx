@@ -100,9 +100,9 @@ flowchart TD
 
 | Header | Scheme | Used by |
 |--------|--------|---------|
-| `admin-api-key` | Static secret | Internal ops — CRUD for platforms, providers, benefits |
+| `Authorization: Bearer <admin-jwt>` | JWT (admin scope, via OIDC) | Internal ops — CRUD for platforms, providers, benefits |
 | `api-key` | Static secret (per partner) | External partners — token issuance, account/MRN ops |
-| `Authorization: Bearer <jwt>` | JWT (HS256) | Logged-in users — profile, dependants, accounts, MRNs |
+| `Authorization: Bearer <user-jwt>` | JWT (HS256) | Logged-in users — profile, dependants, accounts, MRNs |
 
 No passwords, OTP flows, or refresh tokens. When the JWT expires, the partner backend calls `POST /auth/token` again.
 

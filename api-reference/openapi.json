@@ -31,7 +31,16 @@
         "operationId": "admin_list_accounts",
         "parameters": [
           {
-            "name": "user_id",
+            "name": "holder",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "user:012345678901"
+          },
+          {
+            "name": "holder_kind",
             "in": "query",
             "required": false,
             "schema": {
@@ -40,7 +49,7 @@
                   "type": "null"
                 },
                 {
-                  "$ref": "#/components/schemas/UserId"
+                  "$ref": "#/components/schemas/HolderKind"
                 }
               ]
             }
@@ -111,6 +120,9 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid holder filter"
+          },
           "401": {
             "description": "Missing or invalid bearer token"
           },
@@ -152,6 +164,105 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "404": {
+            "description": "Account not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Account (Admin)"
+        ],
+        "operationId": "admin_delete_account",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "description": "Account ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteAccountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "404": {
+            "description": "Account not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Account (Admin)"
+        ],
+        "operationId": "admin_update_account",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "description": "Account ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUpdateAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Account updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -3300,120 +3411,6 @@
             "BearerAuth": []
           }
         ]
-      },
-      "delete": {
-        "tags": [
-          "Account"
-        ],
-        "operationId": "delete_account",
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "description": "User ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account_id",
-            "in": "path",
-            "description": "Account ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Account deleted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeleteAccountResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid bearer token"
-          },
-          "403": {
-            "description": "Not owner or dashboard user"
-          },
-          "404": {
-            "description": "Account not found"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ]
-      },
-      "patch": {
-        "tags": [
-          "Account"
-        ],
-        "operationId": "update_account",
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "description": "User ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account_id",
-            "in": "path",
-            "description": "Account ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateAccountRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Account updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccountResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid bearer token"
-          },
-          "403": {
-            "description": "Not owner or dashboard user"
-          },
-          "404": {
-            "description": "Account not found"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ]
       }
     },
     "/users/{user_id}/balance": {
@@ -4953,6 +4950,20 @@
                 ]
               }
             }
+          },
+          {
+            "type": "object",
+            "required": [
+              "account_type"
+            ],
+            "properties": {
+              "account_type": {
+                "type": "string",
+                "enum": [
+                  "SPONSOR"
+                ]
+              }
+            }
           }
         ],
         "description": "Tagged JSONB blob persisted into `accounts.account_details`. Mirrors\n`accounts.account_type` — types that carry extra metadata (e.g.\n`SAVINGS` → IFSC) embed it; the rest are unit variants. Bank account\nnumbers / PBA UUIDs live in `accounts.external_account_id`."
@@ -4990,7 +5001,7 @@
         "type": "object",
         "required": [
           "id",
-          "user_id",
+          "holder",
           "external_account_id",
           "status",
           "account_type",
@@ -5011,6 +5022,10 @@
           "external_account_id": {
             "type": "string"
           },
+          "holder": {
+            "type": "string",
+            "example": "user:012345678901"
+          },
           "id": {
             "type": "string"
           },
@@ -5019,9 +5034,6 @@
           },
           "status": {
             "$ref": "#/components/schemas/AccountStatus"
-          },
-          "user_id": {
-            "$ref": "#/components/schemas/UserId"
           }
         }
       },
@@ -5040,7 +5052,8 @@
         "enum": [
           "SAVINGS",
           "HSA",
-          "EDUCATION"
+          "EDUCATION",
+          "SPONSOR"
         ]
       },
       "AddressDetails": {
@@ -5159,6 +5172,9 @@
       },
       "AdminListAccountsRequest": {
         "type": "object",
+        "required": [
+          "holder"
+        ],
         "properties": {
           "account_type": {
             "oneOf": [
@@ -5167,6 +5183,20 @@
               },
               {
                 "$ref": "#/components/schemas/AccountType"
+              }
+            ]
+          },
+          "holder": {
+            "type": "string",
+            "example": "user:012345678901"
+          },
+          "holder_kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HolderKind"
               }
             ]
           },
@@ -5191,16 +5221,6 @@
               },
               {
                 "$ref": "#/components/schemas/AccountStatus"
-              }
-            ]
-          },
-          "user_id": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/UserId"
               }
             ]
           }
@@ -5541,6 +5561,17 @@
             "items": {
               "$ref": "#/components/schemas/AdminNarayanaPatient"
             }
+          }
+        }
+      },
+      "AdminUpdateAccountRequest": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/AccountStatus"
           }
         }
       },
@@ -6994,6 +7025,14 @@
             "format": "int64"
           }
         }
+      },
+      "HolderKind": {
+        "type": "string",
+        "description": "Discriminator for [`Holder`] variants. Used at the wire boundary for\nsplit-field admin query params (`?holder_kind=user&holder_id=...`).\nNot stored as a DB column — the DB has only the URN-encoded `holder`\ncolumn.",
+        "enum": [
+          "user",
+          "sponsor"
+        ]
       },
       "IdProof": {
         "type": "object",
@@ -8495,21 +8534,6 @@
           }
         }
       },
-      "UpdateAccountRequest": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/AccountStatus"
-              }
-            ]
-          }
-        }
-      },
       "UpdateBenefitProviderRequest": {
         "type": "object",
         "properties": {
@@ -8839,11 +8863,6 @@
       }
     },
     "securitySchemes": {
-      "AdminApiKey": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "admin-api-key"
-      },
       "ApiKey": {
         "type": "apiKey",
         "in": "header",

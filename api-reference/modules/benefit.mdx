@@ -76,7 +76,7 @@ flowchart LR
 <CodeGroup>
 ```bash Create a benefit
 curl -X POST http://localhost:8080/benefits \
-  -H 'admin-api-key: your-admin-key' \
+  -H 'Authorization: Bearer eyJhbGci...admin-jwt...' \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Free GP Consultation",

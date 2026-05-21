@@ -4,7 +4,7 @@ description: "Tenant management — each platform represents a partner integrati
 ---
 
 <Info>
-  **Auth guard:** `admin-api-key` header required for all endpoints. No JWT or partner key access.
+  **Auth guard:** admin JWT bearer (`Authorization: Bearer <admin-jwt>`) required for all endpoints. No user JWT or partner key access.
 </Info>
 
 ## Overview
@@ -66,7 +66,7 @@ flowchart LR
 <CodeGroup>
 ```bash Create a platform
 curl -X POST http://localhost:8080/platforms \
-  -H 'admin-api-key: your-admin-key' \
+  -H 'Authorization: Bearer eyJhbGci...admin-jwt...' \
   -H 'Content-Type: application/json' \
   -d '{ "name": "Namma Yatri" }'
 ```

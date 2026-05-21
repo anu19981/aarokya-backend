@@ -1,40 +1,74 @@
 ---
 title: "Account Module"
-description: "User-scoped financial and health accounts. JWT self-access or partner key."
+description: "Universal accounts table — any holder kind. User self-service for read/create; admin for read/update/delete."
 ---
 
 <Info>
-  **Auth guard:** JWT self-access (`jwt.sub == user_id`) or any external partner
-  key. Admin key is not accepted — use partner key for programmatic access.
+  **Auth:** all routes use bearer JWT.
+  - User-scoped routes (`/users/{user_id}/...`) require a user JWT
+    where `jwt.sub == user_id`.
+  - Admin routes (flat `/accounts/...`) require an admin JWT
+    (`Actor::AdminUser`). Mutating an account (status, external id,
+    details) and soft-delete are admin-only.
 </Info>
 
 ## Overview
 
-An account stores a user's external account reference (`external_account_id`, e.g. a bank account number). For type-specific metadata (e.g. IFSC for `SAVINGS`), use the optional `account_details` JSONB field. All routes are scoped under `/users/{user_id}/accounts`. Accounts are created with `status = pending` by default.
+The `accounts` table holds accounts for any holder kind (today: `user`,
+`sponsor`; extensible). Each row carries a single `holder` field encoded
+as a URN string — `user:<12-digit-id>` or `sponsor:<uuid>`. The same
+encoding is used everywhere: DB storage, API responses, admin filters,
+audit logs.
+
+Accounts are created with `status = pending` by default and soft-deleted
+via admin `DELETE` (status flips to `inactive`; rows are never removed).
+
+---
+
+## Holder encoding
+
+| Holder      | Wire format                                 |
+| ----------- | ------------------------------------------- |
+| User        | `user:012345678901` (12-digit numeric)      |
+| Sponsor     | `sponsor:0194e0f3-4b2a-7123-8f4a-9d5e2c8b1a3d` (UUID) |
+
+Validation runs at every entry point — JSON deserialization, DB row
+reads, admin query params. A malformed value returns 400 with the parse
+error.
 
 ---
 
 ## Account Types
 
-| Value       | Description               |
-| ----------- | ------------------------- |
-| `savings`   | Savings bank account      |
-| `hsa`       | Health Savings Account    |
-| `education` | Education savings account |
+| Value       | Description                              | Legal holders |
+| ----------- | ---------------------------------------- | ------------- |
+| `savings`   | Real-world bank account                  | user, sponsor |
+| `hsa`       | PBA-backed Health Savings Account        | user          |
+| `education` | PBA-backed education savings account     | user          |
+| `sponsor`   | Sponsor's contribution-funding wallet    | sponsor       |
+
+`(holder, account_type)` legality is enforced at create time and at
+list-filter time. An illegal combination returns 400 (`AE-807`)
+rather than a silent empty list.
 
 ---
 
 ## Auth Guards by Endpoint
 
-| Endpoint                                | JWT user   | Partner key | Notes                              |
-| --------------------------------------- | ---------- | ----------- | ---------------------------------- |
-| `POST /users/{user_id}/accounts`        | ✓ own only | ✓           |                                    |
-| `GET /users/{user_id}/accounts`         | ✓ own only | ✓           | Filter by `status`, `account_type` |
-| `GET /users/{user_id}/accounts/{id}`    | ✓ own only | ✓           |                                    |
-| `PATCH /users/{user_id}/accounts/{id}`  | ✓ own only | ✓           | Only `status` updatable            |
-| `DELETE /users/{user_id}/accounts/{id}` | ✓ own only | ✓           | Hard delete                        |
+| Endpoint                                | Auth        | Notes                                          |
+| --------------------------------------- | ----------- | ---------------------------------------------- |
+| `POST /users/{user_id}/accounts`        | bearer (self) | User self-create                              |
+| `GET /users/{user_id}/accounts`         | bearer (self) | Filter by `status`, `account_type`            |
+| `GET /users/{user_id}/accounts/{id}`    | bearer (self) |                                                |
+| `GET /accounts`                         | admin       | Filter by `holder`, `holder_kind`, `status`, `account_type` |
+| `GET /accounts/{id}`                    | admin       | Fetch any account by UUID                      |
+| `PATCH /accounts/{id}`                  | admin       | Update `status`, `external_account_id`, `account_details` |
+| `DELETE /accounts/{id}`                 | admin       | Soft-delete (status → inactive)                |
+| `GET /users/{user_id}/balance`          | bearer (self) | PBA balance proxy                             |
+| `GET /users/{user_id}/ledger`           | bearer (self) | PBA transaction ledger proxy                  |
 
-JWT users receive `403` if `user_id` in the path does not match `jwt.sub`.
+User-scoped routes return 403 if the path `user_id` does not match `jwt.sub`.
+Admin routes return 403 if the caller is not an admin.
 
 ---
 
@@ -42,66 +76,34 @@ JWT users receive `403` if `user_id` in the path does not match `jwt.sub`.
 
 ```mermaid
 flowchart LR
-    Create[POST /accounts] --> Pending[status=pending]
-    Pending -->|PATCH status=active| Active[status=active]
-    Active -->|PATCH status=inactive| Inactive[status=inactive]
-    Pending -->|DELETE| Deleted[hard delete]
-    Active -->|DELETE| Deleted
+    Create[POST /users/{user_id}/accounts] --> Pending[status=pending]
+    Pending -->|admin PATCH status=active| Active[status=active]
+    Active -->|admin PATCH status=inactive| Inactive[status=inactive]
+    Pending -->|admin DELETE| Inactive
+    Active -->|admin DELETE| Inactive
 ```
+
+Soft delete only — rows persist for audit.
 
 ---
 
-## Endpoints
+## Admin list filters
 
-<CardGroup cols={2}>
-  <Card
-    title="POST /users/{user_id}/accounts"
-    icon="plus"
-    color="#16a34a"
-    href="/api/endpoints/accounts/create"
-  >
-    Create a new account.
-  </Card>
-  <Card
-    title="GET /users/{user_id}/accounts"
-    icon="list"
-    color="#3b82f6"
-    href="/api/endpoints/accounts/list"
-  >
-    Paginated list. Filter by `status` or `account_type`.
-  </Card>
-  <Card
-    title="GET /users/{user_id}/accounts/{id}"
-    icon="credit-card"
-    color="#3b82f6"
-    href="/api/endpoints/accounts/get"
-  >
-    Fetch a single account.
-  </Card>
-  <Card
-    title="PATCH /users/{user_id}/accounts/{id}"
-    icon="pen"
-    color="#8b5cf6"
-    href="/api/endpoints/accounts/update"
-  >
-    Update account `status`.
-  </Card>
-  <Card
-    title="DELETE /users/{user_id}/accounts/{id}"
-    icon="trash"
-    color="#dc2626"
-    href="/api/endpoints/accounts/delete"
-  >
-    Hard delete an account.
-  </Card>
-</CardGroup>
+| Param          | Type                                             | Behaviour |
+| -------------- | ------------------------------------------------ | --------- |
+| `holder`       | URN string (`user:<12d>` / `sponsor:<uuid>`)     | Exact-holder filter (btree equality) |
+| `holder_kind`  | `user` \| `sponsor`                              | Kind-scan filter; ignored when `holder` is set |
+| `status`       | `active` \| `inactive` \| `pending`              | |
+| `account_type` | `savings` \| `hsa` \| `education` \| `sponsor`   | Returns 400 if combined with a `holder` of an incompatible kind |
+| `limit`        | `i32`                                            | default 50, max 200 |
+| `offset`       | `i32`                                            | default 0 |
 
 ---
 
 ## Request / Response Examples
 
 <CodeGroup>
-```bash Create an account
+```bash User creates a savings account
 curl -X POST http://localhost:8080/users/047382910564/accounts \
   -H 'Authorization: Bearer eyJhbGci...' \
   -H 'Content-Type: application/json' \
@@ -118,7 +120,7 @@ curl -X POST http://localhost:8080/users/047382910564/accounts \
 ```json Response 201
 {
   "id": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60040",
-  "user_id": "047382910564",
+  "holder": "user:047382910564",
   "external_account_id": "12345678",
   "status": "PENDING",
   "account_type": "SAVINGS",
@@ -131,14 +133,38 @@ curl -X POST http://localhost:8080/users/047382910564/accounts \
 }
 ```
 
+```bash Admin lists all sponsor accounts
+curl -G http://localhost:8080/accounts \
+  -H 'Authorization: Bearer eyJhbGci...admin-jwt...' \
+  --data-urlencode 'holder_kind=user' \
+  --data-urlencode 'account_type=hsa'
+```
+
+```bash Admin activates an account
+curl -X PATCH http://localhost:8080/accounts/01926b3a-7c2e-7d4f-a1b2-c3d4e5f60040 \
+  -H 'Authorization: Bearer eyJhbGci...admin-jwt...' \
+  -H 'Content-Type: application/json' \
+  -d '{ "status": "ACTIVE" }'
+```
+
+```bash Admin soft-deletes an account
+curl -X DELETE http://localhost:8080/accounts/01926b3a-7c2e-7d4f-a1b2-c3d4e5f60040 \
+  -H 'Authorization: Bearer eyJhbGci...admin-jwt...'
+```
+
 </CodeGroup>
 
 ---
 
 ## Error Codes
 
-| Code     | HTTP | Description           |
-| -------- | ---- | --------------------- |
-| `AE-800` | 500  | Internal server error |
-| `AE-801` | 404  | Account not found     |
-| `AE-803` | 400  | Validation error      |
+| Code     | HTTP | Description                                                 |
+| -------- | ---- | ----------------------------------------------------------- |
+| `AE-800` | 500  | Internal server error                                       |
+| `AE-801` | 404  | Account not found                                           |
+| `AE-802` | 400  | Validation error                                            |
+| `AE-803` | 500  | Upstream PBA call failed                                    |
+| `AE-804` | 500  | PBA is not configured for this environment                  |
+| `AE-805` | 404  | No PBA-backed account exists for user                       |
+| `AE-806` | 404  | Holder not found                                            |
+| `AE-807` | 400  | `(holder, account_type)` combination is not allowed         |

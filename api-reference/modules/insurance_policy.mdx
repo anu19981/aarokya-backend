@@ -4,7 +4,7 @@ description: "Preview premiums, purchase policies, and manage lifecycle — user
 ---
 
 <Info>
-  **Two auth tiers** — User-facing endpoints (preview, create, get, list) use JWT Bearer. Admin endpoints (list all, update) require an `admin-api-key` header.
+  **Two auth tiers** — User-facing endpoints (preview, create, get, list) use a user JWT Bearer. Admin endpoints (list all, update) require an admin JWT Bearer (`Authorization: Bearer <admin-jwt>`).
 </Info>
 
 ## Overview

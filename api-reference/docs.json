@@ -134,6 +134,8 @@
                   "api/endpoints/accounts/create",
                   "api/endpoints/accounts/list",
                   "api/endpoints/accounts/get",
+                  "api/endpoints/accounts/admin_list",
+                  "api/endpoints/accounts/admin_get",
                   "api/endpoints/accounts/update",
                   "api/endpoints/accounts/delete"
                 ]

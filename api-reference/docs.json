@@ -52,7 +52,8 @@
               "modules/account",
               "modules/mrn",
               "modules/insurance_policy",
-              "modules/mandate"
+              "modules/mandate",
+              "modules/order"
             ]
           }
         ]
@@ -168,6 +169,13 @@
                 "pages": [
                   "api/endpoints/mandate/register",
                   "api/endpoints/mandate/order-status"
+                ]
+              },
+              {
+                "group": "Orders",
+                "pages": [
+                  "api/endpoints/orders/self-contribution",
+                  "api/endpoints/orders/order-status"
                 ]
               },
               {

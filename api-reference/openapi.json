@@ -7968,6 +7968,7 @@
           "user_id",
           "account_id",
           "amount",
+          "source",
           "created_at",
           "last_modified_at"
         ],
@@ -7981,17 +7982,20 @@
           "created_at": {
             "type": "string"
           },
+          "external_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "id": {
             "type": "string"
           },
           "last_modified_at": {
             "type": "string"
           },
-          "status": {
-            "type": [
-              "string",
-              "null"
-            ]
+          "source": {
+            "type": "string"
           },
           "user_id": {
             "$ref": "#/components/schemas/UserId"
@@ -8353,6 +8357,7 @@
           "user_id",
           "account_id",
           "amount",
+          "source",
           "payload",
           "created_at",
           "last_modified_at"
@@ -8367,6 +8372,12 @@
           "created_at": {
             "type": "string"
           },
+          "external_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "id": {
             "type": "string"
           },
@@ -8374,11 +8385,8 @@
             "type": "string"
           },
           "payload": {},
-          "status": {
-            "type": [
-              "string",
-              "null"
-            ]
+          "source": {
+            "type": "string"
           },
           "user_id": {
             "$ref": "#/components/schemas/UserId"

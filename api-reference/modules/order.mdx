@@ -1,0 +1,83 @@
+---
+title: "Order Module"
+description: "Universal orders table — one row per funding event into a user's PBA account. Discriminated by a `source` URN."
+---
+
+<Info>
+  **Auth:** all routes use bearer JWT with self-scope —
+  `jwt.sub == user_id` on the path. There are no admin routes for orders today.
+</Info>
+
+## Overview
+
+An order is a single **funding event** crediting a user's PBA-backed
+(HSA) account. The `orders` table is universal across funding flavours;
+a `source` URN column on every row identifies the funding leg.
+
+Today only the **self contribution** flow is exposed through the public API. Sponsor
+contributions (PBA-to-PBA transfers from a sponsor's account) share the same table shape
+but settle through a separate, internal flow.
+
+---
+
+## Funding source (`source`)
+
+Every order carries a `source` field on the response, URN-encoded:
+
+| `source` value                              | Meaning                                                                                  |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `self_contribution`                         | One-time user contribution. The funding leg debits the TigerBeetle sentinel account.     |
+| `sponsor:<account-uuid>`                    | Sponsor PBA transfer. The payload is the `accounts.id` of the sponsor's PBA account.     |
+
+Validation runs at every entry point — JSON deserialization and DB row reads. A malformed
+URN is a 400 with the parse error.
+
+---
+
+## Order lifecycle (self contribution)
+
+1. **Create** — `POST /users/{user_id}/contributions/self` opens a Juspay session for the
+   requested `amount` (major units) and inserts an `orders` row with `source = "self_contribution"` and
+   a null `external_status`. The Juspay `/session` response is returned verbatim as `payload`
+   (the frontend uses `payload.sdk_payload` to render the payment page).
+2. **Poll** — `GET /users/{user_id}/orders/{id}` calls Juspay `/orders/{id}` on every
+   invocation, merges the latest `external_status` (`CHARGED` / `PENDING_VBV` / `FAILED` / verbatim
+   `Other(...)` for unknown values) and payment-method fields into the row, and returns
+   the refreshed snapshot. Frontend controls polling cadence — there is no server-side
+   short-circuit.
+3. **Settle on CHARGED** — the first poll observing `CHARGED` credits the user's HSA via
+   PBA's `deposit` API. Dedup is gated on `wallet_txn_data == Pending`; subsequent polls
+   after success do nothing. PBA's `idempotency_key = order.id` guards against
+   double-deposits even if the gate is bypassed.
+
+Sponsor-funded orders **do not** transit `GET /users/{user_id}/orders/{id}` — they settle
+synchronously at create time through the sponsor flow and are read via their own surface.
+
+---
+
+## Response shape (both endpoints)
+
+| Field                | Type     | Notes                                                                          |
+| -------------------- | -------- | ------------------------------------------------------------------------------ |
+| `id`                 | UUID v7  | Also the value sent to Juspay as `order_id`.                                   |
+| `user_id`            | string   | 12-digit user id (`UserId`).                                                   |
+| `account_id`         | UUID     | Destination PBA account (HSA today).                                           |
+| `amount`             | object   | `{ amount: Decimal, currency }` in major units.                                |
+| `external_status`    | string?  | Raw Juspay (external) status. `null` until the first `GetOrderStatus` poll completes. |
+| `source`             | string   | Funding URN — see table above.                                                 |
+| `payload`            | document | (create only) Verbatim Juspay `/session` response, including `sdk_payload`.    |
+| `created_at`         | ISO-8601 |                                                                                |
+| `last_modified_at`   | ISO-8601 |                                                                                |
+
+---
+
+## Error codes
+
+| Code      | HTTP | Meaning                                                                |
+| --------- | ---- | ---------------------------------------------------------------------- |
+| `OE-1300` | 500  | Unhandled internal error.                                              |
+| `OE-1301` | 404  | Order id not found for this user.                                      |
+| `OE-1302` | 404  | User id on the path doesn't exist.                                     |
+| `OE-1303` | 400  | User has no PBA-backed (HSA) account — complete onboarding first.      |
+| `OE-1304` | 400  | Validation error (e.g. non-positive amount).                           |
+| `OE-1305` | 500  | Payment provider (Juspay) unavailable / upstream error.                |

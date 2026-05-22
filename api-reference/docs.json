@@ -53,7 +53,8 @@
               "modules/mrn",
               "modules/insurance_policy",
               "modules/mandate",
-              "modules/order"
+              "modules/order",
+              "modules/sponsor"
             ]
           }
         ]
@@ -176,6 +177,21 @@
                 "pages": [
                   "api/endpoints/orders/self-contribution",
                   "api/endpoints/orders/order-status"
+                ]
+              },
+              {
+                "group": "Sponsors",
+                "pages": [
+                  "api/endpoints/sponsors/create",
+                  "api/endpoints/sponsors/list",
+                  "api/endpoints/sponsors/get",
+                  "api/endpoints/sponsors/update",
+                  "api/endpoints/sponsors/sync",
+                  "api/endpoints/sponsors/delete",
+                  "api/endpoints/sponsors/balance",
+                  "api/endpoints/sponsors/transactions",
+                  "api/endpoints/sponsors/deposit",
+                  "api/endpoints/sponsors/contribute"
                 ]
               },
               {

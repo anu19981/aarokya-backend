@@ -2970,6 +2970,602 @@
         ]
       }
     },
+    "/sponsors": {
+      "get": {
+        "tags": [
+          "Sponsor"
+        ],
+        "operationId": "list_sponsors",
+        "parameters": [
+          {
+            "name": "statuses",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "PENDING,ACTIVE"
+          },
+          {
+            "name": "sponsor_kinds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "INDIVIDUAL,ORGANISATION"
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of sponsors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SponsorListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a trusted-backend actor"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Sponsor"
+        ],
+        "operationId": "create_sponsor",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSponsorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Sponsor created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SponsorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or sponsor_kind mismatch"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a trusted-backend actor"
+          },
+          "409": {
+            "description": "Slug already exists"
+          },
+          "500": {
+            "description": "External provisioning failed"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/sponsors/{sponsor_id}": {
+      "get": {
+        "tags": [
+          "Sponsor"
+        ],
+        "operationId": "get_sponsor_by_id",
+        "parameters": [
+          {
+            "name": "sponsor_id",
+            "in": "path",
+            "description": "Sponsor ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sponsor found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SponsorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a trusted-backend actor"
+          },
+          "404": {
+            "description": "Sponsor not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Sponsor"
+        ],
+        "operationId": "delete_sponsor",
+        "parameters": [
+          {
+            "name": "sponsor_id",
+            "in": "path",
+            "description": "Sponsor ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sponsor soft-deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteSponsorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a trusted-backend actor"
+          },
+          "404": {
+            "description": "Sponsor not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Sponsor"
+        ],
+        "operationId": "update_sponsor",
+        "parameters": [
+          {
+            "name": "sponsor_id",
+            "in": "path",
+            "description": "Sponsor ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSponsorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Sponsor updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SponsorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or sponsor_kind mismatch"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a trusted-backend actor"
+          },
+          "404": {
+            "description": "Sponsor not found"
+          },
+          "409": {
+            "description": "Name conflict or invalid status transition"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/sponsors/{sponsor_id}/balance": {
+      "get": {
+        "tags": [
+          "Sponsor"
+        ],
+        "operationId": "get_sponsor_balance",
+        "parameters": [
+          {
+            "name": "sponsor_id",
+            "in": "path",
+            "description": "Sponsor ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sponsor normal-account balance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SponsorBalanceResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sponsor not found"
+          },
+          "409": {
+            "description": "Sponsor not active"
+          },
+          "500": {
+            "description": "PBA read failed"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/sponsors/{sponsor_id}/contribute": {
+      "post": {
+        "tags": [
+          "Sponsor"
+        ],
+        "operationId": "sponsor_contribution",
+        "parameters": [
+          {
+            "name": "sponsor_id",
+            "in": "path",
+            "description": "Sponsor ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SponsorContributionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Contribution transferred",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SponsorContributionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "404": {
+            "description": "Sponsor not found"
+          },
+          "409": {
+            "description": "Sponsor not active / user has 0 or >1 policies / no HSA"
+          },
+          "500": {
+            "description": "PBA transfer failed"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/sponsors/{sponsor_id}/deposit": {
+      "post": {
+        "tags": [
+          "Sponsor"
+        ],
+        "operationId": "sponsor_deposit",
+        "parameters": [
+          {
+            "name": "sponsor_id",
+            "in": "path",
+            "description": "Sponsor ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SponsorDepositRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Deposit created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SponsorDepositResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "404": {
+            "description": "Sponsor not found"
+          },
+          "409": {
+            "description": "Sponsor not active"
+          },
+          "500": {
+            "description": "PBA deposit failed"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/sponsors/{sponsor_id}/sync": {
+      "post": {
+        "tags": [
+          "Sponsor"
+        ],
+        "operationId": "sync_sponsor",
+        "parameters": [
+          {
+            "name": "sponsor_id",
+            "in": "path",
+            "description": "Sponsor ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncSponsorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Sponsor linked + activated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SponsorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a trusted-backend actor"
+          },
+          "404": {
+            "description": "Sponsor not found"
+          },
+          "409": {
+            "description": "Sponsor not activatable (INACTIVE)"
+          },
+          "500": {
+            "description": "PBA read or local link failed"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/sponsors/{sponsor_id}/transactions": {
+      "get": {
+        "tags": [
+          "Sponsor"
+        ],
+        "operationId": "list_sponsor_transactions",
+        "parameters": [
+          {
+            "name": "sponsor_id",
+            "in": "path",
+            "description": "Sponsor ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "from_date",
+            "in": "query",
+            "description": "ISO 8601 inclusive",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to_date",
+            "in": "query",
+            "description": "ISO 8601 inclusive",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sponsor transactions page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SponsorListTransactionsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sponsor not found"
+          },
+          "409": {
+            "description": "Sponsor not active"
+          },
+          "500": {
+            "description": "PBA read failed"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/users": {
       "get": {
         "tags": [
@@ -6251,6 +6847,35 @@
           }
         }
       },
+      "ContactDetails": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "person_first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "person_last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "CreateAccountRequest": {
         "type": "object",
         "required": [
@@ -6457,6 +7082,55 @@
           }
         }
       },
+      "CreateSponsorRequest": {
+        "type": "object",
+        "required": [
+          "sponsor_kind",
+          "name",
+          "slug",
+          "sponsor_details"
+        ],
+        "properties": {
+          "address": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AddressDetails"
+              }
+            ]
+          },
+          "bank_details": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BankDetails"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "pan": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slug": {
+            "type": "string"
+          },
+          "sponsor_details": {
+            "$ref": "#/components/schemas/SponsorDetails"
+          },
+          "sponsor_kind": {
+            "$ref": "#/components/schemas/SponsorKind"
+          }
+        }
+      },
       "Currency": {
         "type": "string",
         "description": "ISO 4217 three-letter currency codes.\n\nCurrently INR only; add variants as the product expands.",
@@ -6608,6 +7282,21 @@
           },
           "status": {
             "$ref": "#/components/schemas/PlatformStatus"
+          }
+        }
+      },
+      "DeleteSponsorResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SponsorStatus"
           }
         }
       },
@@ -7059,6 +7748,35 @@
           "DRIVING_LICENSE",
           "VOTER_ID"
         ]
+      },
+      "IndividualSponsorDetails": {
+        "type": "object",
+        "required": [
+          "first_name"
+        ],
+        "properties": {
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "InsurancePolicyBenefitDetails": {
         "type": "object",
@@ -8002,6 +8720,33 @@
           }
         }
       },
+      "OrganisationSponsorDetails": {
+        "type": "object",
+        "required": [
+          "legal_name"
+        ],
+        "properties": {
+          "contact": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ContactDetails"
+              }
+            ]
+          },
+          "legal_name": {
+            "type": "string"
+          },
+          "registration_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "PhoneScopeQuery": {
         "type": "object",
         "required": [
@@ -8436,6 +9181,365 @@
           "created_at"
         ]
       },
+      "SponsorBalanceResponse": {
+        "type": "object",
+        "required": [
+          "sponsor_id",
+          "balance",
+          "pending"
+        ],
+        "properties": {
+          "balance": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "pending": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "sponsor_id": {
+            "type": "string"
+          }
+        }
+      },
+      "SponsorContributionRequest": {
+        "type": "object",
+        "required": [
+          "insurance_policy_id",
+          "amount"
+        ],
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "insurance_policy_id": {
+            "type": "string"
+          }
+        }
+      },
+      "SponsorContributionResponse": {
+        "type": "object",
+        "required": [
+          "sponsor_id",
+          "user_id",
+          "insurance_policy_id",
+          "provider_transfer_id",
+          "amount",
+          "status"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "insurance_policy_id": {
+            "type": "string"
+          },
+          "provider_transfer_id": {
+            "type": "string"
+          },
+          "sponsor_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "SponsorDepositRequest": {
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "gateway_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SponsorDepositResponse": {
+        "type": "object",
+        "required": [
+          "sponsor_id",
+          "provider_deposit_id",
+          "amount",
+          "status"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "gateway_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider_deposit_id": {
+            "type": "string"
+          },
+          "sponsor_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "SponsorDetails": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IndividualSponsorDetails"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "sponsor_kind"
+                ],
+                "properties": {
+                  "sponsor_kind": {
+                    "type": "string",
+                    "enum": [
+                      "INDIVIDUAL"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OrganisationSponsorDetails"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "sponsor_kind"
+                ],
+                "properties": {
+                  "sponsor_kind": {
+                    "type": "string",
+                    "enum": [
+                      "ORGANISATION"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "SponsorKind": {
+        "type": "string",
+        "description": "Kind of sponsor — individual person or organisation.",
+        "enum": [
+          "INDIVIDUAL",
+          "ORGANISATION"
+        ]
+      },
+      "SponsorListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SponsorResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SponsorListTransactionsResponse": {
+        "type": "object",
+        "required": [
+          "transactions",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SponsorTransactionSummary"
+            }
+          }
+        }
+      },
+      "SponsorResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "sponsor_kind",
+          "name",
+          "slug",
+          "status",
+          "sponsor_details",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "address": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AddressDetails"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pan": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slug": {
+            "type": "string"
+          },
+          "sponsor_details": {
+            "$ref": "#/components/schemas/SponsorDetails"
+          },
+          "sponsor_kind": {
+            "$ref": "#/components/schemas/SponsorKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SponsorStatus"
+          }
+        }
+      },
+      "SponsorStatus": {
+        "type": "string",
+        "description": "Sponsor lifecycle status.",
+        "enum": [
+          "PENDING",
+          "ACTIVE",
+          "INACTIVE"
+        ]
+      },
+      "SponsorTransactionSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "account_id",
+          "transaction_type",
+          "status",
+          "amount",
+          "direction",
+          "created_at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "correlation_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direction": {
+            "type": "string"
+          },
+          "funding_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gateway_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "transaction_type": {
+            "type": "string"
+          }
+        }
+      },
+      "SyncSponsorRequest": {
+        "type": "object",
+        "required": [
+          "external_account_id"
+        ],
+        "properties": {
+          "external_account_id": {
+            "type": "string"
+          }
+        }
+      },
       "TimeRange": {
         "type": "object",
         "description": "A half-open time range, with a mandatory start and an optional end.\nDesigned to be embedded in list/filter query params via `#[serde(flatten)]`.\n\n`Deserialize` runs [`TimeRange::validate`] as part of deserialization, so\ncallers never receive a [`TimeRange`] that violates `start_time <= end_time`.",
@@ -8467,7 +9571,6 @@
           "type",
           "status",
           "amount",
-          "pool",
           "direction",
           "created_at"
         ],
@@ -8475,13 +9578,27 @@
           "account_id": {
             "type": "string"
           },
+          "account_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`pb` or `normal`. Optional because older PBA responses may omit it."
+          },
           "amount": {
             "type": "integer",
             "format": "int64"
           },
+          "correlation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "PBA correlation id linking paired ledger entries (e.g. transfer debit ↔ credit)."
+          },
           "created_at": {
             "type": "string",
-            "description": "ISO 8601 date-time, e.g. `\"2026-04-27T10:30:00Z\"`."
+            "description": "ISO 8601 date-time."
           },
           "description": {
             "type": [
@@ -8520,7 +9637,11 @@
             ]
           },
           "pool": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pool segment for PB-account transactions; absent on normal-account."
           },
           "source_account": {
             "type": [
@@ -8691,6 +9812,43 @@
             "type": [
               "string",
               "null"
+            ]
+          }
+        }
+      },
+      "UpdateSponsorRequest": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AddressDetails"
+              }
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pan": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sponsor_details": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SponsorDetails"
+              }
             ]
           }
         }
@@ -8900,6 +10058,10 @@
     {
       "name": "BenefitProvider",
       "description": "Benefit provider management endpoints"
+    },
+    {
+      "name": "Sponsor",
+      "description": "Sponsor management endpoints"
     },
     {
       "name": "Benefit",

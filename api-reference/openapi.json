@@ -716,6 +716,181 @@
         ]
       }
     },
+    "/admin/readonly_users": {
+      "get": {
+        "tags": [
+          "AdminUser"
+        ],
+        "operationId": "list_readonly_admin_users",
+        "responses": {
+          "200": {
+            "description": "List of read-only admin dashboard users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUserListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "AdminUser"
+        ],
+        "operationId": "create_readonly_admin_user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDashboardUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Read-only admin user provisioned — temporary_password shown once, store it now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUserCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "409": {
+            "description": "A user with the given email already exists"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/readonly_users/credentials": {
+      "get": {
+        "tags": [
+          "AdminUser"
+        ],
+        "operationId": "list_readonly_admin_credentials",
+        "responses": {
+          "200": {
+            "description": "List of read-only admin service credential ids",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListAdminCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "AdminUser"
+        ],
+        "operationId": "create_readonly_admin_credentials",
+        "responses": {
+          "200": {
+            "description": "Read-only admin service credential provisioned — basic_token shown once, store it now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/readonly_users/credentials/{credential_id}": {
+      "delete": {
+        "tags": [
+          "AdminUser"
+        ],
+        "operationId": "revoke_readonly_admin_credentials",
+        "parameters": [
+          {
+            "name": "credential_id",
+            "in": "path",
+            "description": "Credential UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoke result — `revoked: true` if a matching credential existed (idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeAdminCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/admin/users": {
       "get": {
         "tags": [
@@ -780,6 +955,108 @@
           },
           "409": {
             "description": "A user with the given email already exists"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/users/credentials": {
+      "get": {
+        "tags": [
+          "AdminUser"
+        ],
+        "operationId": "list_admin_credentials",
+        "responses": {
+          "200": {
+            "description": "List of admin service credential ids",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListAdminCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "AdminUser"
+        ],
+        "operationId": "create_admin_credentials",
+        "responses": {
+          "200": {
+            "description": "Admin service credential provisioned — basic_token shown once, store it now",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/users/credentials/{credential_id}": {
+      "delete": {
+        "tags": [
+          "AdminUser"
+        ],
+        "operationId": "revoke_admin_credentials",
+        "parameters": [
+          {
+            "name": "credential_id",
+            "in": "path",
+            "description": "Credential UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoke result — `revoked: true` if a matching credential existed (idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeAdminCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
           }
         },
         "security": [
@@ -5810,6 +6087,32 @@
           }
         }
       },
+      "AdminCredentialSummary": {
+        "type": "object",
+        "required": [
+          "credential_id"
+        ],
+        "properties": {
+          "credential_id": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminCredentialsResponse": {
+        "type": "object",
+        "required": [
+          "credential_id",
+          "basic_token"
+        ],
+        "properties": {
+          "basic_token": {
+            "type": "string"
+          },
+          "credential_id": {
+            "type": "string"
+          }
+        }
+      },
       "AdminExportInsurancePoliciesRequest": {
         "type": "object",
         "required": [
@@ -8206,6 +8509,20 @@
           }
         }
       },
+      "ListAdminCredentialsResponse": {
+        "type": "object",
+        "required": [
+          "credentials"
+        ],
+        "properties": {
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCredentialSummary"
+            }
+          }
+        }
+      },
       "ListBenefitProviderCredentialsResponse": {
         "type": "object",
         "required": [
@@ -9108,6 +9425,17 @@
           "MOTHER_IN_LAW",
           "SIBLING"
         ]
+      },
+      "RevokeAdminCredentialsResponse": {
+        "type": "object",
+        "required": [
+          "revoked"
+        ],
+        "properties": {
+          "revoked": {
+            "type": "boolean"
+          }
+        }
       },
       "RevokeBenefitProviderCredentialsResponse": {
         "type": "object",

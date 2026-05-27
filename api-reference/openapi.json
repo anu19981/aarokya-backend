@@ -1741,6 +1741,75 @@
         ]
       }
     },
+    "/config": {
+      "get": {
+        "tags": [
+          "Config"
+        ],
+        "operationId": "get_app_config",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/AppPlatform"
+                }
+              ]
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sdk_version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resolved app feature flags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppConfigResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -6237,6 +6306,10 @@
           }
         }
       },
+      "AppConfigResponse": {
+        "type": "object",
+        "description": "Feature flags consumed by the mobile app to enable/disable UI affordances.\n\nA verbatim passthrough of every key in the dedicated app-facing\nSuperposition workspace (`[superposition].app_workspace_id`). The backend\ndoes not interpret these values — adding a flag is purely a Superposition\nchange (admin UI + app fallback TOML), no backend redeploy. The app owns\nthe default for any key absent from the map."
+      },
       "BankDetails": {
         "type": "object",
         "description": "Origin-bank details required to open a purpose-bound account at PBA.",
@@ -10046,6 +10119,10 @@
     {
       "name": "Health",
       "description": "Health check endpoints"
+    },
+    {
+      "name": "Config",
+      "description": "App feature-flag config"
     },
     {
       "name": "Auth",

@@ -1,11 +1,15 @@
 ---
 title: "Mandate Module"
-description: "Recurring-debit mandate registration via Juspay/Euler. Two user-scoped endpoints: open a payment session, and poll for mandate status."
+description: "Recurring-debit mandate registration via Juspay/Euler. Three user-scoped endpoints: open a payment session, poll for mandate status, and fetch the user's live mandate."
 ---
 
 <Info>
-  **Auth guard:** JWT self-access (`jwt.sub == user_id`). Admin key and partner keys are not accepted.
+  **Auth guard:** `require_self_or_trusted_backend` — the user themselves (`jwt.sub == user_id`) or a trusted backend actor (admin). Partner keys and the callback service are not accepted.
 </Info>
+
+<Note>
+  **One live mandate per user.** A user may hold **at most one** mandate in `pending`, `active`, **or** `paused` state at a time, enforced by an application-level check before insert (no DB constraint). A `paused` mandate still counts as live — it must be resumed or cancelled before a new one can be registered. `initiated` rows (a registration that was started but never completed on the payment page) and terminal `failed`/`cancelled` rows do **not** count and can stack freely. A second `register` while a live mandate exists returns `409 ME 1207`.
+</Note>
 
 ## Overview
 
@@ -26,6 +30,9 @@ Autopay execution (`/txns`), webhooks, and pause/revoke flows are **not part of 
   </Card>
   <Card title="GET /users/{user_id}/mandate/order_status/{order_id}" icon="magnifying-glass" color="#16a34a" href="/api/endpoints/mandate/order-status">
     Poll for the latest mandate status. Always queries Juspay — no server-side caching.
+  </Card>
+  <Card title="GET /users/{user_id}/mandates/active" icon="circle-check" color="#16a34a" href="/api/endpoints/mandates/active">
+    Fetch the user's live (`pending`, `active`, or `paused`) mandate. DB-only, no Juspay round-trip. Returns `404 ME 1208` when there is no live mandate.
   </Card>
 </CardGroup>
 
@@ -111,11 +118,14 @@ Also: the user row must have a non-null `email` — registration requires it for
 | Code | Status | Error | Situation |
 |---|---|---|---|
 | `ME 1200` | 500 | Internal error | Unexpected failure |
-| `ME 1201` | 404 | Mandate order not found | `order_id` doesn't exist or doesn't belong to `user_id` |
+| `ME 1201` | 404 | Mandate not found | Mandate `id` doesn't exist or doesn't belong to `user_id` |
 | `ME 1202` | 404 | User not found | JWT is valid but user row was deleted |
-| `ME 1203` | 404 | Account not found | `account_id` (if passed) doesn't exist |
-| `ME 1204` | 400 | Validation error | `amount < 1`, invalid `account_id`, missing user email |
-| `ME 1205` | 500 | Provider unavailable | Juspay returned 5xx or network timed out |
+| `ME 1203` | 404 | Account not found | `account_id` doesn't exist |
+| `ME 1204` | 400 | HSA account required | User has no PBA-backed (HSA) account — onboarding not completed |
+| `ME 1205` | 400 | Validation error | Bad input (e.g. missing user email for the Juspay session) |
+| `ME 1206` | 500 | Provider unavailable | Juspay returned 5xx or network timed out |
+| `ME 1207` | 409 | Mandate already exists | User already has a live (`pending`/`active`/`paused`) mandate; only one is allowed |
+| `ME 1208` | 404 | No active mandate | `GET /mandates/active` — user has no live (`pending`/`active`/`paused`) mandate |
 
 ---
 

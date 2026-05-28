@@ -169,7 +169,8 @@
                 "group": "Mandate",
                 "pages": [
                   "api/endpoints/mandate/register",
-                  "api/endpoints/mandate/order-status"
+                  "api/endpoints/mandate/order-status",
+                  "api/endpoints/mandate/active"
                 ]
               },
               {

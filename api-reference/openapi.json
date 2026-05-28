@@ -5793,6 +5793,43 @@
         }
       }
     },
+    "/users/{user_id}/mandates/active": {
+      "get": {
+        "tags": [
+          "Mandate"
+        ],
+        "operationId": "get_active_mandate",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The user's live (Pending, Active, or Paused) mandate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateOrderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "User not found, or the user has no live mandate"
+          }
+        }
+      }
+    },
     "/users/{user_id}/orders/{id}": {
       "get": {
         "tags": [
@@ -8871,8 +8908,9 @@
       },
       "MandateStatus": {
         "type": "string",
-        "description": "Internal mandate lifecycle status — coarse-grained view derived from the raw Juspay status string.",
+        "description": "Internal mandate lifecycle status — coarse-grained view derived from the raw Juspay status string. Starts at INITIATED the moment a registration row is created (before/while the Juspay session is opened) and advances to PENDING/ACTIVE/etc. as Juspay reports progress.",
         "enum": [
+          "INITIATED",
           "PENDING",
           "ACTIVE",
           "FAILED",

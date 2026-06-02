@@ -1,0 +1,131 @@
+---
+title: "ADR-004: Provider-Keyed Consultation Messages"
+description: "Per-provider chat message contracts via a discriminated union, with provider routing derived from the consultation benefit."
+---
+
+<Note>
+  **Status:** Superseded by [ADR-005](/decisions/adr-005-neutral-consultation-message-shape) (wire shape only — the
+  adapter-owns-its-own-domain-types principle remains in force) · **Date:** 2026-Q2 ·
+  **Deciders:** Aarokya Engineering
+</Note>
+
+## Context
+
+The consultation module is a provider-agnostic chat-doctor pipeline. Today every
+consultation routes to Narayana Health, and the list-messages API contract
+(`ConsultationMessageResponse` + `ConsultationMessageBody`) was shaped after Narayana's
+gateway. A second provider (e.g. Apollo) will have a meaningfully different chat model —
+different message kinds, attachments, lifecycle events — and the mobile client renders
+its chat per provider.
+
+We needed the message contract to **differ per provider** without:
+- a normalized "union of everything" message type (optional fields bleeding across providers), or
+- making an existing provider's contract change when a new one is added.
+
+The consultation **entity** itself (id, dependant, benefit, status, timestamps) is our own
+DB row and is *not* provider-specific — only the message payload is.
+
+---
+
+## Options Considered
+
+<AccordionGroup>
+  <Accordion title="Option 1 — Normalized canonical message model">
+    One shared message shape; every provider maps into it; the client renders one way.
+
+    **Pros:** client stays provider-agnostic; one endpoint, one schema.
+    **Cons:** lossy — provider-specific message kinds must be dropped or force the shape to
+    grow into a god-object of optional fields; the contract is dishonest when providers
+    genuinely diverge.
+    **Verdict:** Rejected — the product requirement is that each provider's chat is a
+    distinct experience the client renders differently.
+  </Accordion>
+  <Accordion title="Option 2 — Per-provider endpoints">
+    Separate operations/paths per provider (`/…/narayana/messages`, `/…/acme/messages`),
+    each with its own response type.
+
+    **Pros:** maximal separation; fully independent schemas.
+    **Cons:** the client must route by provider across N URL sets; more route surface to
+    maintain; the single logical "list messages" action is fragmented.
+    **Verdict:** Rejected — heavier than needed when a single endpoint with a discriminator
+    expresses the same thing.
+  </Accordion>
+  <Accordion title="Option 3 — Provider-keyed discriminated union (chosen)">
+    One endpoint; a uniform pagination envelope whose `data` is a `provider`-tagged union,
+    each variant carrying that provider's own independent types.
+
+    **Pros:** additive (a new provider = a new variant + its own types, zero change to
+    existing variants); self-describing payload; one OpenAPI operation rendering `oneOf` +
+    discriminator; not a god-object.
+    **Cons:** the client becomes provider-aware (it switches on the `provider` tag).
+    **Verdict:** Accepted.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Decision
+
+The list-messages response is a uniform envelope; its `data` field is a `provider`-tagged
+discriminated union. The domain layer mirrors this with provider-keyed enums, and provider
+routing is derived server-side from the consultation benefit.
+
+```json
+{
+  "total": 1,
+  "limit": 20,
+  "offset": 0,
+  "data": {
+    "provider": "NARAYANA",
+    "messages": [
+      {
+        "id": "19:acsV2_msg_…",
+        "sender_display_name": "Dr. Jane",
+        "created_on": "2026-04-28T16:00:00.000Z",
+        "body": { "message_type": "TEXT", "content": "How are you feeling today?" }
+      }
+    ]
+  }
+}
+```
+
+- **API:** `ConsultationMessageListResponse { data: ConsultationMessages, total, limit, offset }`,
+  where `ConsultationMessages` is `#[serde(tag = "provider")]`. Narayana's types live in the
+  `api_models::consultation::narayana` submodule. Each union variant wraps a struct (serde
+  internally-tagged enums cannot tag a bare sequence).
+- **Domain:** `DomainThread`, `DomainConsultationMessages`, `DomainAttachmentStream` are
+  provider-keyed enums; the `ConsultationProvider` trait uses associated types so each
+  adapter declares its own output; `core` consumes them via accessors and never names a
+  provider.
+- **Routing:** the provider kind lives on the consultation benefit's
+  `ConsultationBenefitDetails.provider` (admin-set JSONB). The client only sends `benefit_id`;
+  the server derives the kind from the benefit and routes on it — no slug, no
+  `benefit_providers`/`consultations` column, no migration, no client-sent provider.
+- **Entity stays singular:** create/get/list consultation responses are unchanged — they
+  describe our own row, not the provider's chat.
+
+---
+
+## Consequences
+
+<CardGroup cols={2}>
+  <Card title="Gained">
+    - Onboarding a provider is purely additive — new variant + new types, no edits to existing providers.
+    - Self-describing payloads with a clean OpenAPI `oneOf` + `provider` discriminator.
+    - Server-authoritative routing; the client never picks the integration.
+    - The consultation entity remains a single, stable contract.
+  </Card>
+  <Card title="Trade-offs">
+    - The client is provider-aware: it switches on the `provider` tag to render each variant (a new provider needs client work).
+    - The provider kind is mildly denormalized — each of a provider's consultation benefits carries it (the cost of avoiding a `benefit_providers` column).
+    - Codegen gained nested-module support (`@rustModule(name: "parent::child")`).
+  </Card>
+</CardGroup>
+
+---
+
+## Related
+
+- [ADR-001: Smithy Codegen](/decisions/adr-001-smithy)
+- Consultation module: [modules/consultation](/modules/consultation), [api/consultation-guide](/api/consultation-guide)
+- Backend agent notes: `backend/ai-docs/domains/consultation/AGENT-NOTES.md`

@@ -36,7 +36,9 @@
               "decisions/overview",
               "decisions/adr-001-smithy",
               "decisions/adr-002-rust-stack",
-              "decisions/adr-003-auth-design"
+              "decisions/adr-003-auth-design",
+              "decisions/adr-004-provider-keyed-consultation-messages",
+              "decisions/adr-005-neutral-consultation-message-shape"
             ]
           },
           {
@@ -54,7 +56,8 @@
               "modules/insurance_policy",
               "modules/mandate",
               "modules/order",
-              "modules/sponsor"
+              "modules/sponsor",
+              "modules/consultation"
             ]
           }
         ]
@@ -193,6 +196,20 @@
                   "api/endpoints/sponsors/transactions",
                   "api/endpoints/sponsors/deposit",
                   "api/endpoints/sponsors/contribute"
+                ]
+              },
+              {
+                "group": "Consultations",
+                "pages": [
+                  "api/endpoints/consultations/list_eligible_dependants",
+                  "api/endpoints/consultations/create",
+                  "api/endpoints/consultations/list",
+                  "api/endpoints/consultations/get",
+                  "api/endpoints/consultations/admin_list",
+                  "api/endpoints/consultations/admin_get",
+                  "api/endpoints/consultations/list_messages",
+                  "api/endpoints/consultations/read_receipt",
+                  "api/endpoints/consultations/attachment"
                 ]
               },
               {

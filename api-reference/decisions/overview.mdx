@@ -17,6 +17,12 @@ We document significant architectural decisions as **Architecture Decision Recor
   <Card title="ADR-003: JWT Auth Design" icon="lock" href="/decisions/adr-003-auth-design" color="#0891b2">
     Token rotation, OTP hashing, device-level sessions, and the stateless access token approach.
   </Card>
+  <Card title="ADR-004: Provider-Keyed Consultation Messages" icon="comments" href="/decisions/adr-004-provider-keyed-consultation-messages" color="#7c3aed">
+    Per-provider chat message contracts via a discriminated union. **Superseded by ADR-005** for the wire shape.
+  </Card>
+  <Card title="ADR-005: Neutral Consultation Message Shape" icon="comments" href="/decisions/adr-005-neutral-consultation-message-shape" color="#7c3aed">
+    Replace the per-provider message union with one neutral wire shape we own; adapters map upstream messages into it.
+  </Card>
 </CardGroup>
 
 ---
@@ -28,8 +34,8 @@ We document significant architectural decisions as **Architecture Decision Recor
 | ADR-001 | Smithy IDL as API source of truth | Accepted | 2025-Q1 |
 | ADR-002 | Rust + Actix-web + Diesel + PostgreSQL | Accepted | 2025-Q1 |
 | ADR-003 | JWT stateless auth with token rotation | Accepted | 2025-Q1 |
-| ADR-004 | Async wallet provisioning with retry worker | Accepted | 2025-Q1 |
-| ADR-005 | No OpenAPI in Smithy codegen path | Accepted | 2025-Q1 |
+| ADR-004 | Provider-Keyed Consultation Messages | Superseded by ADR-005 (wire) | 2026-Q2 |
+| ADR-005 | Neutral Consultation Message Shape | Accepted | 2026-05 |
 
 ---
 

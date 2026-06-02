@@ -1,0 +1,182 @@
+---
+title: "Consultation Module"
+description: "Provider-agnostic chat-doctor pipeline. Patients open authenticated chat threads with doctors via Narayana Health's Conversation Gateway."
+---
+
+<Info>
+  **Authentication:** All user-facing endpoints require `Authorization: Bearer <access_token>`. The inbound webhook is **public** (see Security).
+
+  **External Dependencies:** Narayana Health Conversation Gateway (Aathma). All upstream calls go through the `narayana` crate.
+
+  **Status:** Shipped (single-provider). Provider-agnostic dispatcher in place for a second provider.
+</Info>
+
+## What This Module Does
+
+Lets an authenticated primary user open and run a chat thread with a doctor on behalf
+of any of their eligible dependants. Messages (text + file attachments) round-trip
+through the Aarokya backend; doctor replies arrive on Aarokya via an inbound webhook.
+
+The Aarokya backend never owns the chat itself — it mirrors a row per thread for
+indexing, eligibility, and audit, and forwards every message through the upstream
+provider with freshly-minted user-context and participant tokens.
+
+---
+
+## Eligibility Rule
+
+A dependant is eligible for a consultation under a given consultation benefit when:
+
+1. The primary user holds an `Issued` insurance policy whose `InsurancePolicy` benefit
+   shares a `benefit_provider_id` with an active `Consultation` benefit, **and**
+2. The dependant is on the policy's `dependant_ids` list.
+
+Once eligible, usage is unlimited — a dependant may have multiple concurrent active
+consultations under the same benefit. `eligible_dependants` still reports
+`active_consultation_count` as informational context.
+
+A future free tier (3 free consultations for users without a policy) will surface
+through the same `eligible_dependants` endpoint.
+
+---
+
+## State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: POST /consultations
+    Active --> Completed: doctor closes upstream
+    Active --> Closed: patient/admin closes upstream
+    Completed --> [*]
+    Closed --> [*]
+```
+
+Upstream Narayana owns the lifecycle; Aarokya mirrors it lazily on every `GET` and
+`LIST` call (see Read-time Sync below).
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Patient[Patient App] -- JWT --> API[Aarokya API]
+    API -- mirrors --> DB[(consultations table)]
+    API -- vendor JWT + user-context token --> Narayana
+    Narayana -- inbound webhook --> API
+    Doctor[Doctor App] --> Narayana
+```
+
+The provider-agnostic dispatcher (`ConsultationContext`) lives in
+`backend/crates/aarokya/src/domain/consultation.rs`. Each provider gets its own
+adapter sibling module that owns DTO ↔ domain conversion, token orchestration, and
+error mapping. `core/consultation.rs` only ever talks to the dispatcher — it doesn't
+name the provider.
+
+### Neutral message shape
+
+The consultation **entity** (create / get / list) and the **messages** payload are both
+neutral shapes we own. List-messages returns `data: ConsultationMessages { provider,
+messages: [ConsultationMessage] }` — `provider` is an informational tag carrying the
+upstream that backed this thread (today only `NARAYANA`), and each `ConsultationMessage`
+has a uniform shape regardless of provider: `id`, `sender_display_name`, `sender_role`
+(`PATIENT | DOCTOR | SYSTEM | UNKNOWN`), `created_at` (UTC ISO 8601), and a discriminated
+`body` (`TEXT | ATTACHMENT | SYSTEM_EVENT` with our owned `SystemEventKind` enum). Provider
+adapters map their upstream messages into this shape internally. Which provider backs a
+consultation is set on its **benefit** (`ConsultationBenefitDetails.provider`,
+admin-configured) and derived server-side — the client never sends it. Adding a provider
+means adding one mapping arm, not a public schema change. See
+[ADR-005](/decisions/adr-005-neutral-consultation-message-shape) (supersedes
+[ADR-004](/decisions/adr-004-provider-keyed-consultation-messages)).
+
+---
+
+## Tokens — Minted Per Call
+
+There is **no token cache**. Every upstream call mints fresh:
+
+1. **Vendor JWT** — service-to-service, scoped to Aarokya as a Narayana tenant.
+2. **User-context token** — scoped to a single primary user.
+3. **Participant access token** — scoped to a single thread (chat room).
+
+Token lifecycle stays inside the `narayana` crate. Aarokya code never sees raw
+tokens. Don't introduce caching without aligning on rotation/expiry semantics.
+
+---
+
+## Read-time Sync
+
+`GET /users/{user_id}/consultations/{consultation_id}` and
+`GET /users/{user_id}/consultations` perform a best-effort upstream `get_thread` /
+`list_threads` round-trip to populate the `unread_count` field and lazily mirror
+status drift (`Active → Completed`/`Closed`) onto the row.
+
+Upstream failures **do not** fail the request — the mirror row is returned
+unchanged, and a `warn!` log line with `tag = "ConsultationGetUpstream"` records
+the degradation.
+
+---
+
+## Inbound Webhook
+
+`POST /webhooks/consultations/narayana/{benefit_id}` — public, no Bearer token.
+
+Called by Narayana when a new message (typically a doctor reply) arrives.
+`{benefit_id}` scopes the callback to the consultation benefit it was registered
+against; the handler cross-checks that the row resolved via
+`chat_conversation_source_id` matches that benefit, logs the result, and **always**
+returns 200.
+
+### Security Caveats
+
+<Warning>
+Narayana does not currently sign or authenticate webhook requests. Integrity relies
+on:
+
+- strict payload-shape deserialisation (serde rejects anything else),
+- benefit scoping in the URL (mismatches are observable in logs as `benefit_matches = false`),
+- idempotent handling — the handler is currently a pure log line, so duplicates are cheap,
+- IP allow-listing at the edge / load balancer (deployment concern).
+</Warning>
+
+Side effects on inbound messages (push notifications, last-message cache,
+read-state) are deliberately deferred.
+
+---
+
+## Error Codes (CN 16xx)
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| CN-1600 | 500 | Internal server error |
+| CN-1601 | 404 | Consultation not found |
+| CN-1602 | 403 | Caller is not the consultation owner |
+| CN-1603 | 404 | Dependant not found or inactive |
+| CN-1604 | 403 | Dependant is not eligible for consultations |
+| CN-1605 | 400 | Provider does not accept the dependant's gender |
+| CN-1606 | **502** | Upstream vendor authentication failed |
+| CN-1607 | **502** | Upstream user-context authentication failed |
+| CN-1608 | **502** | Upstream provider error |
+| CN-1609 | 400 | Attachments not supported by this provider |
+| CN-1610 | 400 | Read receipts not supported by this provider |
+| CN-1611 | 400 | Attachment downloads not supported by this provider |
+| CN-1612 | 400 | More than one file attached (single attachment only) |
+| CN-1613 | 409 | An active consultation already exists for this `(dependant, benefit)` |
+| CN-1614 | 404 | Benefit not found |
+| CN-1615 | 400 | Benefit is not a consultation-type benefit (eligibility endpoint) |
+| CN-1616 | 400 | Consultation row exists but has no upstream thread yet (messaging on `INITIATED` / `FAILED`) |
+
+Upstream variants surface as **502 Bad Gateway**, not 500, so monitoring can
+distinguish "we broke" from "Narayana broke".
+
+---
+
+## PII Policy
+
+- Phone numbers, names, dates of birth, and pincodes flow through the `narayana` crate
+  as `Secret<String>` where applicable. Logs mask these.
+- The inbound webhook handler emits a fields-only audit log: `chat_conversation_source_id`,
+  message id, message type, benefit id, and the resolved consultation id. **No message
+  content, no patient metadata.**
+- Upstream attachment binaries are streamed through the API without buffering to
+  disk.

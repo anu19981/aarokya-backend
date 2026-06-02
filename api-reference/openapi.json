@@ -2087,6 +2087,151 @@
         ]
       }
     },
+    "/consultations": {
+      "get": {
+        "tags": [
+          "Consultation"
+        ],
+        "operationId": "admin_list_consultations",
+        "parameters": [
+          {
+            "name": "primary_user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
+            "name": "dependant_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "benefit_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "ACTIVE,COMPLETED"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated consultations across users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminConsultationListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not a trusted backend (admin/operator)"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/consultations/{consultation_id}": {
+      "get": {
+        "tags": [
+          "Consultation"
+        ],
+        "operationId": "admin_get_consultation_by_id",
+        "parameters": [
+          {
+            "name": "consultation_id",
+            "in": "path",
+            "description": "Consultation UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consultation found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminConsultationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not a trusted backend (admin/operator)"
+          },
+          "404": {
+            "description": "Consultation not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -4577,6 +4722,63 @@
         }
       }
     },
+    "/users/{user_id}/benefits/{benefit_id}/eligible_dependants": {
+      "get": {
+        "tags": [
+          "Consultation"
+        ],
+        "operationId": "list_eligible_dependants",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "benefit_id",
+            "in": "path",
+            "description": "Consultation benefit UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dependants eligible for this consultation benefit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EligibleDependantsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Benefit is not a consultation benefit"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not owner or trusted backend"
+          },
+          "404": {
+            "description": "Benefit not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/users/{user_id}/complete_onboarding": {
       "post": {
         "tags": [
@@ -4623,6 +4825,458 @@
           },
           "404": {
             "description": "User not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/users/{user_id}/consultations": {
+      "get": {
+        "tags": [
+          "Consultation"
+        ],
+        "operationId": "list_consultations",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dependant_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "benefit_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "ACTIVE,COMPLETED"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated consultations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultationListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not owner or trusted backend"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Consultation"
+        ],
+        "operationId": "create_consultation",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConsultationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Consultation created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error or invalid UUID"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not owner or trusted backend"
+          },
+          "404": {
+            "description": "Dependant or benefit not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/users/{user_id}/consultations/{consultation_id}": {
+      "get": {
+        "tags": [
+          "Consultation"
+        ],
+        "operationId": "get_consultation_by_id",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "consultation_id",
+            "in": "path",
+            "description": "Consultation UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consultation found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not owner or trusted backend"
+          },
+          "404": {
+            "description": "Consultation not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/users/{user_id}/consultations/{consultation_id}/messages": {
+      "get": {
+        "tags": [
+          "Consultation"
+        ],
+        "operationId": "list_messages",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "consultation_id",
+            "in": "path",
+            "description": "Consultation UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultationMessageListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not owner or trusted backend"
+          },
+          "404": {
+            "description": "Consultation not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Consultation"
+        ],
+        "summary": "Accepts `multipart/form-data` with:\n- a text field named `content` (optional when a file is attached)\n- at most one `files` part (binary) — Narayana accepts a single attachment",
+        "operationId": "send_message",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "consultation_id",
+            "in": "path",
+            "description": "Consultation UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Multipart body: optional text part `content`, plus at most one `files` binary part.",
+          "content": {
+            "multipart/form-data": {}
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message sent"
+          },
+          "400": {
+            "description": "More than one file attached"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not owner or trusted backend"
+          },
+          "404": {
+            "description": "Consultation not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/users/{user_id}/consultations/{consultation_id}/messages/{chat_message_id}/attachment": {
+      "get": {
+        "tags": [
+          "Consultation"
+        ],
+        "operationId": "download_attachment",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "consultation_id",
+            "in": "path",
+            "description": "Consultation UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chat_message_id",
+            "in": "path",
+            "description": "Upstream chat message identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attachment binary stream (Content-Type / Content-Disposition forwarded from upstream)",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not owner or trusted backend"
+          },
+          "404": {
+            "description": "Consultation or attachment not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/users/{user_id}/consultations/{consultation_id}/messages/{chat_message_id}/read_receipt": {
+      "post": {
+        "tags": [
+          "Consultation"
+        ],
+        "operationId": "send_read_receipt",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "consultation_id",
+            "in": "path",
+            "description": "Consultation UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chat_message_id",
+            "in": "path",
+            "description": "Upstream chat message identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read receipt recorded"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Not owner or trusted backend"
+          },
+          "404": {
+            "description": "Consultation not found"
           }
         },
         "security": [
@@ -6124,6 +6778,126 @@
           }
         }
       },
+      "AdminConsultationListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminConsultationResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AdminConsultationResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "primary_user_id",
+          "dependant_id",
+          "benefit_id",
+          "benefit_provider_id",
+          "status",
+          "created_at",
+          "last_modified_at",
+          "primary_user_phone_number"
+        ],
+        "properties": {
+          "benefit_id": {
+            "type": "string"
+          },
+          "benefit_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "benefit_provider_id": {
+            "type": "string"
+          },
+          "benefit_provider_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "dependant_first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dependant_id": {
+            "type": "string"
+          },
+          "dependant_last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "external_reference_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "primary_user_first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "primary_user_id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "primary_user_last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "primary_user_phone_country_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "primary_user_phone_number": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConsultationStatus"
+          }
+        }
+      },
       "AdminCredentialSummary": {
         "type": "object",
         "required": [
@@ -6392,9 +7166,6 @@
       },
       "AdminNarayanaMessage": {
         "type": "object",
-        "required": [
-          "metadata"
-        ],
         "properties": {
           "content": {
             "type": [
@@ -6430,15 +7201,7 @@
               }
             ]
           },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "propertyNames": {
-              "type": "string"
-            }
-          },
+          "metadata": {},
           "sender_display_name": {
             "type": [
               "string",
@@ -6770,6 +7533,13 @@
             "type": "string"
           }
         }
+      },
+      "BenefitProviderKind": {
+        "type": "string",
+        "description": "Which provider backs a benefit. Drives consultation provider dispatch. Currently hardcoded to Narayana at the call site; will move onto the benefit_provider record later. Serde-only for now — not a standalone DB column, so no diesel_enum.",
+        "enum": [
+          "NARAYANA"
+        ]
       },
       "BenefitProviderListResponse": {
         "type": "object",
@@ -7260,6 +8030,282 @@
           }
         }
       },
+      "ConsultationListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsultationResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ConsultationMessage": {
+        "type": "object",
+        "required": [
+          "id",
+          "sender_display_name",
+          "sender_role",
+          "created_at",
+          "body"
+        ],
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/ConsultationMessageBody"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "sender_display_name": {
+            "type": "string"
+          },
+          "sender_role": {
+            "$ref": "#/components/schemas/SenderRole"
+          }
+        }
+      },
+      "ConsultationMessageAttachment": {
+        "type": "object",
+        "required": [
+          "id",
+          "file_name",
+          "mime_type",
+          "file_size"
+        ],
+        "properties": {
+          "file_name": {
+            "type": "string"
+          },
+          "file_size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string"
+          },
+          "mime_type": {
+            "type": "string"
+          }
+        }
+      },
+      "ConsultationMessageBody": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConsultationMessageText"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "TEXT"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConsultationMessageAttachment"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "ATTACHMENT"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConsultationMessageSystemEvent"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "SYSTEM_EVENT"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "ConsultationMessageListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ConsultationMessages"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ConsultationMessageSystemEvent": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/SystemEventKind"
+          }
+        }
+      },
+      "ConsultationMessageText": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "ConsultationMessages": {
+        "type": "object",
+        "required": [
+          "provider",
+          "messages"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsultationMessage"
+            }
+          },
+          "provider": {
+            "$ref": "#/components/schemas/BenefitProviderKind"
+          }
+        }
+      },
+      "ConsultationResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "primary_user_id",
+          "dependant_id",
+          "benefit_id",
+          "benefit_provider_id",
+          "status",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "benefit_id": {
+            "type": "string"
+          },
+          "benefit_provider_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "dependant_id": {
+            "type": "string"
+          },
+          "external_reference_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "primary_user_id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConsultationStatus"
+          },
+          "unread_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ConsultationStatus": {
+        "type": "string",
+        "description": "Consultation lifecycle status. INITIATED = row inserted, upstream thread not yet created (transient or stuck). ACTIVE = upstream thread open (mirrors chatStatusCategory OPEN). COMPLETED = doctor marked done (mirrors DONE). CLOSED = archived (mirrors CLOSED). FAILED = upstream create_thread errored after our INSERT; not visible to FE.",
+        "enum": [
+          "INITIATED",
+          "ACTIVE",
+          "COMPLETED",
+          "CLOSED",
+          "FAILED"
+        ]
+      },
       "ContactDetails": {
         "type": "object",
         "properties": {
@@ -7372,6 +8418,21 @@
             "type": "string"
           },
           "provider_id": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateConsultationRequest": {
+        "type": "object",
+        "required": [
+          "dependant_id",
+          "benefit_id"
+        ],
+        "properties": {
+          "benefit_id": {
+            "type": "string"
+          },
+          "dependant_id": {
             "type": "string"
           }
         }
@@ -7915,6 +8976,60 @@
           }
         ],
         "description": "A length of time expressed in a single unit.\n\nWire format: externally-tagged union — single-key object whose key is the\nunit name (`days` / `months` / `years`) and whose value is the integer\ncount. Example: `{\"months\": 12}` or `{\"years\": 1}`."
+      },
+      "EligibleDependant": {
+        "type": "object",
+        "required": [
+          "dependant_id",
+          "first_name",
+          "last_name",
+          "salutation",
+          "gender",
+          "relationship",
+          "insurance_policy_id",
+          "active_consultation_count"
+        ],
+        "properties": {
+          "active_consultation_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dependant_id": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "insurance_policy_id": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/Relationship"
+          },
+          "salutation": {
+            "$ref": "#/components/schemas/Salutation"
+          }
+        }
+      },
+      "EligibleDependantsResponse": {
+        "type": "object",
+        "required": [
+          "dependants"
+        ],
+        "properties": {
+          "dependants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EligibleDependant"
+            }
+          }
+        }
       },
       "EnrollerBank": {
         "type": "object",
@@ -9577,6 +10692,16 @@
           }
         }
       },
+      "SenderRole": {
+        "type": "string",
+        "description": "Who sent a consultation message. Classified server-side from the upstream sender metadata; UNKNOWN is the forward-compat fallback when no signal is available.",
+        "enum": [
+          "PATIENT",
+          "DOCTOR",
+          "SYSTEM",
+          "UNKNOWN"
+        ]
+      },
       "Sort": {
         "type": "object",
         "description": "Sort specification for list endpoints. Read the field names as\n\"sort **on** `<column>` **by** `<direction>`\".",
@@ -9978,6 +11103,16 @@
             "type": "string"
           }
         }
+      },
+      "SystemEventKind": {
+        "type": "string",
+        "description": "Kind of provider-emitted system event surfaced inside a consultation message. OTHER is the forward-compat fallback when the adapter sees an upstream kind it does not yet know — keeps the message stream parseable instead of failing the page.",
+        "enum": [
+          "PARTICIPANT_ADDED",
+          "PARTICIPANT_REMOVED",
+          "TOPIC_UPDATED",
+          "OTHER"
+        ]
       },
       "TimeRange": {
         "type": "object",
@@ -10557,6 +11692,10 @@
     {
       "name": "EventLog",
       "description": "Admin audit log endpoints"
+    },
+    {
+      "name": "Consultation",
+      "description": "Chat-based consultation endpoints"
     }
   ]
 }

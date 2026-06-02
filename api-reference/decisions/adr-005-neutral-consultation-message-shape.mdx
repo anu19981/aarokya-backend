@@ -1,0 +1,144 @@
+---
+title: "ADR-005: Neutral Consultation Message Shape"
+description: "Replace the per-provider message union with one neutral wire shape we own; adapters map upstream messages into it."
+---
+
+<Note>
+  **Status:** Accepted · **Date:** 2026-05 · **Deciders:** Aarokya Engineering ·
+  **Supersedes:** [ADR-004](/decisions/adr-004-provider-keyed-consultation-messages) (wire shape only)
+</Note>
+
+## Context
+
+[ADR-004](/decisions/adr-004-provider-keyed-consultation-messages) shipped a `provider`-tagged discriminated union for the list-messages
+response. Each provider carried its own message types (`NarayanaConsultationMessage*`,
+`NarayanaConsultationMessageBody`, …), surfacing the upstream vocabulary 1:1 on the wire.
+The principle was *additive provider onboarding* — a new provider would land as a new
+union variant without changing existing ones.
+
+In practice, the cost showed up before the second provider:
+
+- **Mobile + dashboard clients had to learn each provider's wire vocabulary.** A union with
+  variant-specific message shapes meant downstream parsers per-provider. The "additive"
+  property was paid for by every client.
+- **Provider-specific leaks** (e.g. Narayana's `iso8601_ist` IST-shifted naïve timestamp,
+  the two-id model of `id` + `chat_message_id` on attachments, free-form `system_event.kind`
+  strings) all flowed straight to the client.
+- **Adding a provider still requires a wire shape change** — the discriminator value, the
+  schema, the per-variant types. The union framing only *seemed* additive.
+
+We want the wire shape to belong to *us*, not to whichever vendor sits behind a benefit.
+
+---
+
+## Options Considered
+
+<AccordionGroup>
+  <Accordion title="Option A — Flatten at API boundary, keep domain provider-keying (chosen)">
+    `api_models` becomes neutral: one `ConsultationMessage`, one `ConsultationMessageBody`,
+    one `ConsultationMessages { provider, messages }` envelope (a plain struct — `provider`
+    is informational metadata, not a serde discriminator). The domain layer keeps
+    `DomainConsultationMessages::Narayana(Vec<NarayanaDomainMessage>)`; the adapter maps
+    its own domain message into the neutral API shape in `utils/consultation/narayana.rs`
+    via the existing `*Ext::to_response` convention.
+
+    **Pros:** clients see one shape; the "adapter owns its domain types" invariant from
+    ADR-004 survives where it actually pays off (DomainThread, DomainAttachmentStream, the
+    way the create-thread call carries upstream-specific data); adding a provider becomes
+    *one mapping arm in `utils/consultation.rs`* instead of a public schema change.
+    **Cons:** two shapes per concept on the inside (neutral api + provider-keyed domain).
+    Mild duplication, paid by the adapter author, not by clients.
+    **Verdict:** Accepted.
+  </Accordion>
+  <Accordion title="Option B — Push neutrality into the domain layer too">
+    Delete `NarayanaDomainMessage`; the adapter constructs neutral domain messages directly.
+
+    **Pros:** one shape end-to-end.
+    **Cons:** burns the "adapter owns its domain types" invariant — a future provider with
+    a richer chat model would either drop fields or re-introduce per-provider types,
+    effectively undoing this refactor.
+    **Verdict:** Rejected.
+  </Accordion>
+  <Accordion title="Option C — Envelope rename only">
+    Keep `NarayanaConsultationMessage*` on the wire; only collapse the union → struct so
+    the discriminator becomes a regular field.
+
+    **Pros:** smallest change.
+    **Cons:** doesn't meet the goal — clients still parse provider-shaped messages.
+    **Verdict:** Rejected.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Decision
+
+The list-messages response carries one neutral message shape we own. The `provider` field
+stays as informational metadata on the envelope (not a serde tag).
+
+```json
+{
+  "total": 1,
+  "limit": 20,
+  "offset": 0,
+  "data": {
+    "provider": "NARAYANA",
+    "messages": [
+      {
+        "id": "19:acsV2_msg_…",
+        "sender_display_name": "Patient:Alice",
+        "sender_role": "PATIENT",
+        "created_at": "2026-04-28T16:00:00Z",
+        "body": { "message_type": "TEXT", "content": "How are you feeling today?" }
+      }
+    ]
+  }
+}
+```
+
+What changed from ADR-004's wire:
+
+- `data` is a struct, not a serde-tagged union. `provider` is a plain
+  `BenefitProviderKind` field.
+- `Narayana*` message types are removed from `api_models`. Neutral types
+  (`ConsultationMessage`, `ConsultationMessageBody`, `ConsultationMessageText`,
+  `ConsultationMessageAttachment`, `ConsultationMessageSystemEvent`) replace them.
+- **New field `sender_role`** on each message: `PATIENT | DOCTOR | SYSTEM | UNKNOWN`. The
+  Narayana adapter classifies from upstream sender metadata; the current heuristic is a
+  prefix-match against `PATIENT_DISPLAY_NAME_PREFIX` (`"Patient:"`, which we ourselves mint
+  on outbound). System message types collapse to `SYSTEM`.
+- **New enum `SystemEventKind`** (`PARTICIPANT_ADDED | PARTICIPANT_REMOVED | TOPIC_UPDATED |
+  OTHER`) replaces the free-form `system_event.kind` string. `OTHER` is the forward-compat
+  fallback if an adapter ever sees an upstream kind it doesn't know — keeps the response
+  parseable instead of dropping the page.
+- **Timestamp** rename `created_on` → `created_at`; serde becomes the project-standard
+  `iso8601` (UTC `Z`). The earlier `iso8601_ist` was wrong (treated naïve UTC as IST and
+  shifted by +5:30 on the wire) and is now unused.
+- **Attachment** field rename `chat_message_id` → `id` (the same identifier clients use to
+  pull the binary from `/attachment`).
+
+---
+
+## Consequences
+
+<CardGroup cols={2}>
+  <Card title="Gained">
+    - Clients see one shape regardless of provider. New providers no longer break parsers.
+    - Adding a provider is a single `*Ext::to_response` mapping in `utils/consultation/<provider>.rs`. No public schema change.
+    - Provider-shaped leaks (IST timestamps, two-id attachments, free-form system kinds) closed.
+    - Adapter-owns-domain-types invariant from ADR-004 stays in force for `DomainThread`, `DomainAttachmentStream`, and any provider-rich create-thread inputs.
+  </Card>
+  <Card title="Trade-offs">
+    - Hard wire break: mobile + dashboard parsers must reflect the new envelope; no back-compat shim.
+    - `SystemEventKind::Other` is the first non-exhaustive wire enum in the codebase. Future enums should follow the same posture deliberately (catch-all variant + `warn!` on unknown).
+    - `sender_role` for Text/Attachment messages today depends on a prefix-match heuristic; if upstream returns messages we didn't mint (multi-tenant Narayana share?), classification flips to `DOCTOR`. Acceptable today, documented in AGENT-NOTES.
+  </Card>
+</CardGroup>
+
+---
+
+## Related
+
+- [ADR-004: Provider-Keyed Consultation Messages](/decisions/adr-004-provider-keyed-consultation-messages) (superseded — wire shape)
+- Consultation module: [modules/consultation](/modules/consultation), [api/consultation-guide](/api/consultation-guide)
+- Backend agent notes: `backend/ai-docs/domains/consultation/AGENT-NOTES.md`

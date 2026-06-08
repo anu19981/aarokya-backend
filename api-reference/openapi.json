@@ -1152,6 +1152,200 @@
         ]
       }
     },
+    "/benefit_provider_orders": {
+      "get": {
+        "tags": [
+          "BenefitProviderOrder"
+        ],
+        "operationId": "list_benefit_provider_orders",
+        "parameters": [
+          {
+            "name": "benefit_entity_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "benefit_provider_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Benefit provider orders matching the filters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListBenefitProviderOrdersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "BenefitProviderOrder"
+        ],
+        "operationId": "create_benefit_provider_order",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBenefitProviderOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Benefit provider order created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitProviderOrderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error / multiple approved policies"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Benefit provider or approved policy not found"
+          },
+          "409": {
+            "description": "Duplicate external order id for the provider"
+          }
+        }
+      }
+    },
+    "/benefit_provider_orders/{id}": {
+      "get": {
+        "tags": [
+          "BenefitProviderOrder"
+        ],
+        "operationId": "get_benefit_provider_order",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Benefit provider order UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Benefit provider order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitProviderOrderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    },
+    "/benefit_provider_orders/{id}/sync": {
+      "patch": {
+        "tags": [
+          "BenefitProviderOrder"
+        ],
+        "operationId": "sync_benefit_provider_order",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Benefit provider order UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reconciled benefit provider order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitProviderOrderResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    },
     "/benefit_providers": {
       "get": {
         "tags": [
@@ -2476,6 +2670,49 @@
       }
     },
     "/insurance_policies/{insurance_policy_id}": {
+      "get": {
+        "tags": [
+          "Insurance Policy (Admin)"
+        ],
+        "operationId": "admin_get_insurance_policy",
+        "parameters": [
+          {
+            "name": "insurance_policy_id",
+            "in": "path",
+            "description": "Insurance Policy ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Insurance policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsurancePolicyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
+          },
+          "404": {
+            "description": "Insurance policy not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
       "patch": {
         "tags": [
           "Insurance Policy (Admin)"
@@ -4543,183 +4780,6 @@
             "BearerAuth": []
           }
         ]
-      }
-    },
-    "/users/{user_id}/benefit_provider_orders": {
-      "get": {
-        "tags": [
-          "BenefitProviderOrder"
-        ],
-        "operationId": "list_benefit_provider_orders",
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "description": "User ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Benefit provider orders for the user",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ListBenefitProviderOrdersResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "BenefitProviderOrder"
-        ],
-        "operationId": "create_benefit_provider_order",
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "description": "User ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateBenefitProviderOrderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Benefit provider order created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BenefitProviderOrderResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error / multiple approved policies"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "User, benefit provider, or approved policy not found"
-          },
-          "409": {
-            "description": "Duplicate external order id for the provider"
-          }
-        }
-      }
-    },
-    "/users/{user_id}/benefit_provider_orders/{id}": {
-      "get": {
-        "tags": [
-          "BenefitProviderOrder"
-        ],
-        "operationId": "get_benefit_provider_order",
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "description": "User ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Benefit provider order UUID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Benefit provider order",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BenefitProviderOrderResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "Order not found"
-          }
-        }
-      }
-    },
-    "/users/{user_id}/benefit_provider_orders/{id}/sync": {
-      "patch": {
-        "tags": [
-          "BenefitProviderOrder"
-        ],
-        "operationId": "sync_benefit_provider_order",
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "description": "User ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Benefit provider order UUID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Reconciled benefit provider order",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BenefitProviderOrderResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "Order not found"
-          }
-        }
       }
     },
     "/users/{user_id}/benefits/{benefit_id}/eligible_dependants": {
@@ -7613,7 +7673,7 @@
             "$ref": "#/components/schemas/UserId"
           },
           "wallet_txn_data": {
-            "type": "string"
+            "$ref": "#/components/schemas/WalletTxnStatus"
           }
         }
       },
@@ -8364,8 +8424,8 @@
         ],
         "properties": {
           "amount": {
-            "type": "number",
-            "format": "double"
+            "type": "integer",
+            "format": "int64"
           },
           "benefit_entity_id": {
             "type": "string"
@@ -8375,6 +8435,12 @@
           },
           "external_order_id": {
             "type": "string"
+          },
+          "external_ref_id": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -9692,14 +9758,29 @@
       "ListBenefitProviderOrdersResponse": {
         "type": "object",
         "required": [
-          "orders"
+          "data",
+          "total",
+          "limit",
+          "offset"
         ],
         "properties": {
-          "orders": {
+          "data": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/BenefitProviderOrderResponse"
             }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -10229,6 +10310,7 @@
           "user_id",
           "account_id",
           "amount",
+          "wallet_txn_data",
           "source",
           "created_at",
           "last_modified_at"
@@ -10260,6 +10342,9 @@
           },
           "user_id": {
             "$ref": "#/components/schemas/UserId"
+          },
+          "wallet_txn_data": {
+            "$ref": "#/components/schemas/WalletTxnStatus"
           }
         }
       },
@@ -11600,6 +11685,57 @@
           "ACTIVE",
           "DEACTIVATED"
         ]
+      },
+      "WalletTxnStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "PENDING"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "detail",
+              "status"
+            ],
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "SUCCESS"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "FAILED"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Lifecycle status of the wallet-side transaction attached to an order.\n\nWallet-agnostic — today PBA, tomorrow any other wallet integration.\nInitialised to `Pending` when the order row is inserted; flipped to\n`Success(deposit_id)` once the wallet credit succeeds, with the\nreturned deposit id embedded in the variant so re-polls have a single\ndedup signal. `Failed` is reserved for the explicit-failure path.\n\nSerialized to text as `pending`, `success:<deposit_id>`, or `failed`."
       }
     },
     "securitySchemes": {

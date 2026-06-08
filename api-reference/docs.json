@@ -55,6 +55,7 @@
               "modules/mrn",
               "modules/insurance_policy",
               "modules/mandate",
+              "modules/mandate_execution",
               "modules/order",
               "modules/benefit_provider_order",
               "modules/sponsor",
@@ -183,8 +184,24 @@
                 "group": "Mandate",
                 "pages": [
                   "api/endpoints/mandate/register",
+                  "api/endpoints/mandate/register-v2",
                   "api/endpoints/mandate/order-status",
-                  "api/endpoints/mandate/active"
+                  "api/endpoints/mandate/active",
+                  "api/endpoints/mandate/list-orders",
+                  "api/endpoints/mandate/list",
+                  "api/endpoints/mandate/check-status",
+                  "api/endpoints/mandate/update",
+                  "api/endpoints/mandate/start",
+                  "api/endpoints/mandate/pause",
+                  "api/endpoints/mandate/resume"
+                ]
+              },
+              {
+                "group": "Mandate Execution",
+                "pages": [
+                  "api/endpoints/mandate-execution/execute",
+                  "api/endpoints/mandate-execution/status-check",
+                  "api/endpoints/mandate-execution/list"
                 ]
               },
               {

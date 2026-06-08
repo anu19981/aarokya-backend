@@ -2822,6 +2822,123 @@
         ]
       }
     },
+    "/mandates/{mandate_id}/execute": {
+      "post": {
+        "tags": [
+          "MandateExecution"
+        ],
+        "operationId": "execute_mandate",
+        "parameters": [
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "description": "Aarokya internal mandate UUID (mandates.id)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Mandate-Execution-Id",
+            "in": "header",
+            "description": "Per-firing Kronos execution id (templated via `{{execution.execution_id}}`). Stable across a firing's retries; callers manually replaying a firing must reuse the same value.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Idempotent replay / resumed row",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateExecutionResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Mandate execution recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateExecutionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Mandate not in Live state, or missing/empty execution-id header"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Mandate not found"
+          }
+        }
+      }
+    },
+    "/mandates/{mandate_id}/execution/{execution_id}/status_check": {
+      "post": {
+        "tags": [
+          "MandateExecution"
+        ],
+        "operationId": "status_check_mandate_execution",
+        "parameters": [
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "description": "Aarokya internal mandate UUID (mandates.id)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "execution_id",
+            "in": "path",
+            "description": "mandate_executions.id (UUID PK)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Mandate-Execution-Id",
+            "in": "header",
+            "description": "Per-firing Kronos execution id (templated via `{{execution.execution_id}}`). Used for log correlation only on this route.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status reconciled (terminal-state fast-path or settled this attempt)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateExecutionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing/empty execution-id header, malformed body, or mandate_id/execution_id mismatch"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Execution row not found"
+          }
+        }
+      }
+    },
     "/mrns": {
       "get": {
         "tags": [
@@ -6392,6 +6509,7 @@
         "tags": [
           "Mandate"
         ],
+        "summary": "Legacy mandate-status route. Returns the flat-amount `MandateOrderResponse`\nfor backwards compatibility with pre-currency clients. New callers should\nuse [`check_mandate_status`] (`POST /users/{u}/mandate/{m}/status`).",
         "operationId": "get_mandate_order_status",
         "parameters": [
           {
@@ -6415,7 +6533,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Current mandate status",
+            "description": "Current mandate status (legacy flat-amount shape)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6478,6 +6596,7 @@
         "tags": [
           "Mandate"
         ],
+        "summary": "Legacy list route. No pagination; returns flat-amount `MandateOrderResponse`\nitems. Preserved for backwards compatibility — new callers should hit\n[`list_user_mandates`] at `/users/{u}/mandates`.",
         "operationId": "list_user_mandate_orders",
         "parameters": [
           {
@@ -6492,11 +6611,69 @@
         ],
         "responses": {
           "200": {
-            "description": "All mandate orders for the user (most-recent first)",
+            "description": "All mandate orders for the user (most-recent first, legacy shape)",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ListUserMandateOrdersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/users/{user_id}/mandates": {
+      "get": {
+        "tags": [
+          "Mandate"
+        ],
+        "operationId": "list_user_mandates",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mandates for the user (most-recent first)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListUserMandatesResponse"
                 }
               }
             }
@@ -6526,11 +6703,11 @@
         ],
         "responses": {
           "200": {
-            "description": "The user's live (Pending, Active, or Paused) mandate",
+            "description": "The user's live mandate",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MandateOrderResponse"
+                  "$ref": "#/components/schemas/MandateResponse"
                 }
               }
             }
@@ -6540,6 +6717,414 @@
           },
           "404": {
             "description": "User not found, or the user has no live mandate"
+          }
+        }
+      }
+    },
+    "/users/{user_id}/mandates/register": {
+      "post": {
+        "tags": [
+          "Mandate"
+        ],
+        "summary": "Currency-aware registration. Mirrors [`register_mandate`] but returns\nthe richer `RegisterMandateResponseV2` (amount + currency envelope).",
+        "operationId": "register_mandate_v2",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Mandate registration initiated (currency-aware shape)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterMandateResponseV2"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/users/{user_id}/mandates/{mandate_id}": {
+      "post": {
+        "tags": [
+          "Mandate"
+        ],
+        "operationId": "update_mandate",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "description": "Aarokya internal mandate UUID (mandates.id)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMandateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Mandate updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid status transition"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Mandate not found"
+          },
+          "502": {
+            "description": "Kronos schedule/cancel call failed"
+          }
+        }
+      }
+    },
+    "/users/{user_id}/mandates/{mandate_id}/executions": {
+      "get": {
+        "tags": [
+          "MandateExecution"
+        ],
+        "summary": "Admin/dashboard list of a single mandate's autopay-debit attempts\n(`mandate_executions` rows), most-recent first, each joined to its linked\norder's Juspay `external_status`. Mirrors `list_user_mandate_orders`' auth\n(`require_self_or_trusted_backend`); the core handler additionally asserts\nthe mandate belongs to `user_id`. Distinct from the Kronos-fired\n`execute`/`status_check` routes above.",
+        "operationId": "list_mandate_executions",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "description": "Aarokya internal mandate UUID (mandates.id)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Executions for the mandate (most-recent first)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListMandateExecutionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Mandate not found for this user"
+          }
+        }
+      }
+    },
+    "/users/{user_id}/mandates/{mandate_id}/executions/{execution_id}": {
+      "get": {
+        "tags": [
+          "MandateExecution"
+        ],
+        "summary": "Single autopay-execution row by id. Same auth as the list\n(`require_self_or_trusted_backend`); the core handler asserts the execution\nbelongs to `mandate_id` and the mandate to `user_id` (fails closed).",
+        "operationId": "get_mandate_execution",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "description": "Aarokya internal mandate UUID (mandates.id)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "execution_id",
+            "in": "path",
+            "description": "mandate_executions.id (UUID PK)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The mandate execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateExecutionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Execution not found for this user's mandate"
+          }
+        }
+      }
+    },
+    "/users/{user_id}/mandates/{mandate_id}/pause": {
+      "post": {
+        "tags": [
+          "Mandate"
+        ],
+        "operationId": "pause_mandate",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "description": "Aarokya internal mandate UUID (mandates.id)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Autopay paused — Kronos job cancelled, mandate Paused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid status transition (mandate not Live)"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Mandate not found"
+          },
+          "502": {
+            "description": "Kronos cancel call failed"
+          }
+        }
+      }
+    },
+    "/users/{user_id}/mandates/{mandate_id}/resume": {
+      "post": {
+        "tags": [
+          "Mandate"
+        ],
+        "operationId": "resume_mandate",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "description": "Aarokya internal mandate UUID (mandates.id)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Autopay resumed — mandate Live, fresh Kronos job scheduled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid status transition (mandate not Paused)"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Mandate not found"
+          },
+          "502": {
+            "description": "Kronos schedule call failed"
+          }
+        }
+      }
+    },
+    "/users/{user_id}/mandates/{mandate_id}/start": {
+      "post": {
+        "tags": [
+          "Mandate"
+        ],
+        "operationId": "start_mandate",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "description": "Aarokya internal mandate UUID (mandates.id)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Autopay started — mandate Live, Kronos job scheduled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid status transition (mandate not Active/Created)"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Mandate not found"
+          },
+          "502": {
+            "description": "Kronos schedule call failed"
+          }
+        }
+      }
+    },
+    "/users/{user_id}/mandates/{mandate_id}/status": {
+      "post": {
+        "tags": [
+          "Mandate"
+        ],
+        "operationId": "check_mandate_status",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "description": "Aarokya internal mandate UUID (mandates.id)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mandate refreshed from Juspay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Mandate not found"
           }
         }
       }
@@ -9868,6 +10453,20 @@
           }
         }
       },
+      "ListMandateExecutionsResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MandateExecutionSummary"
+            }
+          }
+        }
+      },
       "ListMessagesQuery": {
         "type": "object",
         "required": [
@@ -10000,6 +10599,152 @@
           }
         }
       },
+      "ListUserMandatesRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ListUserMandatesResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MandateResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "MandateExecutionResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "mandate_id",
+          "job_execution_id",
+          "amount",
+          "status",
+          "order_id",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "job_execution_id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "mandate_id": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MandateExecutionStatus"
+          }
+        }
+      },
+      "MandateExecutionStatus": {
+        "type": "string",
+        "description": "Internal lifecycle status of a mandate-execution (autopay) firing, independent of the linked order's `external_status` (Juspay vocabulary). Inserted as `Initiated` when the Kronos firing is claimed, advances to `Pending` once the charge is dispatched, and lands on `Success`/`Failed` from the `/orders` reconciliation. Distinct from `OrderStatus` so the firing's vocabulary can diverge from the payment's. See `From<&ExternalOrderStatus>` for the provider-status mapping.",
+        "enum": [
+          "INITIATED",
+          "PENDING",
+          "SUCCESS",
+          "FAILED"
+        ]
+      },
+      "MandateExecutionSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "mandate_id",
+          "job_execution_id",
+          "amount",
+          "status",
+          "order_id",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "external_order_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "job_execution_id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "mandate_id": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MandateExecutionStatus"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
       "MandateFrequency": {
         "type": "string",
         "description": "Debit frequency for a mandate. Mirrors Juspay's wire enum.",
@@ -10102,16 +10847,112 @@
           }
         }
       },
+      "MandateResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "account_id",
+          "amount",
+          "max_amount",
+          "frequency",
+          "mandate_status",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "external_mandate_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "external_order_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "frequency": {
+            "$ref": "#/components/schemas/MandateFrequency"
+          },
+          "id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "mandate_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mandate_status": {
+            "$ref": "#/components/schemas/MandateStatus"
+          },
+          "max_amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "payment_method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payment_method_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
       "MandateStatus": {
         "type": "string",
         "description": "Internal mandate lifecycle status — coarse-grained view derived from the raw Juspay status string. Starts at INITIATED the moment a registration row is created (before/while the Juspay session is opened) and advances to PENDING/ACTIVE/etc. as Juspay reports progress.",
         "enum": [
           "INITIATED",
           "PENDING",
+          "CREATED",
           "ACTIVE",
-          "FAILED",
+          "LIVE",
           "PAUSED",
-          "CANCELLED"
+          "EXTERNALLY_PAUSED",
+          "FAILED",
+          "CANCELLED",
+          "COMPLETED",
+          "OTHER"
         ]
       },
       "MemberDetail": {
@@ -10643,6 +11484,51 @@
           "max_amount": {
             "type": "integer",
             "format": "int64"
+          },
+          "payload": {},
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "RegisterMandateResponseV2": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "account_id",
+          "amount",
+          "max_amount",
+          "frequency",
+          "mandate_status",
+          "payload",
+          "created_at",
+          "last_modified_at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "frequency": {
+            "$ref": "#/components/schemas/MandateFrequency"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "mandate_status": {
+            "$ref": "#/components/schemas/MandateStatus"
+          },
+          "max_amount": {
+            "$ref": "#/components/schemas/AmountResponse"
           },
           "payload": {},
           "user_id": {
@@ -11455,6 +12341,17 @@
           }
         }
       },
+      "UpdateMandateRequest": {
+        "type": "object",
+        "required": [
+          "mandate_status"
+        ],
+        "properties": {
+          "mandate_status": {
+            "$ref": "#/components/schemas/MandateStatus"
+          }
+        }
+      },
       "UpdateMrnRequest": {
         "type": "object",
         "required": [
@@ -11697,6 +12594,24 @@
               "status": {
                 "type": "string",
                 "enum": [
+                  "INITIATED"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "detail",
+              "status"
+            ],
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
                   "PENDING"
                 ]
               }
@@ -11723,6 +12638,24 @@
           {
             "type": "object",
             "required": [
+              "detail",
+              "status"
+            ],
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "VOIDED"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
               "status"
             ],
             "properties": {
@@ -11735,7 +12668,7 @@
             }
           }
         ],
-        "description": "Lifecycle status of the wallet-side transaction attached to an order.\n\nWallet-agnostic — today PBA, tomorrow any other wallet integration.\nInitialised to `Pending` when the order row is inserted; flipped to\n`Success(deposit_id)` once the wallet credit succeeds, with the\nreturned deposit id embedded in the variant so re-polls have a single\ndedup signal. `Failed` is reserved for the explicit-failure path.\n\nSerialized to text as `pending`, `success:<deposit_id>`, or `failed`."
+        "description": "Lifecycle status of the wallet-side transaction attached to an order.\n\nWallet-agnostic — today PBA, tomorrow any other wallet integration.\nThe lifecycle has five observable states:\n\n- `Initiated` — order row inserted; no wallet call has been made yet. Set\n  at row create-time. Single-phase (interactive add-money) advances\n  straight to `Success`; two-phase (mandate-autopay) advances to `Pending`.\n- `Pending(deposit_id)` — two-phase Phase 1 succeeded: the wallet provider\n  accepted the deposit and returned its id, but it is still parked on the\n  provider side waiting for an external settlement signal. Carried between\n  the Juspay `/txns` ack and the `/orders/{id}=Charged` reconciliation.\n- `Success(deposit_id)` — terminal: the deposit has been finalised at\n  the wallet provider (Phase 2 confirm, or single-phase commit). The\n  provider's id is the single dedup signal for any further status poll.\n- `Voided(deposit_id)` — terminal: a parked `Pending` deposit was\n  explicitly released back to the source because the originating charge\n  reached a terminal failure. The provider's id is preserved for audit.\n- `Failed` — terminal: the originating charge failed before any\n  wallet-side deposit was held (Phase 1 never ran or itself failed).\n\nSerialized to text as:\n- `initiated`                        → `Initiated`\n- `pending:<deposit_id>`             → `Pending(deposit_id)`\n- `success:<deposit_id>`             → `Success(deposit_id)`\n- `voided:<deposit_id>`              → `Voided(deposit_id)`\n- `failed`                           → `Failed`"
       }
     },
     "securitySchemes": {
@@ -11807,7 +12740,11 @@
     },
     {
       "name": "Mandate",
-      "description": "Mandate registration and status"
+      "description": "Mandate registration, status, and lifecycle"
+    },
+    {
+      "name": "MandateExecution",
+      "description": "Kronos-fired mandate-execution routes. `execute` runs the per-firing debit; `status_check` reconciles execution rows whose Juspay-side status hadn't settled at debit time. Both gated by `require_callback_service`."
     },
     {
       "name": "Order",

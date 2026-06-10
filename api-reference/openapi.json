@@ -6377,10 +6377,10 @@
           {
             "name": "document_type",
             "in": "path",
-            "description": "Document type",
+            "description": "Document type path token (e.g. POLICY_CERTIFICATE, or HEALTH_CARD/{dependant_id})",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/InsurancePolicyDocumentType"
+              "type": "string"
             }
           }
         ],
@@ -10207,7 +10207,8 @@
           "status",
           "questionnaire",
           "created_at",
-          "last_modified_at"
+          "last_modified_at",
+          "documents"
         ],
         "properties": {
           "benefit_id": {
@@ -10230,6 +10231,9 @@
             "items": {
               "$ref": "#/components/schemas/DependantMember"
             }
+          },
+          "documents": {
+            "$ref": "#/components/schemas/PolicyDocuments"
           },
           "end_date": {
             "type": [
@@ -11360,6 +11364,41 @@
           "ACTIVE",
           "INACTIVE"
         ]
+      },
+      "PolicyDocuments": {
+        "type": "object",
+        "required": [
+          "health_cards"
+        ],
+        "properties": {
+          "customer_information_sheet": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enrollment_form": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "health_cards": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "policy_certificate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "PolicyQuestionnaire": {
         "type": "object",

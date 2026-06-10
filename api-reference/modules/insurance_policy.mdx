@@ -375,7 +375,11 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies \
   },
   "status": "pending",
   "created_at": "2026-04-13T10:00:00",
-  "last_modified_at": "2026-04-13T10:00:00"
+  "last_modified_at": "2026-04-13T10:00:00",
+  "documents": {
+    "health_cards": {},
+    "customer_information_sheet": "https://cdn.example.com/assets/customer_information_sheet.pdf"
+  }
 }
 ```
 </CodeGroup>
@@ -407,6 +411,21 @@ Policy responses carry the policyholder identity and full dependant roster as st
 
 <Note>
   `dependants` includes the SELF entry (the policyholder represented as a dependant on the policy roster). UIs that want to surface only the *additional* covered family members should filter by `relationship !== "SELF"`.
+</Note>
+
+### `documents` — backend-owned download URLs
+
+Every policy response carries a `documents` object so clients **never construct document paths themselves** — render exactly what the backend returns.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `documents.health_cards` | object (map) | `dependant_id → url` map, one entry per member; `url` is that member's health-card download (`…/documents/HEALTH_CARD/<dependant_id>`). Empty `{}` until the policy is downloadable. |
+| `documents.enrollment_form` | string? | Enrollment-form download URL. Omitted until the policy is downloadable. |
+| `documents.policy_certificate` | string? | Certificate-of-insurance download URL. Omitted until the policy is downloadable. |
+| `documents.customer_information_sheet` | string? | Static CDN (CloudFront) URL for the Customer Information Sheet. Omitted when not configured. Fetch directly from the CDN — the backend does not proxy it. |
+
+<Note>
+  The dynamic document URLs (`health_cards`, `enrollment_form`, `policy_certificate`) appear **only once the policy is downloadable** (status `ISSUED` and subsequent renewal states). Before then, `health_cards` is `{}` and the two URL fields are absent. The `customer_information_sheet` is status-independent. The **pre-purchase** enrollment form preview is a separate endpoint (`preview_enrollment_form`) and is not part of `documents`.
 </Note>
 
 ### `nominee_details` — Tagged Union

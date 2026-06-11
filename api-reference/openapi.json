@@ -6391,6 +6391,9 @@
               "application/pdf": {}
             }
           },
+          "400": {
+            "description": "Invalid or missing dependant_id (HEALTH_CARD requires it)"
+          },
           "401": {
             "description": "Missing or invalid bearer token"
           },

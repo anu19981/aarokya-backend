@@ -408,6 +408,239 @@
         ]
       }
     },
+    "/admin/mandate_executions": {
+      "get": {
+        "tags": [
+          "MandateExecution"
+        ],
+        "summary": "Admin cross-user execution list for the dashboard Payments area\n(Executions tab). Lean rows straight off `mandate_executions`. Admin /\nreadonly-admin gated. Distinct from the Kronos-fired routes above.",
+        "operationId": "admin_list_mandate_executions",
+        "parameters": [
+          {
+            "name": "statuses",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "PENDING,SUCCESS"
+          },
+          {
+            "name": "mandate_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cross-user autopay-execution list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminListMandateExecutionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
+    "/admin/mandates": {
+      "get": {
+        "tags": [
+          "Mandate"
+        ],
+        "summary": "Admin cross-user mandate list for the dashboard Payments area (Mandates\ntab). Unlike [`list_user_mandates`], `user_id` is an optional query filter\nrather than a path label. Admin / readonly-admin gated.",
+        "operationId": "admin_list_mandates",
+        "parameters": [
+          {
+            "name": "statuses",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "live,paused"
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
+            "name": "frequency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "MONTHLY,WEEKLY"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cross-user mandate list (most-recent first)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListUserMandatesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
     "/admin/narayana/auth_status": {
       "get": {
         "tags": [
@@ -714,6 +947,131 @@
             "BearerAuth": []
           }
         ]
+      }
+    },
+    "/admin/orders": {
+      "get": {
+        "tags": [
+          "Order"
+        ],
+        "summary": "Admin cross-user funding-order list for the dashboard Payments area (Orders\ntab). Lean rows straight off the `orders` row; filters by user, source kind\n(self/sponsor), and local status. Admin / readonly-admin gated.",
+        "operationId": "admin_list_orders",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
+            "name": "source_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/SourceKind"
+                }
+              ]
+            }
+          },
+          {
+            "name": "statuses",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "PENDING,SUCCESS"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cross-user funding-order list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminListOrdersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
       }
     },
     "/admin/readonly_users": {
@@ -7904,6 +8262,64 @@
           }
         ]
       },
+      "AdminListMandateExecutionsResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MandateExecutionSummary"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AdminListOrdersResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderStatusResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AdminNarayanaChatStatusCategory": {
         "type": "string",
         "enum": [
@@ -11453,6 +11869,16 @@
         ],
         "description": "Nominee for an insurance policy — either a registered dependant or an\nexternal person whose details are captured inline."
       },
+      "OrderStatus": {
+        "type": "string",
+        "description": "Local lifecycle status of an order, independent of the provider's `external_status` (Juspay vocabulary). Inserted as `Initiated` before the Juspay `/session` call so the row is always traceable, advances to `Pending` once the session is created, and lands on `Success`/`Failed` from the first terminal poll. See `From<&ExternalOrderStatus>` for the provider-status mapping.",
+        "enum": [
+          "INITIATED",
+          "PENDING",
+          "SUCCESS",
+          "FAILED"
+        ]
+      },
       "OrderStatusResponse": {
         "type": "object",
         "required": [
@@ -11462,6 +11888,7 @@
           "amount",
           "wallet_txn_data",
           "source",
+          "status",
           "created_at",
           "last_modified_at"
         ],
@@ -11489,6 +11916,9 @@
           },
           "source": {
             "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
           },
           "user_id": {
             "$ref": "#/components/schemas/UserId"

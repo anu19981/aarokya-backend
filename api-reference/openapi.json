@@ -1152,6 +1152,131 @@
         ]
       }
     },
+    "/benefit_entities": {
+      "get": {
+        "tags": [
+          "BenefitEntity"
+        ],
+        "operationId": "list_benefit_entities",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
+            "name": "entity_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/BenefitType"
+                }
+              ]
+            }
+          },
+          {
+            "name": "benefit_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated benefit-utilization ledger entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitEntityListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/benefit_provider_orders": {
       "get": {
         "tags": [
@@ -8127,6 +8252,62 @@
           }
         ]
       },
+      "BenefitEntityListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BenefitEntityResponse"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "BenefitEntityResponse": {
+        "type": "object",
+        "required": [
+          "entity_id",
+          "entity_type",
+          "benefit_id",
+          "user_id",
+          "created_at"
+        ],
+        "properties": {
+          "benefit_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "entity_type": {
+            "$ref": "#/components/schemas/BenefitType"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
       "BenefitListResponse": {
         "type": "object",
         "required": [
@@ -10332,6 +10513,75 @@
             }
           }
         }
+      },
+      "ListBenefitEntitiesRequest": {
+        "allOf": [
+          {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Sort"
+              }
+            ]
+          },
+          {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TimeRange"
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "benefit_id"
+            ],
+            "properties": {
+              "benefit_id": {
+                "type": "string"
+              },
+              "entity_type": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BenefitType"
+                  }
+                ]
+              },
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32"
+              },
+              "offset": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32"
+              },
+              "user_id": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UserId"
+                  }
+                ]
+              }
+            }
+          }
+        ]
       },
       "ListBenefitProviderCredentialsResponse": {
         "type": "object",
@@ -12755,6 +13005,10 @@
     {
       "name": "Benefit",
       "description": "Benefit management endpoints"
+    },
+    {
+      "name": "BenefitEntity",
+      "description": "Benefit-utilization ledger endpoints"
     },
     {
       "name": "User",

@@ -1,0 +1,73 @@
+---
+title: "Benefit Entities"
+description: "Append-only ledger of benefits each user has utilized."
+---
+
+The **benefit entities** module is an append-only **utilization ledger**. One
+row is recorded every time a user utilizes a benefit — when they create an
+**insurance policy** or **initiate a consultation**. It answers "which benefits
+has this user (or every user) utilized, and when?"
+
+<Info>
+  Admin-only. `GET /benefit_entities` requires an admin bearer token. There is
+  **no** write API — ledger rows are minted server-side, in the same database
+  transaction as the policy / consultation they describe, so a utilization can
+  never be recorded without its owning entity (or vice-versa).
+</Info>
+
+## Row shape
+
+| Field | Type | Notes |
+|---|---|---|
+| `entity_id` | `string` (UUID) | The utilized entity's id — the `insurance_policies.id` **or** `consultations.id`. This is the primary key. |
+| `entity_type` | enum | `INSURANCE_POLICY` or `CONSULTATION`. |
+| `benefit_id` | `string` (UUID) | The benefit that was utilized. |
+| `user_id` | `string` | The user (12-digit id) who utilized the benefit. |
+| `created_at` | `string` (ISO 8601) | When the utilization was recorded. |
+
+<Note>
+  `entity_id` is polymorphic (it points into two different tables) and so carries
+  no foreign key. Integrity is guaranteed at write time because the ledger row
+  is inserted in the same transaction as its owner.
+</Note>
+
+## Immutable history
+
+A utilization is a historical fact: rows are **never updated or deleted**, and
+the table has no status column. Consultations are recorded at **initiation** —
+a consultation that later fails upstream still has a ledger row, because the
+ledger records utilization attempts.
+
+## Listing
+
+`GET /benefit_entities` returns the standard paginated envelope
+(`{ data, total, limit, offset }`) and supports:
+
+- `user_id` — scope to a single user (omit to list across all users).
+- `entity_type` — `INSURANCE_POLICY` or `CONSULTATION`.
+- `benefit_id` — a specific benefit.
+- `start_time` / `end_time` — bound results by `created_at` (ISO 8601).
+- `on` / `by` — sort (`on=created_at`, `by=asc|desc`; defaults to newest first).
+- `limit` / `offset` — pagination (limit capped at 100).
+
+```bash
+curl -s "$BASE_URL/benefit_entities?entity_type=INSURANCE_POLICY&limit=20" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+```json
+{
+  "data": [
+    {
+      "entity_id": "0194e0f3-4b2a-7123-8f4a-9d5e2c8b1a3d",
+      "entity_type": "INSURANCE_POLICY",
+      "benefit_id": "0194e0f3-1111-7123-8f4a-9d5e2c8b1a3d",
+      "user_id": "012345678901",
+      "created_at": "2026-06-14T07:18:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}
+```

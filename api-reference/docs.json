@@ -50,6 +50,7 @@
               "modules/user",
               "modules/benefit_provider",
               "modules/benefit",
+              "modules/benefit_entity",
               "modules/dependant",
               "modules/account",
               "modules/mrn",
@@ -122,6 +123,12 @@
                   "api/endpoints/benefits/get",
                   "api/endpoints/benefits/update",
                   "api/endpoints/benefits/delete"
+                ]
+              },
+              {
+                "group": "Benefit Entities",
+                "pages": [
+                  "api/endpoints/benefit_entities/list"
                 ]
               },
               {

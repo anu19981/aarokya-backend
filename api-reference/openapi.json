@@ -7159,6 +7159,58 @@
         }
       }
     },
+    "/users/{user_id}/mandates/{mandate_id}/revoke": {
+      "post": {
+        "tags": [
+          "Mandate"
+        ],
+        "operationId": "revoke_mandate",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "description": "Aarokya internal mandate UUID (mandates.id)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mandate revoked at Juspay and re-synced: mandate_status=CANCELLED, external_mandate_status=REVOKED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid status transition, or mandate not registered at provider"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Mandate not found"
+          },
+          "500": {
+            "description": "Juspay revoke or Kronos teardown failed"
+          }
+        }
+      }
+    },
     "/users/{user_id}/mandates/{mandate_id}/start": {
       "post": {
         "tags": [

@@ -281,6 +281,100 @@
         ]
       }
     },
+    "/admin/daily-contributions": {
+      "get": {
+        "tags": [
+          "DailyContribution"
+        ],
+        "operationId": "admin_list_daily_contributions",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
+            "name": "utc_offset_minutes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User × day autopay-contribution pivot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminListDailyContributionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
     "/admin/event_logs": {
       "get": {
         "tags": [
@@ -8308,6 +8402,42 @@
           }
         }
       },
+      "AdminListDailyContributionsResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "days",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyContributionRow"
+            }
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AdminListInsurancePoliciesRequest": {
         "allOf": [
           {
@@ -10034,6 +10164,106 @@
         "enum": [
           "INR"
         ]
+      },
+      "DailyContributionCell": {
+        "type": "object",
+        "required": [
+          "date",
+          "execution_count"
+        ],
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "execution_amount": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AmountResponse"
+              }
+            ]
+          },
+          "execution_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "execution_status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MandateExecutionStatus"
+              }
+            ]
+          },
+          "self_amount": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AmountResponse"
+              }
+            ]
+          },
+          "self_status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrderStatus"
+              }
+            ]
+          },
+          "sponsor_amount": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AmountResponse"
+              }
+            ]
+          },
+          "sponsor_status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrderStatus"
+              }
+            ]
+          }
+        }
+      },
+      "DailyContributionRow": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "cells"
+        ],
+        "properties": {
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyContributionCell"
+            }
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
       },
       "DashboardUserCredentialsResponse": {
         "type": "object",
@@ -13657,6 +13887,10 @@
     {
       "name": "MandateExecution",
       "description": "Kronos-fired mandate-execution routes. `execute` runs the per-firing debit; `status_check` reconciles execution rows whose Juspay-side status hadn't settled at debit time. Both gated by `require_callback_service`."
+    },
+    {
+      "name": "DailyContribution",
+      "description": "Admin dashboard Daily Contributions pivot — per-user, per-day autopay activity (execution + self/sponsor contribution status and amounts). Read-only, admin-gated."
     },
     {
       "name": "Order",

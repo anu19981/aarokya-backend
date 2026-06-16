@@ -130,8 +130,8 @@ stateDiagram-v2
 ## Shared Infrastructure
 
 <CardGroup cols={3}>
-  <Card title="server_wrap" icon="shield-check" color="#7c3aed">
-    Single entry point for auth validation and error handling. Every handler calls `server_wrap(auth_guard, ...)` — no handler can skip auth accidentally.
+  <Card title="AuthN middleware" icon="shield-check" color="#7c3aed">
+    `AuthNMiddleware` authenticates every request app-wide and injects an `Actor`; handlers pull `web::ReqData<Actor>` and authorize with `actor.require_*()?` — no handler can skip auth accidentally.
   </Card>
   <Card title="Error Envelope" icon="triangle-exclamation" color="#dc2626">
     All errors return `{"error": {"code": "...", "message": "..."}}`. Switch on `code` (e.g. `MR-903`), not `message`.

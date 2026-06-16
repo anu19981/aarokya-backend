@@ -215,6 +215,39 @@ Claims are submitted to Aarokya's API, which forwards them to Narayana Health's 
 
 ---
 
+## Policy status webhook (clapi → Aarokya)
+
+The insurer's tech partner (**clapi**, under Narayana) keeps a policy's in-force
+status in sync by POSTing to `POST /benefits/{benefit_id}/webhook` — the **same**
+endpoint the consultation provider uses. Aarokya dispatches by the benefit's
+`benefit_type`; an `InsurancePolicy` benefit routes to the insurance status-sync
+handler.
+
+The payload's `benefit_entity_id` is the Aarokya `insurance_policies.id` we hand
+clapi at enrollment, so the policy is resolved directly. `external_ref_id`
+(optional) is the certificate / `external_policy_id` and is cross-checked when
+present (mismatch → `400`).
+
+| clapi `status` | Aarokya `PolicyStatus` |
+| -------------- | ---------------------- |
+| `inforced`     | `ISSUED`               |
+| `grace_period` | `REQUIRES_CUSTOMER_RENEWAL_IN_GRACE` |
+| `lapsed`       | `EXPIRED`              |
+
+<Note>
+Transitions are clapi-authoritative — including `EXPIRED → ISSUED` reinstatement
+— with two guards: a `REJECTED` policy is frozen, and a **pre-issue** policy
+(`PENDING` / `APPROVED`) ignores every clapi signal — its in-force lifecycle
+hasn't begun, so it can't be in-force, in grace, or lapsed. An unrecognised
+`status` is logged and acknowledged with `200` without changing the policy.
+</Note>
+
+**Auth:** a Narayana-scoped benefit-provider-service credential
+(`Authorization: Basic …`); the handler additionally requires the credential's
+`benefit_provider_id` to match the benefit's provider.
+
+---
+
 ## Endpoints
 
 | Method | Path | Description |

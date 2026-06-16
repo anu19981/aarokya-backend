@@ -12585,7 +12585,7 @@
         "type": "object",
         "description": "Sort specification for list endpoints. Read the field names as\n\"sort **on** `<column>` **by** `<direction>`\".",
         "properties": {
-          "by": {
+          "sort_by": {
             "oneOf": [
               {
                 "type": "null"
@@ -12596,7 +12596,7 @@
               }
             ]
           },
-          "on": {
+          "sort_on": {
             "oneOf": [
               {
                 "type": "null"

@@ -5086,6 +5086,45 @@
         "operationId": "list_users",
         "parameters": [
           {
+            "name": "name",
+            "in": "query",
+            "description": "Case-insensitive prefix search over the user's name. A single token matches the first OR last name; two tokens match first AND last name (full-name search).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "ravi kumar"
+          },
+          {
+            "name": "phone",
+            "in": "query",
+            "description": "Prefix search over the phone number (local number, without country code).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "9876"
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "description": "Prefix search over the 12-digit user id. Partial ids are accepted.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "0123"
+          },
+          {
             "name": "statuses",
             "in": "query",
             "required": false,

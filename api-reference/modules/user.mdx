@@ -41,11 +41,36 @@ Required fields for `complete_onboarding`: `first_name`, `last_name`, `dob`, `ge
 
 ---
 
+## Searching & Filtering Users
+
+`GET /users` accepts optional, **AND-combined** query parameters. All three search
+filters are **case-insensitive prefix** matches (`starts-with`), not substring.
+
+| Query param | Matches | Example |
+|-------------|---------|---------|
+| `name` | Prefix of the **first name**, **last name**, or **full name** (`first last`), case-insensitive | `?name=ravi`, `?name=ravi%20kumar` |
+| `phone` | Phone number prefix (local number, no country code) | `?phone=9876` |
+| `user_id` | 12-digit user-id prefix (partial ids accepted) | `?user_id=0123` |
+| `statuses` | Comma-separated `UserStatus` (`IN (...)`) | `?statuses=ACTIVE,ONBOARDING` |
+| `start_time` / `end_time` | `created_at` range | `?start_time=2026-01-01T00:00:00` |
+| `by` / `on` | Sort column / direction (default `created_at` / `desc`) | `?by=created_at&on=asc` |
+| `limit` / `offset` | Pagination (limit clamped to the server max) | `?limit=20&offset=40` |
+
+<Note>
+Prefix means `?name=ravi` matches "Ravi" and "Ravikumar" but **not** "Shravi".
+Search terms are sanitized to alphanumerics + spaces, and must contain **at
+least 3 alphanumeric characters** — shorter or symbol-only terms (e.g. a blank
+`?name=`) are ignored, not treated as match-everything.
+</Note>
+
+---
+
 ## Endpoints
 
 <CardGroup cols={2}>
   <Card title="GET /users" icon="list" color="#f59e0b" href="/api/endpoints/users/list">
-    **Admin only.** Paginated list of all users. Filter by `status`.
+    **Admin only.** Paginated list of users. Filter by `statuses`, creation
+    `time_range`, and search by `name` / `phone` / `user_id`.
   </Card>
   <Card title="GET /users/{user_id}" icon="user" color="#3b82f6" href="/api/endpoints/users/get">
     Fetch a user profile. JWT users can only fetch their own record.

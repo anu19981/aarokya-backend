@@ -1659,6 +1659,21 @@
             }
           },
           {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
+          },
+          {
             "name": "time_range",
             "in": "query",
             "required": false,
@@ -1847,6 +1862,21 @@
                 },
                 {
                   "$ref": "#/components/schemas/BenefitProviderStatus"
+                }
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
                 }
               ]
             }
@@ -2445,6 +2475,21 @@
             }
           },
           {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
+          },
+          {
             "name": "time_range",
             "in": "query",
             "required": false,
@@ -2813,6 +2858,21 @@
               ]
             },
             "example": "ACTIVE,COMPLETED"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
           },
           {
             "name": "limit",
@@ -3754,6 +3814,21 @@
             }
           },
           {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
+          },
+          {
             "name": "time_range",
             "in": "query",
             "required": false,
@@ -4328,6 +4403,21 @@
               ]
             },
             "example": "INDIVIDUAL,ORGANISATION"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
           },
           {
             "name": "time_range",
@@ -6028,6 +6118,21 @@
             }
           },
           {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -7126,6 +7231,21 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
             }
           },
           {
@@ -11325,23 +11445,37 @@
         }
       },
       "ListUserMandatesRequest": {
-        "type": "object",
-        "properties": {
-          "limit": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32"
+        "allOf": [
+          {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Sort"
+              }
+            ]
           },
-          "offset": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32"
+          {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32"
+              },
+              "offset": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32"
+              }
+            }
           }
-        }
+        ]
       },
       "ListUserMandatesResponse": {
         "type": "object",

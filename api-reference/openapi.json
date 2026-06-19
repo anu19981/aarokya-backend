@@ -10208,12 +10208,27 @@
         "type": "object",
         "required": [
           "date",
-          "execution_count"
+          "entries"
         ],
         "properties": {
           "date": {
             "type": "string"
           },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyContributionEntry"
+            }
+          }
+        }
+      },
+      "DailyContributionEntry": {
+        "type": "object",
+        "required": [
+          "source",
+          "order_id"
+        ],
+        "properties": {
           "execution_amount": {
             "oneOf": [
               {
@@ -10223,10 +10238,6 @@
                 "$ref": "#/components/schemas/AmountResponse"
               }
             ]
-          },
-          "execution_count": {
-            "type": "integer",
-            "format": "int32"
           },
           "execution_status": {
             "oneOf": [
@@ -10238,7 +10249,7 @@
               }
             ]
           },
-          "self_amount": {
+          "order_amount": {
             "oneOf": [
               {
                 "type": "null"
@@ -10248,7 +10259,10 @@
               }
             ]
           },
-          "self_status": {
+          "order_id": {
+            "type": "string"
+          },
+          "order_status": {
             "oneOf": [
               {
                 "type": "null"
@@ -10258,25 +10272,8 @@
               }
             ]
           },
-          "sponsor_amount": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/AmountResponse"
-              }
-            ]
-          },
-          "sponsor_status": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/OrderStatus"
-              }
-            ]
+          "source": {
+            "$ref": "#/components/schemas/DailyContributionSource"
           }
         }
       },
@@ -10303,6 +10300,45 @@
             "$ref": "#/components/schemas/UserId"
           }
         }
+      },
+      "DailyContributionSource": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "self_contribution"
+                ]
+              }
+            }
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SponsorContributionSource"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "sponsor"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
       },
       "DashboardUserCredentialsResponse": {
         "type": "object",
@@ -12956,6 +12992,17 @@
           },
           "user_id": {
             "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "SponsorContributionSource": {
+        "type": "object",
+        "required": [
+          "sponsor_id"
+        ],
+        "properties": {
+          "sponsor_id": {
+            "type": "string"
           }
         }
       },

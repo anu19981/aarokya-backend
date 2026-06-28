@@ -1,15 +1,17 @@
 ---
 title: "Auth Module"
-description: "Partner-driven token issuance. External partners call POST /auth/token with a phone number and platform ID — Aarokya creates the user on first call and returns a JWT."
+description: "Platform-driven token issuance. A platform service account calls POST /auth/token with a phone number and id-proof — Aarokya find-or-creates the user and returns an app JWT."
 ---
 
 <Info>
-  **Auth guard:** `api-key` header (external partner key). Partners cannot call admin endpoints. Admin cannot call this endpoint.
+  **Auth guard:** bearer JWT minted for a platform *service account* (`actor_type: platform_service`). The handler calls `actor.require_platform_service()`, so only a platform service-account token is admitted — admins, dashboard users, and end-user tokens are rejected. The `platform_id` is taken from the token claim, never from the request body.
 </Info>
 
 ## Overview
 
-Aarokya does not own user authentication — that belongs to the partner app (e.g. Namma Yatri). The partner backend calls `POST /auth/token` with a verified phone number and receives a short-lived JWT scoped to that user. This is the only auth endpoint; there are no refresh tokens, OTP flows, or session management.
+Aarokya does not own user authentication — that belongs to the partner app (e.g. Namma Yatri). The partner backend authenticates as its platform service account, then calls `POST /auth/token` with a verified phone number and id-proof and receives a short-lived app JWT scoped to that user. This is the only token-issuance endpoint, and the app JWT is stateless and self-contained.
+
+The platform service-account bearer is obtained out-of-band: an admin provisions a credential via `POST /platforms/{platform_id}/credentials`, which returns a `basic_token`. The platform exchanges that `basic_token` with Keycloak (`client_credentials` grant) for the service-account JWT it presents here. See the [Platform module](/modules/platform) for credential provisioning.
 
 ---
 
@@ -21,18 +23,19 @@ sequenceDiagram
     participant API as Aarokya API
     participant DB as Database
 
-    PartnerBE->>API: POST /auth/token<br/>{phone_number, phone_country_code, id_proof}<br/>api-key: partner_key
-    API->>DB: Validate platform_id
+    PartnerBE->>API: POST /auth/token<br/>{phone_number, phone_country_code, id_proof}<br/>Authorization Bearer platform_service JWT
+    API->>API: require_platform_service<br/>read platform_id from claim
+    API->>DB: Validate platform_id is Active
     DB-->>API: platform row
-    API->>DB: Find user by (platform_id, phone_number)
+    API->>DB: Find active user by phone_country_code + phone_number
     alt User exists
         DB-->>API: existing user row
     else First call
-        API->>DB: INSERT user (status=onboarding)
+        API->>DB: INSERT user (status=Onboarding)
         DB-->>API: new user row
     end
-    API->>API: Sign JWT {sub, status, exp}
-    API-->>PartnerBE: {access_token}
+    API->>API: Sign app JWT (RS256)
+    API-->>PartnerBE: {user_id, access_token}
 ```
 
 ---
@@ -41,18 +44,34 @@ sequenceDiagram
 
 | Scenario | Behaviour |
 |----------|-----------|
-| First call for this phone + platform | Creates user with `status = onboarding`, returns token |
-| Subsequent calls | Returns fresh token for existing user, reflects current `status` |
-| User is deactivated | Returns error — deactivated users cannot receive tokens |
+| First call for this phone (`phone_country_code` + `phone_number`) | Creates user with `status = ONBOARDING`, persists `id_proof`, returns token |
+| Subsequent calls | Returns fresh token for the existing active user, reflects current `status` |
+| `id_proof` on a repeat call | Ignored — `id_proof` is consumed only on the create path |
+
+<Note>
+  Lookup is by `(phone_country_code, phone_number)` against active users — it is not keyed on `platform_id`. The `platform_id` from the token is validated and embedded in the issued app token's claims.
+</Note>
 
 ---
 
-## JWT Claims
+## App JWT Claims
+
+The issued `access_token` is an RS256 app token. Its claims flatten an `app` actor block alongside standard `iss` / `aud` / `iat` / `exp`:
 
 ```json
 {
-  "sub": "047382910564",
+  "actor_type": "app",
+  "user_info": {
+    "user_id": "047382910564",
+    "phone_number": "9876543210",
+    "phone_country_code": "+91",
+    "first_name": null,
+    "last_name": null
+  },
   "status": "ONBOARDING",
+  "platform_id": "0190b6c2-7e3a-7c6e-9b1d-2f4a8c1e5d33",
+  "iss": "aarokya-backend",
+  "aud": "aarokya-mobile",
   "iat": 1718000000,
   "exp": 1718086400
 }
@@ -60,9 +79,10 @@ sequenceDiagram
 
 | Claim | Description |
 |-------|-------------|
-| `sub` | User ID — pass in `{user_id}` path params for all user-scoped calls |
-| `status` | `onboarding` or `active` — drive onboarding UI from this |
-| `exp` | Configurable via `jwt.expiry_hours`; call token again when expired |
+| `user_info.user_id` | 12-digit numeric user ID — pass in `{user_id}` path params for all user-scoped calls |
+| `status` | `ONBOARDING`, `ACTIVE`, or `DEACTIVATED` — drive onboarding UI from this |
+| `platform_id` | UUID of the issuing platform, carried from the service-account token |
+| `exp` | Configurable via `auth.app.expiry_hours`; call token again when expired |
 
 ---
 
@@ -70,7 +90,7 @@ sequenceDiagram
 
 <CardGroup cols={1}>
   <Card title="POST /auth/token" icon="key" color="#16a34a" href="/api/endpoints/auth/generate-token">
-    Issue a JWT for a user. Creates the user on first call. Requires partner `api-key` header.
+    Issue an app JWT for a user. Creates the user on first call. Requires a platform service-account bearer token.
   </Card>
 </CardGroup>
 
@@ -81,7 +101,7 @@ sequenceDiagram
 <CodeGroup>
 ```bash Generate token
 curl -X POST http://localhost:8080/auth/token \
-  -H 'api-key: your-partner-key' \
+  -H 'Authorization: Bearer <platform_service-jwt>' \
   -H 'Content-Type: application/json' \
   -d '{
     "phone_number": "9876543210",
@@ -93,12 +113,15 @@ curl -X POST http://localhost:8080/auth/token \
   }'
 ```
 
-```json Response 201
+```json Response 200
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "user_id": "047382910564",
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```
 </CodeGroup>
+
+`proof_type` accepts `AADHAAR`, `PAN`, `PASSPORT`, `DRIVING_LICENSE`, or `VOTER_ID`.
 
 ---
 
@@ -106,11 +129,11 @@ curl -X POST http://localhost:8080/auth/token \
 
 | Code | HTTP | Description |
 |------|------|-------------|
-| `AUE-300` | 500 | Internal server error |
-| `AUE-301` | 401 | Invalid or expired token |
-| `AUE-302` | 401 | Invalid API key |
-| `AUE-303` | 403 | User account is not active |
-| `AUE-304` | 400 | Invalid platform ID format |
-| `AUE-305` | 400 | Platform not found |
-| `AUE-306` | 400 | Platform is inactive |
-| `AUE-307` | 422 | Onboarding already complete |
+| `AUE_300` | 500 | Internal server error |
+| `AUE_301` | 401 | Invalid or expired token |
+| `AUE_302` | 403 | User account is not active |
+| `AUE_304` | 400 | Platform not found |
+| `AUE_305` | 400 | Platform is inactive |
+| `AUE_306` | 422 | Onboarding already complete |
+| `AUE_307` | 500 | Dashboard authentication is not configured on this server |
+| `AUE_308` | 500 | OpenID Connect upstream call failed |

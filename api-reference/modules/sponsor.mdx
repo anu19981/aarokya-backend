@@ -31,7 +31,7 @@ stateDiagram-v2
     INACTIVE --> [*]
 ```
 
-ACTIVE → PENDING and INACTIVE → anywhere are rejected with `409 SPE-1407`.
+ACTIVE → PENDING and INACTIVE → anywhere are rejected with `409 SPE_1404` (`SponsorNotActivatable`).
 
 ---
 
@@ -47,8 +47,8 @@ flowchart LR
     Insert --> PBA[Call CreateNormalAccount<br/>holder_id = sponsor_id]
     PBA -->|success| Tx[BEGIN tx<br/>INSERT accounts row<br/>UPDATE sponsor=ACTIVE<br/>COMMIT]
     Tx --> Return201Active[Return 201<br/>status=ACTIVE]
-    PBA -->|fail| StaysPBA[Row stays PENDING<br/>500 SPE-1410]
-    Tx -->|fail| StaysLocal[Row stays PENDING<br/>500 SPE-1410<br/>retry via /sync]
+    PBA -->|fail| StaysPBA[Row stays PENDING<br/>500 SPE_1407]
+    Tx -->|fail| StaysLocal[Row stays PENDING<br/>500 SPE_1407<br/>retry via /sync]
 ```
 
 Two writes are split for safety:
@@ -78,7 +78,7 @@ If step 2 fails the sponsor stays PENDING with no `accounts` row — recover via
 | `INDIVIDUAL` | `IndividualSponsorDetails` — `first_name` (required); `last_name`, `email`, `phone` (optional) |
 | `ORGANISATION` | `OrganisationSponsorDetails` — `legal_name` (required); `registration_number`, `contact` (optional). `contact` is a `ContactDetails` block: `email`, `phone`, `person_first_name`, `person_last_name` (all optional) |
 
-The `sponsor_details` JSON discriminator (`sponsor_kind` key) must match the top-level `sponsor_kind` field — mismatches return `400 SPE-1404`.
+The `sponsor_details` JSON discriminator (`sponsor_kind` key) must match the top-level `sponsor_kind` field. A mismatch on **create** is a `400 SPE_1405` (validation error); a mismatch on **update** (`sponsor_details` variant vs the stored `sponsor_kind`) is a `400 SPE_1402`.
 
 ---
 
@@ -89,9 +89,9 @@ The `sponsor_details` JSON discriminator (`sponsor_kind` key) must match the top
 | `POST /sponsors` | ✓ | PBA `CreateNormalAccount` runs inline; on success the linking `accounts` row is inserted and the sponsor flips to ACTIVE in a single transaction. PBA failure leaves the row PENDING — recover via `POST /{id}/sync`. |
 | `GET /sponsors` | ✓ | Filter by `statuses` and/or `sponsor_kinds` (comma-separated, multi-select; same shape as `GET /users`) |
 | `GET /sponsors/{sponsor_id}` | ✓ | |
-| `PATCH /sponsors/{sponsor_id}` | ✓ | `name`, `pan`, `address`, `sponsor_details`, `status` (state-machine validated) |
+| `PATCH /sponsors/{sponsor_id}` | ✓ | Mutable fields: `name`, `pan`, `address`, `sponsor_details`. `slug`, `sponsor_kind`, and `status` are **not** patchable here — `status` is owned by the create / sync / soft-delete paths. |
 | `POST /sponsors/{sponsor_id}/sync` | ✓ | Recovery — link a PENDING sponsor whose `create` succeeded at PBA but failed locally afterwards. Idempotent on ACTIVE. |
-| `DELETE /sponsors/{sponsor_id}` | ✓ | Soft-delete (`status → inactive`). Idempotent. |
+| `DELETE /sponsors/{sponsor_id}` | ✓ | Soft-delete (`status → INACTIVE`). Idempotent. |
 | `GET /sponsors/{sponsor_id}/balance` | ✓ | PBA proxy. Sponsor must be ACTIVE. |
 | `GET /sponsors/{sponsor_id}/transactions` | ✓ | PBA proxy. Pagination + date range. Sponsor must be ACTIVE. |
 | `POST /sponsors/{sponsor_id}/deposit` | ✓ | Add funds to sponsor's normal account. Sponsor must be ACTIVE. |
@@ -118,7 +118,7 @@ The `sponsor_details` JSON discriminator (`sponsor_kind` key) must match the top
     Update mutable fields. `slug` and `sponsor_kind` are immutable.
   </Card>
   <Card title="DELETE /sponsors/{id}" icon="trash" color="#dc2626" href="/api/endpoints/sponsors/delete">
-    Soft-delete (`status → inactive`).
+    Soft-delete (`status → INACTIVE`).
   </Card>
   <Card title="GET /sponsors/{id}/balance" icon="wallet" color="#3b82f6" href="/api/endpoints/sponsors/balance">
     Current balance on the sponsor's normal account at PBA.
@@ -248,19 +248,19 @@ Once PBA exposes a "find normal account by holder_id" endpoint, the request body
 
 | Code | HTTP | Description |
 |------|------|-------------|
-| `SPE-1400` | 500 | Internal server error |
-| `SPE-1401` | 404 | Sponsor not found |
-| `SPE-1402` | 400 | `sponsor_details` variant does not match stored `sponsor_kind` |
-| `SPE-1403` | 409 | Sponsor is already linked to an external account |
-| `SPE-1404` | 409 | Sponsor cannot be activated from its current state (e.g. INACTIVE on `/sync`) |
-| `SPE-1405` | 400 | Validation error (empty name, invalid slug, malformed PAN, half-supplied bank details, etc.) |
-| `SPE-1406` | 409 | Uniqueness violation (slug collision) |
-| `SPE-1407` | 500 | External account provisioning failed (PBA call errored) |
-| `SPE-1408` | 409 | Sponsor is not active (no linked `accounts` row); cannot proxy to PBA |
-| `SPE-1409` | 500 | PBA reports the external account is unknown |
-| `SPE-1410` | 500 | PBA deposit call failed |
-| `SPE-1411` | 409 | Insurance policy is not in `APPROVED` status; contribution rejected |
-| `SPE-1412` | 409 | User has no active HSA account |
-| `SPE-1413` | 500 | PBA transfer call failed |
-| `SPE-1414` | 500 | PBA read (balance / transactions) failed |
-| `SPE-1415` | 404 | Insurance policy not found |
+| `SPE_1400` | 500 | Internal server error |
+| `SPE_1401` | 404 | Sponsor not found |
+| `SPE_1402` | 400 | `sponsor_details` variant does not match stored `sponsor_kind` |
+| `SPE_1403` | 409 | Sponsor is already linked to an external account |
+| `SPE_1404` | 409 | Sponsor cannot be activated from its current state (e.g. INACTIVE on `/sync`) |
+| `SPE_1405` | 400 | Validation error (empty name, invalid slug, malformed PAN, half-supplied bank details, etc.) |
+| `SPE_1406` | 409 | Uniqueness violation (slug collision) |
+| `SPE_1407` | 500 | External account provisioning failed (PBA call errored) |
+| `SPE_1408` | 409 | Sponsor is not active (no linked `accounts` row); cannot proxy to PBA |
+| `SPE_1409` | 500 | PBA reports the external account is unknown |
+| `SPE_1410` | 500 | PBA deposit call failed |
+| `SPE_1411` | 409 | Insurance policy is not in `APPROVED` status; contribution rejected |
+| `SPE_1412` | 409 | User has no active HSA account |
+| `SPE_1413` | 500 | PBA transfer call failed |
+| `SPE_1414` | 500 | PBA read (balance / transactions) failed |
+| `SPE_1415` | 404 | Insurance policy not found |

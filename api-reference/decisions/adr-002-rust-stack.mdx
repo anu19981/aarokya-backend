@@ -71,15 +71,15 @@ We needed a backend that could:
 
 ```mermaid
 flowchart LR
-    A["Diesel\nChosen"] -->|"compile-time\nSQL verification"| B["SQL errors caught\nbefore runtime"]
-    C["SQLx"] -->|"runtime query\nverification"| D["SQL errors at\nstartup or runtime"]
-    E["SeaORM"] -->|"async-native\nbut less mature"| F["Larger API surface,\nyounger ecosystem"]
+    A["Diesel<br/>Chosen"] -->|"compile-time<br/>SQL verification"| B["SQL errors caught<br/>before runtime"]
+    C["SQLx"] -->|"runtime query<br/>verification"| D["SQL errors at<br/>startup or runtime"]
+    E["SeaORM"] -->|"async-native<br/>but less mature"| F["Larger API surface,<br/>younger ecosystem"]
 
 ```
 
 **Why Diesel over SQLx:**
 - Diesel's query builder is checked **at compile time** — a wrong column name or type mismatch is a compiler error, not a runtime panic
-- For financial data (wallet balances, payment orders), this level of safety is worth the synchronous API trade-off
+- For financial data (PBA account balances, funding orders, mandate executions), this level of safety is worth the synchronous API trade-off
 - SQLx's async advantage is partially mitigated by using `async-bb8-diesel` for the connection pool
 
 ---
@@ -91,7 +91,7 @@ backend/
 ├── crates/
 │   ├── aarokya/          # Main service — routes, handlers, middleware
 │   │   ├── src/
-│   │   │   ├── core/     # Business logic (auth, user, wallet)
+│   │   │   ├── core/     # Business logic (auth, user, account, insurance_policy, consultation, ...)
 │   │   │   ├── db/       # Diesel query implementations
 │   │   │   ├── routes/   # Actix-web route builders
 │   │   │   ├── errors/   # Error types + HTTP error handlers
@@ -101,7 +101,7 @@ backend/
 │   ├── domain_models/    # Core domain types
 │   ├── diesel_models/    # Diesel ORM models + schema
 │   ├── common_types/     # Shared primitive types
-│   ├── common_enums/     # Shared enums (Gender, WalletStatus, ...)
+│   ├── common_enums/     # Shared enums (Gender, AccountStatus, MandateStatus, ...)
 │   └── aarokya_derive/   # Custom derive macros
 ```
 

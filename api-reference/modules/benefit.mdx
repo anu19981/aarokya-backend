@@ -1,15 +1,15 @@
 ---
 title: "Benefit Module"
-description: "Individual offerings (consultation, insurance, etc.) attached to a benefit provider. Admins manage the catalogue; JWT users browse active benefits."
+description: "Individual offerings (consultation, insurance policy) attached to a benefit provider. Admins and benefit-provider users manage the catalogue; app users browse active benefits."
 ---
 
 <Info>
-  **Auth guards vary by endpoint** — Create, Update, Delete are admin-only. Get and List accept both JWT users (active benefits only) and the admin key (all benefits).
+  **Auth guards vary by endpoint** — Create, Update, and Delete require an admin or benefit-provider OIDC token. Get and List accept any authenticated actor; app users (mobile JWT) see only active benefits, while admins see all.
 </Info>
 
 ## Overview
 
-A **benefit** is a specific offering — a free consultation, an insurance policy, a diagnostic test — provided by a [Benefit Provider](/modules/benefit_provider). Benefits carry a `benefit_type` enum and a `benefit_details` JSONB block whose variant must match the type.
+A **benefit** is a specific offering — a free consultation or a health insurance policy — provided by a [Benefit Provider](/modules/benefit_provider). Benefits carry a `benefit_type` enum and a `benefit_details` JSONB block whose variant must match the type.
 
 Responses always include `provider_name` via a JOIN — callers never need a separate provider lookup.
 
@@ -19,10 +19,23 @@ Responses always include `provider_name` via a JOIN — callers never need a sep
 
 | `benefit_type` | `benefit_details` variant | Description |
 |----------------|--------------------------|-------------|
-| `consultation` | `Consultation { description }` | Free or subsidised doctor consultation |
-| `insurance_policy` | `InsurancePolicy { description }` | Health or accident insurance |
+| `CONSULTATION` | `CONSULTATION { description? }` | Teleconsultation or in-person doctor consultation |
+| `INSURANCE_POLICY` | `INSURANCE_POLICY { description?, duration, plans, questionnaire? }` | Health, life, or accident insurance |
 
-Type and details must be consistent — mismatches return `BE-503`.
+Type and details must be consistent at create time — a mismatch returns `BE_503`. (`update_benefit` does not re-validate this consistency.)
+
+<Note>
+  `benefit_details` is a serde-tagged enum. The discriminator key is `benefit_type` and its value is the SCREAMING_SNAKE_CASE variant name (`CONSULTATION` / `INSURANCE_POLICY`) — the same value as the sibling `benefit_type` column.
+</Note>
+
+### Insurance policy details
+
+The `INSURANCE_POLICY` variant holds:
+
+- `description` — optional human-readable copy.
+- `duration` — externally-tagged single-key object: `{"days": 90}`, `{"months": 12}`, or `{"years": 1}`.
+- `plans` — a map keyed by free-form provider-defined `plan_code` (e.g. `"1A"`, `"2A"`, `"2A1C"`). Each `PlanVariant` carries `daily_premium_amount`, `annual_premium_amount`, `coverage_amount` (all amounts in minor units with a `currency`), optional `grace_period_days`, and `nominee_required`.
+- `questionnaire` — optional tree of `Question`s the policyholder answers at policy creation.
 
 ---
 
@@ -30,22 +43,22 @@ Type and details must be consistent — mismatches return `BE-503`.
 
 ```mermaid
 flowchart LR
-    JWT[JWT User\nstatus=active] -->|GET /benefits| ActiveOnly[Active benefits only]
-    Admin[Admin Key] -->|GET /benefits| All[Active + Inactive]
-    JWT -->|GET /benefits/id inactive| E[404 Not Found]
+    JWT["App User"] -->|"GET /benefits"| ActiveOnly["Active benefits only"]
+    Admin["Admin / BP"] -->|"GET /benefits"| All["Active + Inactive"]
+    JWT -->|"GET /benefits/id (inactive)"| E["404 Not Found"]
 ```
 
 ---
 
 ## Auth Guards by Endpoint
 
-| Endpoint | JWT user | Admin key | Notes |
-|----------|----------|-----------|-------|
-| `POST /benefits` | — | ✓ | Provider must be active |
-| `GET /benefits` | ✓ active only | ✓ all | |
-| `GET /benefits/{id}` | ✓ active only | ✓ all | |
-| `PATCH /benefits/{id}` | — | ✓ | |
-| `DELETE /benefits/{id}` | — | ✓ | Sets `status → inactive` |
+| Endpoint | Guard | Notes |
+|----------|-------|-------|
+| `POST /benefits` | `require_benefit_provider_strict(false, provider_id)` | Admin, or BP scoped to the payload's provider; provider must be active |
+| `GET /benefits` | none (any authenticated actor) | App users forced to active-only |
+| `GET /benefits/{benefit_id}` | none (any authenticated actor) | App users get 404 for inactive |
+| `PATCH /benefits/{benefit_id}` | `require_benefit_provider(false)` then strict on the resolved provider | Admin or benefit provider |
+| `DELETE /benefits/{benefit_id}` | `require_benefit_provider(false)` then strict on the resolved provider | Sets `status → INACTIVE` |
 
 ---
 
@@ -53,19 +66,19 @@ flowchart LR
 
 <CardGroup cols={2}>
   <Card title="POST /benefits" icon="plus" color="#16a34a" href="/api/endpoints/benefits/create">
-    **Admin only.** Create a benefit. Provider must exist and be active.
+    Create a benefit. Provider must exist and be active.
   </Card>
   <Card title="GET /benefits" icon="list" color="#3b82f6" href="/api/endpoints/benefits/list">
-    List benefits. JWT users see only `active` ones. Filter by `provider_id`, `benefit_type`, `status`.
+    List benefits. App users see only `ACTIVE` ones. Filter by `provider_id`, `benefit_type`, `status`.
   </Card>
   <Card title="GET /benefits/{benefit_id}" icon="stethoscope" color="#3b82f6" href="/api/endpoints/benefits/get">
-    Fetch a benefit by UUID. JWT users receive 404 for inactive benefits.
+    Fetch a benefit by UUID. App users receive 404 for inactive benefits.
   </Card>
   <Card title="PATCH /benefits/{benefit_id}" icon="pen" color="#8b5cf6" href="/api/endpoints/benefits/update">
-    **Admin only.** Update `name`, `benefit_details`, or `status`.
+    Update `name`, `description`, `benefit_details`, or `status`.
   </Card>
   <Card title="DELETE /benefits/{benefit_id}" icon="trash" color="#dc2626" href="/api/endpoints/benefits/delete">
-    **Admin only.** Soft-delete (`status → inactive`).
+    Soft-delete (`status → INACTIVE`).
   </Card>
 </CardGroup>
 
@@ -76,14 +89,15 @@ flowchart LR
 <CodeGroup>
 ```bash Create a benefit
 curl -X POST http://localhost:8080/benefits \
-  -H 'Authorization: Bearer eyJhbGci...admin-jwt...' \
+  -H 'Authorization: Bearer eyJhbGci...oidc-token...' \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Free GP Consultation",
+    "description": "One free general physician consultation per month",
     "benefit_type": "CONSULTATION",
     "provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
     "benefit_details": {
-      "type": "Consultation",
+      "benefit_type": "CONSULTATION",
       "description": "One free general physician consultation per month"
     }
   }'
@@ -93,10 +107,14 @@ curl -X POST http://localhost:8080/benefits \
 {
   "id": "019a1b2c-3d4e-5f6a-7b8c-9d0e1f2a3b4c",
   "name": "Free GP Consultation",
+  "description": "One free general physician consultation per month",
   "benefit_type": "CONSULTATION",
   "provider_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
-  "provider_name": "Apollo Diagnostics",
-  "benefit_details": { "type": "Consultation", "description": "..." },
+  "provider_name": "Narayana Health",
+  "benefit_details": {
+    "benefit_type": "CONSULTATION",
+    "description": "One free general physician consultation per month"
+  },
   "status": "ACTIVE",
   "created_at": "2026-04-12T10:05:00Z",
   "last_modified_at": "2026-04-12T10:05:00Z"
@@ -110,9 +128,10 @@ curl -X POST http://localhost:8080/benefits \
 
 | Code | HTTP | Description |
 |------|------|-------------|
-| `BE-500` | 500 | Internal server error |
-| `BE-501` | 404 | Benefit not found |
-| `BE-502` | 409 | Name already exists for this provider |
-| `BE-503` | 400 | `benefit_type` / `benefit_details` type mismatch |
-| `BE-504` | 404 | Benefit provider not found or inactive |
-| `BE-505` | 400 | Validation error (e.g. empty name) |
+| `BE_500` | 500 | Internal server error |
+| `BE_501` | 404 | Benefit not found |
+| `BE_502` | 409 | Name already exists for this provider |
+| `BE_503` | 400 | `benefit_type` / `benefit_details` variant mismatch |
+| `BE_504` | 404 | Benefit provider not found or inactive |
+| `BE_505` | 400 | Validation error (e.g. empty name) |
+| `BE_506` | 403 | Caller is not authorized for this benefit's provider |

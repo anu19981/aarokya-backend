@@ -15,7 +15,7 @@ description: "Affordable healthcare for India's 200 million gig workers — heal
 
 That's what "Aarokya" asks — it's a name that phonetically echoes *"Are you ok?"*, rooted in the Sanskrit word for wholistic wellbeing. For India's delivery riders, drivers, domestic workers, and construction workers, the answer has too often been: *not really*.
 
-Aarokya changes that. It's a healthcare super-app that brings together a health savings wallet, affordable insurance, and on-demand doctor access — all in one place, built for people who've never had any of this before.
+Aarokya changes that. It's a healthcare super-app that brings together a health savings account, affordable insurance, and on-demand doctor access — all in one place, built for people who've never had any of this before.
 
 ---
 
@@ -52,22 +52,21 @@ Aarokya meets gig workers where they are: on their phone, in their language, wit
 
 ```mermaid
 flowchart TD
-    A["Worker earns income"] --> B["Saves ₹50–500/week\ninto Health Wallet"]
+    A["Worker earns income"] --> B["Saves into a<br/>health savings account"]
     B --> C{Needs healthcare?}
-    C -->|"Preventive / routine"| D["Call a Doctor\nAI collects symptoms\nReal doctor calls back"]
-    C -->|"Major illness / surgery"| E["Insurance\nNarayana Health covers\nup to ₹5 lakh"]
-    C -->|"Emergency / OPD"| F["Pay from Wallet\nCash-free at network hospitals"]
-    D --> G["Stay healthy\nKeep working"]
+    C -->|"Routine / advice"| D["Talk to a doctor<br/>chat consultation<br/>with a Narayana doctor"]
+    C -->|"Major illness / surgery"| E["Insurance<br/>Narayana Health policy<br/>covers the hospitalisation"]
+    C -->|"Emergency / OPD"| F["Pay from savings<br/>cash-free at network hospitals"]
+    D --> G["Stay healthy<br/>keep working"]
     E --> G
     F --> G
-
 ```
 
-The wallet, insurance, and doctor features are not three separate products — they are one integrated safety net:
+Savings, insurance, and consultations are not three separate products — they are one integrated safety net:
 
-1. **Save regularly** — small weekly contributions into a ring-fenced health wallet
-2. **Stay covered** — buy a Narayana Health insurance plan in minutes, paid from the wallet or directly
-3. **Get care quickly** — describe symptoms to an AI, get triaged, and speak to a real doctor without leaving home
+1. **Save regularly** — small, frequent contributions into a ring-fenced health savings account
+2. **Stay covered** — preview the premium for a family and issue a Narayana Health policy in minutes
+3. **Get care quickly** — open a consultation against an eligible benefit and chat with a doctor without leaving home
 
 ---
 
@@ -75,19 +74,19 @@ The wallet, insurance, and doctor features are not three separate products — t
 
 The name *Aarokya* works on two levels. In Sanskrit, *Ārogya* (आरोग्य) means the state of being free from disease — wholistic physical and mental wellbeing. But phonetically, when spoken aloud, it echoes the simple question: *"Are you ok?"*
 
-That question is the product's core philosophy. In the age of AI and automation, gig workers are becoming invisible to the systems that serve them. Aarokya is a counter-statement: **in the age of AI, empathy will matter even more.** Every product decision — the OTP-only login that doesn't require remembering passwords, the AI that collects symptoms conversationally before connecting to a real human doctor, the wallet that accepts small contributions without minimum balance requirements — is designed to say, implicitly: *we see you, and we're asking if you're ok.*
+That question is the product's core philosophy. In the age of AI and automation, gig workers are becoming invisible to the systems that serve them. Aarokya is a counter-statement: **in the age of AI, empathy will matter even more.** Every product decision — the password-free login that does not burden workers with credentials, the in-app consultation that connects them to a real doctor, the savings account that accepts small contributions without minimum-balance requirements — is designed to say, implicitly: *we see you, and we're asking if you're ok.*
 
 ---
 
 <CardGroup cols={3}>
-  <Card title="Health Savings Wallet" icon="wallet" color="#16a34a" href="/modules/wallet">
-    A digital health wallet that can receive contributions from you, your employer, your platform, or family. Money flows only toward healthcare.
+  <Card title="Health Savings" icon="wallet" color="#16a34a" href="/modules/account">
+    A ring-fenced savings account that can receive contributions from the worker, their employer, their platform, or a sponsor. Money flows only toward healthcare.
   </Card>
-  <Card title="Insurance" icon="shield-heart" color="#ec4899" href="/modules/insurance">
-    Browse Narayana Health plans, see the exact premium for your family, and buy a policy in minutes.
+  <Card title="Insurance" icon="shield-heart" color="#ec4899" href="/modules/insurance_policy">
+    Preview the exact premium for a worker's family, preview the enrollment form, and issue a Narayana Health policy in minutes.
   </Card>
-  <Card title="Call a Doctor" icon="stethoscope" color="#8b5cf6" href="/modules/call-doctor">
-    Describe your symptoms through a chat. AI collects and summarizes your case, then connects you to a real doctor.
+  <Card title="Consultations" icon="stethoscope" color="#8b5cf6" href="/modules/consultation">
+    Open a consultation against an eligible benefit and chat with a Narayana doctor — messages, attachments, and read receipts, all in-app.
   </Card>
 </CardGroup>
 
@@ -95,35 +94,36 @@ That question is the product's core philosophy. In the age of AI and automation,
 
 ## Get Started in 3 Steps
 
+Aarokya is a **partner-integrated** API: a platform (a mobility, delivery, or employer app) integrates Aarokya on behalf of its workers. The partner authenticates the worker and exchanges their phone number for a scoped token.
+
 <Steps>
-  <Step title="Log in with your phone">
-    No passwords. Enter your number, receive an OTP, and you're in. The first login creates your account and provisions your health wallet automatically.
+  <Step title="Provision a platform credential">
+    An Aarokya admin creates a platform for the partner and mints a credential via `POST /platforms/{platform_id}/credentials`, which returns a `basic_token` once. The partner exchanges that `basic_token` with Keycloak (`client_credentials` grant) for a platform **service-account** JWT. See the [Platform module](/modules/platform).
+  </Step>
+  <Step title="Issue a user token">
+    The partner backend calls `POST /auth/token` as its service account, passing the worker's phone number and an ID proof. Aarokya find-or-creates the user and returns a `user_id` and a JWT `access_token`.
     ```bash
-    curl -X POST https://api.aarokya.in/auth/otp/trigger \
+    curl -X POST https://api.aarokya.in/auth/token \
+      -H 'Authorization: Bearer <platform_service_token>' \
       -H 'Content-Type: application/json' \
-      -d '{"phone": "9876543210"}'
+      -d '{
+        "phone_number": "9876543210",
+        "phone_country_code": "+91",
+        "id_proof": { "proof_type": "AADHAAR", "number": "123456789012" }
+      }'
     ```
   </Step>
-  <Step title="Verify OTP and get your token">
-    Exchange the OTP for a JWT access token. A wallet is automatically created in the background.
+  <Step title="Call user-scoped endpoints">
+    Pass the returned `access_token` as a Bearer header on every user-scoped request. The path `user_id` must match the token's user.
     ```bash
-    curl -X POST https://api.aarokya.in/auth/otp/verify \
-      -H 'Content-Type: application/json' \
-      -d '{"phone": "9876543210", "otp": "123456"}'
-    ```
-    Response includes `access_token`, `refresh_token`, and `is_new_user`.
-  </Step>
-  <Step title="Call any endpoint">
-    Pass the token as a Bearer header on every request. The access token lasts 24 hours; use the refresh token to get a new pair before it expires.
-    ```bash
-    curl https://api.aarokya.in/user/profile \
+    curl https://api.aarokya.in/users/<user_id> \
       -H 'Authorization: Bearer <access_token>'
     ```
   </Step>
 </Steps>
 
 <Note>
-  **Testing locally:** OTP is hardcoded as `123456` — no SMS is sent. Use `http://localhost:8080` as the base URL.
+  **Testing locally:** use `http://localhost:8080` as the base URL. See the repository README for seeding a platform and credential in development.
 </Note>
 
 ---
@@ -132,10 +132,10 @@ That question is the product's core philosophy. In the age of AI and automation,
 
 <CardGroup cols={2}>
   <Card title="API Reference" icon="code" href="/api/overview">
-    Authentication, error codes, rate limits, and the interactive Try It Out playground.
+    Authentication, error codes, and the interactive Try It Out playground.
   </Card>
   <Card title="Module Guides" icon="book-open" href="/modules/overview">
-    Deep dives into Wallet, Insurance, Call Doctor, Auth, and User Profile.
+    Deep dives into Auth, Platforms, Users, Accounts, Insurance Policies, Mandates, Consultations, and more.
   </Card>
   <Card title="System Architecture" icon="sitemap" href="/architecture/system-overview">
     How the mobile app, Rust backend, Juspay, and Narayana Health fit together.
@@ -151,21 +151,21 @@ That question is the product's core philosophy. In the age of AI and automation,
 
 <AccordionGroup>
   <Accordion title="Why does Aarokya not require passwords?">
-    Gig workers use multiple devices, share phones with family members, and frequently change SIM cards. A password-based system would result in high account recovery rates and locked-out users. Phone OTP is familiar (every UPI app uses it), works on any device, and requires no memory burden. It also has a meaningful secondary benefit: the phone number acts as the identity anchor, which ties neatly into Aadhaar-based KYC when needed for insurance.
+    Aarokya does not own end-user authentication — that belongs to the partner app. The partner verifies the worker (typically a phone-based flow inside their own app), then exchanges the phone number for a scoped Aarokya token via `POST /auth/token`. This keeps Aarokya out of the credential-storage business entirely, and means workers never manage another password. The phone number acts as the identity anchor, which ties neatly into Aadhaar-based KYC when needed for insurance.
   </Accordion>
-  <Accordion title="How is the wallet different from a bank account?">
-    The health wallet is **ring-fenced** — money in it can only be used for healthcare expenses. This is intentional: it prevents health savings from being spent on other expenses, which is the most common reason medical emergency funds disappear. The wallet is powered by Juspay/Transcorp and operates under the RBI's Prepaid Payment Instrument (PPI) framework.
+  <Accordion title="How is the health savings account different from a bank account?">
+    The health savings account is **ring-fenced** — money in it can only be used for healthcare expenses. This is intentional: it prevents health savings from being spent on other expenses, which is the most common reason medical emergency funds disappear. Balances and movements are tracked as a ledger, and the account operates under the RBI Prepaid Payment Instrument (PPI) framework.
   </Accordion>
   <Accordion title="What happens if the user doesn't have insurance and gets hospitalised?">
-    In that case they can use their wallet balance to pay for OPD, pharmacy, and other covered expenses at network hospitals. Aarokya encourages buying insurance, but the wallet is immediately useful even before a policy is purchased. The app also surfaces insurance options at the moment of care — "you'd be covered for this if you had Plan X."
+    In that case they can use their savings balance to pay for OPD, pharmacy, and other covered expenses at network hospitals. Aarokya encourages buying insurance, but the savings account is immediately useful even before a policy is purchased. The app also surfaces insurance options at the moment of care — "you'd be covered for this if you had Plan X."
   </Accordion>
   <Accordion title="What is Narayana Health's role?">
-    Narayana Health (NH) is one of India's largest hospital networks, known for making cardiac surgery affordable. They provide: (a) insurance plans that workers can buy through Aarokya, (b) the Aathma doctor assignment platform used for teleconsultations, and (c) a network of hospitals where wallet payments are accepted.
+    Narayana Health (NH) is one of India's largest hospital networks, known for making cardiac surgery affordable. They provide: (a) insurance plans that workers can buy through Aarokya, (b) the conversation gateway that powers in-app doctor consultations, and (c) a network of hospitals where covered care is delivered.
   </Accordion>
-  <Accordion title="Is the backend production-ready?">
-    The Auth and User Profile modules are production-grade. The Wallet module currently has a local stub — full Juspay/Transcorp integration is in progress. Insurance and Call Doctor modules are planned and have complete endpoint contracts defined.
+  <Accordion title="How is the platform structured?">
+    Aarokya is a layered Rust backend whose API contracts are generated from Smithy models. The domains documented here — auth, platforms, users, dependants, accounts, MRNs, insurance policies, mandates and executions, orders, sponsors, the benefit catalogue, and consultations — each own their tables, business logic, and error types. See the [Modules overview](/modules/overview) for the full map.
   </Accordion>
   <Accordion title="How do I run the backend locally?">
-    See the repository README for local setup. The backend requires PostgreSQL and a `.env` file with the right secrets. Once running, the local base URL is `http://localhost:8080`. All OTPs are `123456` in the local environment.
+    See the repository README for local setup. The backend requires PostgreSQL and a config file with the right secrets. Once running, the local base URL is `http://localhost:8080`.
   </Accordion>
 </AccordionGroup>

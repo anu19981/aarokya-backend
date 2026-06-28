@@ -1,39 +1,47 @@
 ---
 title: "API Overview"
 sidebarTitle: "Overview"
-description: "Base URLs, versioning, request format, headers, pagination, and rate limits for the Aarokya REST API."
+description: "Base URLs, request format, headers, authentication, the response/error envelope, and pagination for the Aarokya REST API."
 ---
 
 ## Base URLs
 
 | Environment | Base URL | Purpose |
 |-------------|----------|---------|
-| Local | `http://localhost:8080` | Development — OTP is always `123456`, no SMS sent |
-| Sandbox | `https://sandbox.api.aarokya.in` | Integration testing — Juspay sandbox, no real payments |
-| Production | `https://api.aarokya.in` | Live environment — real OTPs, real payments |
+| Local | `http://localhost:8080` | Development |
+| Sandbox | `https://sandbox.api.aarokya.in` | Integration testing |
+| Production | `https://api.aarokya.in` | Live environment |
 
-All endpoints accept and return **`application/json`** unless otherwise noted.
+All endpoints accept and return **`application/json`** unless otherwise noted (the `/health` probe returns plain text).
 
 ---
 
-## Versioning
+## Authentication
 
-The API is currently unversioned — all paths are at root (e.g. `/auth/otp/trigger`). A `/v1/` prefix will be introduced before the first public release. Changes will be communicated with:
-
-1. A changelog entry in this documentation
-2. Deprecation header (`Deprecation: true`) on endpoints being replaced
-3. A minimum 3-month parallel operation period before old endpoints are removed
-
-### Versioning Strategy
-
-Once versioned, we will use **URI path versioning**:
+Every protected endpoint is authenticated with a bearer JWT:
 
 ```text
-https://api.aarokya.in/v1/auth/otp/trigger
-https://api.aarokya.in/v2/auth/otp/trigger   ← breaking change
+Authorization: Bearer <jwt>
 ```
 
-Non-breaking changes (new optional fields, new endpoints) will be added within the existing version without incrementing. Breaking changes (removed fields, changed types, altered semantics) will bump the version.
+App-user tokens are issued by `POST /auth/token` — a partner platform's backend authenticates as its service account and exchanges a worker's phone number (and, on first contact, an id-proof) for a short-lived app JWT:
+
+```json Response 200 — POST /auth/token
+{
+  "user_id": "047382910564",
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+Admin and service tokens are minted by Keycloak via OIDC. See the [Authentication guide](/api/authentication) for the full token lifecycle, claims, and renewal model.
+
+### Public endpoints (no auth required)
+
+| Method | Path | Notes |
+|--------|------|-------|
+| `GET` | `/health` | Health check for load balancers — returns plain text |
+
+`POST /auth/token` itself is not public — the caller must present a platform service-account bearer token.
 
 ---
 
@@ -44,24 +52,13 @@ Non-breaking changes (new optional fields, new endpoints) will be added within t
 | Header | Required | Description |
 |--------|----------|-------------|
 | `Content-Type` | Yes (for POST/PATCH) | Always `application/json` |
-| `Authorization` | Yes (protected endpoints) | `Bearer <access_token>` |
-| `X-Request-ID` | Recommended | Client-generated UUID for request tracing |
-| `X-App-Version` | Recommended | App version string (e.g. `1.2.3`) |
-| `X-Platform` | Recommended | `ios` \| `android` \| `web` |
+| `Authorization` | Yes (protected endpoints) | `Bearer <jwt>` |
 
 ### Response Headers
 
 | Header | Description |
 |--------|-------------|
-| `Content-Type` | Always `application/json; charset=utf-8` |
-| `X-Request-ID` | Echoed from request, or server-generated if not provided |
-| `X-RateLimit-Limit` | Max requests allowed in the current window |
-| `X-RateLimit-Remaining` | Requests remaining in the current window |
-| `X-RateLimit-Reset` | Unix timestamp when the rate limit window resets |
-
-<Tip>
-  Always send `X-Request-ID` — a UUID you generate per request. If something goes wrong, this ID appears in server logs and makes debugging dramatically faster. Contact support with the request ID to trace exactly what happened.
-</Tip>
+| `Content-Type` | `application/json` for data and error responses |
 
 ---
 
@@ -69,21 +66,24 @@ Non-breaking changes (new optional fields, new endpoints) will be added within t
 
 <CodeGroup>
 ```bash Authenticated GET
-curl https://api.aarokya.in/user/profile \
-  -H 'Authorization: Bearer <access_token>' \
-  -H 'X-Request-ID: 550e8400-e29b-41d4-a716-446655440000'
+curl https://api.aarokya.in/users/<user_id> \
+  -H 'Authorization: Bearer <jwt>'
 ```
 
 ```bash Authenticated POST with body
-curl -X POST https://api.aarokya.in/auth/otp/verify \
+curl -X POST https://api.aarokya.in/auth/token \
+  -H 'Authorization: Bearer <platform_service_token>' \
   -H 'Content-Type: application/json' \
-  -H 'X-Request-ID: 7c9e6679-7425-40de-944b-e07fc1f90ae7' \
-  -d '{"phone": "9876543210", "otp": "123456"}'
+  -d '{
+    "phone_number": "9876543210",
+    "phone_country_code": "+91",
+    "id_proof": { "proof_type": "AADHAAR", "number": "123456789012" }
+  }'
 ```
 
 ```bash Partial update (PATCH)
-curl -X PATCH https://api.aarokya.in/user/profile \
-  -H 'Authorization: Bearer <access_token>' \
+curl -X PATCH https://api.aarokya.in/users/<user_id> \
+  -H 'Authorization: Bearer <jwt>' \
   -H 'Content-Type: application/json' \
   -d '{"first_name": "Priya"}'
 ```
@@ -91,56 +91,36 @@ curl -X PATCH https://api.aarokya.in/user/profile \
 
 ---
 
-## Authentication
-
-Protected endpoints require a JWT access token in the `Authorization` header:
-
-```text
-Authorization: Bearer <access_token>
-```
-
-Obtain an access token via `POST /auth/otp/verify`. See the [Authentication guide](/api/authentication) for full details on token lifecycle and refresh.
-
-### Public Endpoints (no auth required)
-
-| Method | Path | Notes |
-|--------|------|-------|
-| `POST` | `/auth/otp/trigger` | Starts login flow |
-| `POST` | `/auth/otp/verify` | Completes login, returns tokens |
-| `POST` | `/auth/token/refresh` | Refreshes token pair |
-| `GET` | `/health` | Health check for load balancers |
-| `GET` | `/api_docs/openapi.json` | OpenAPI spec |
-| `GET` | `/api_docs/ui` | Swagger UI |
-
----
-
 ## Response Envelope
 
-All successful responses return JSON directly (no outer wrapper). Error responses use a consistent envelope — see [Error Reference](/api/errors).
+Successful responses return the resource (or a list envelope) as JSON directly — there is no outer success wrapper. Error responses use a consistent `error` envelope — see the [Error Reference](/api/errors).
 
 <CodeGroup>
 ```json Success (200) — resource returned directly
 {
-  "user_id": "a3f8c2d1-...",
-  "phone": "9876543210",
+  "user_id": "047382910564",
+  "phone_number": "9876543210",
   "first_name": "Priya",
-  "profile_complete": true
+  "status": "ACTIVE"
 }
 ```
 
-```json Success (201) — resource created
+```json Success (200) — list endpoint envelope
 {
-  "policy_id": "c3d4e5f6-...",
-  "policy_number": "NH-2025-00123456",
-  "status": "ACTIVE"
+  "data": [ ],
+  "total": 45,
+  "limit": 20,
+  "offset": 0
 }
 ```
 
 ```json Error (4xx / 5xx) — consistent envelope
 {
-  "error": "INVALID_OTP",
-  "message": "OTP is incorrect or has expired",
-  "status_code": 401
+  "error": {
+    "type": "invalid_request",
+    "message": "Invalid or expired token",
+    "code": "AUE_301"
+  }
 }
 ```
 </CodeGroup>
@@ -149,97 +129,25 @@ All successful responses return JSON directly (no outer wrapper). Error response
 
 ## Pagination
 
-Endpoints that return lists (e.g. insurance plans, transaction history) use **cursor-based pagination** where applicable. Query parameters:
+List endpoints (e.g. `/accounts`, `/consultations`, `/insurance_policies`) use **offset-based pagination** via two optional query parameters:
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `limit` | integer | 20 | Maximum items per page (max 100) |
-| `cursor` | string | — | Opaque cursor from previous response |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | integer | Maximum items per page |
+| `offset` | integer | Number of items to skip before the page |
 
-Paginated responses include a `meta` field:
+Paginated responses are a flat envelope carrying the page and the total count:
 
 ```json
 {
-  "plans": [...],
-  "meta": {
-    "total": 45,
-    "limit": 20,
-    "has_more": true,
-    "next_cursor": "eyJpZCI6IjEwMCJ9"
-  }
+  "data": [ ],
+  "total": 45,
+  "limit": 20,
+  "offset": 0
 }
 ```
 
-<Note>
-  Pagination is not yet implemented on the current stub endpoints. Transaction history is capped at 10 entries. Full pagination will be added when live Juspay and NH integrations are complete.
-</Note>
-
----
-
-## Rate Limits
-
-| Endpoint Group | Limit | Window |
-|----------------|-------|--------|
-| `POST /auth/otp/trigger` | 5 requests / phone | 1 minute |
-| `POST /auth/otp/verify` | 5 attempts per OTP session | Per session |
-| `POST /auth/token/refresh` | 10 requests / user | 1 minute |
-| All other endpoints | 300 requests / user | 1 minute |
-
-Exceeding rate limits returns `429 Too Many Requests` with:
-```json
-{
-  "error": "RATE_LIMIT_EXCEEDED",
-  "message": "Too many requests. Please slow down.",
-  "status_code": 429,
-  "retry_after": 47
-}
-```
-
-The `retry_after` field (seconds) indicates when the limit resets.
-
----
-
-## Request ID Tracking
-
-Every request can include an `X-Request-ID` header with a UUID you generate. The server:
-
-1. Logs the request ID alongside every log line for that request
-2. Echoes it in the response header
-
-If you experience an error, share the `X-Request-ID` with Aarokya support — it maps directly to the full request trace in the server logs.
-
-```typescript
-// Example: generate and attach X-Request-ID in TypeScript
-const requestId = crypto.randomUUID();
-
-const response = await fetch('https://api.aarokya.in/user/profile', {
-  headers: {
-    'Authorization': `Bearer ${accessToken}`,
-    'X-Request-ID': requestId,
-  }
-});
-
-// Log it for debugging
-console.log('Request ID:', requestId);
-```
-
----
-
-## OpenAPI Spec
-
-The full machine-readable spec is available at:
-
-```text
-GET /api_docs/openapi.json
-```
-
-An interactive Swagger UI is served at:
-
-```text
-GET /api_docs/ui
-```
-
-Use the **Try It Out** tab above to explore all endpoints interactively.
+The `data` array holds the page; `total` is the full count matching the query (use it with `limit`/`offset` to drive page controls).
 
 ---
 
@@ -249,12 +157,20 @@ Use the **Try It Out** tab above to explore all endpoints interactively.
 GET /health
 ```
 
-Returns `200 OK` with no authentication required. Used by load balancers, uptime monitors, and Kubernetes readiness probes.
+Returns `200 OK` with no authentication required. Used by load balancers, uptime monitors, and Kubernetes readiness probes. The body is a plain-text status string.
 
-```json
-{
-  "status": "ok",
-  "version": "0.1.0",
-  "timestamp": "2025-06-14T10:30:00Z"
-}
-```
+---
+
+## Where to Go Next
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Bearer JWTs, `POST /auth/token`, claims, and token renewal.
+  </Card>
+  <Card title="Error Reference" icon="triangle-exclamation" href="/api/errors">
+    The error envelope, HTTP status conventions, and the per-domain code catalogue.
+  </Card>
+  <Card title="Modules" icon="layer-group" href="/modules/overview">
+    Endpoint-by-endpoint reference for every domain (users, accounts, consultations, insurance, and more).
+  </Card>
+</CardGroup>

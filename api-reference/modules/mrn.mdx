@@ -4,7 +4,7 @@ description: "Link dependants to benefit providers with an external Medical Reco
 ---
 
 <Info>
-  **Auth guards vary by endpoint** — Create and List accept JWT users and partner keys. Delete is admin-only. The JWT ownership check happens in core, not at the route level.
+  **Auth guards vary by endpoint** — Create, List, and Get accept app (JWT) users plus trusted-backend callers (admin, platform, benefit provider). Update and Delete are restricted to trusted-backend callers (admin or benefit provider — not app users). JWT ownership and provider-scope checks happen in core, not at the route level.
 </Info>
 
 ## Overview
@@ -16,7 +16,7 @@ The external identifier is stored as a JSONB object (`external_mrn`) with two op
 Routes are flat at `/mrns` (no user nesting). The `primary_user_id` is derived server-side from the dependant row — callers never supply it.
 
 <Note>
-  MRN records are also **auto-created** during insurance policy creation — one per covered dependant at the benefit's provider. See the [Insurance Policy module](/api-reference/modules/insurance_policy) for details.
+  MRN records are also **auto-created** during insurance policy creation — one per covered dependant at the benefit's provider. See the [Insurance Policy module](/modules/insurance_policy) for details.
 </Note>
 
 ---
@@ -40,7 +40,7 @@ sequenceDiagram
     API->>DB: INSERT mrn (unique on dependant+provider)
     alt Duplicate
         DB-->>API: UniqueViolation
-        API-->>C: 409 MRN-903
+        API-->>C: 409 MR_1103
     else Success
         DB-->>API: mrn row
         API-->>C: 201 MrnResponse
@@ -51,13 +51,13 @@ sequenceDiagram
 
 ## Auth Guards by Endpoint
 
-| Endpoint | JWT user | Partner key | Admin key | Notes |
-|----------|----------|-------------|-----------|-------|
-| `POST /mrns` | ✓ | ✓ | — | JWT: dependant must belong to token user |
-| `GET /mrns` | ✓ | ✓ | — | All filters optional |
-| `GET /mrns/{id}` | ✓ | ✓ | — | Returns 404 if inactive |
-| `PATCH /mrns/{id}` | — | — | ✓ | Replaces `external_mrn` only — backfill `mrn` once provider issues it |
-| `DELETE /mrns/{id}` | — | — | ✓ | Sets `status → inactive` |
+| Endpoint | App (JWT) user | Benefit provider | Admin / platform | Notes |
+|----------|----------------|------------------|------------------|-------|
+| `POST /mrns` | ✓ | ✓ | ✓ | App user: dependant must belong to the token user. No route-level gate — scoping is enforced in core |
+| `GET /mrns` | ✓ own only | ✓ own provider | ✓ | App user is force-scoped to their own `primary_user_id`; a benefit provider is force-scoped to its own `benefit_provider_id` |
+| `GET /mrns/{id}` | ✓ own only | ✓ own provider | ✓ | Ownership / provider-scope mismatch returns 404 (existence not leaked); also 404 if inactive |
+| `PATCH /mrns/{id}` | — | ✓ own provider | ✓ | Coarse gate (`require_benefit_provider`) then core strict-checks the MRN's `benefit_provider_id`. Replaces `external_mrn` only |
+| `DELETE /mrns/{id}` | — | ✓ | ✓ | Trusted-backend only (admin / platform / benefit provider). Sets `status → INACTIVE` |
 
 ---
 
@@ -68,16 +68,16 @@ sequenceDiagram
     Create an MRN linking a dependant to a benefit provider.
   </Card>
   <Card title="GET /mrns" icon="list" color="#3b82f6" href="/api/endpoints/mrns/list">
-    List MRNs. Filter by `dependant_id`, `benefit_provider_id`, or `primary_user_id`.
+    List MRNs. Filter by `dependant_id`, `benefit_provider_id`, `primary_user_id`, `statuses`, or `mrn`.
   </Card>
   <Card title="GET /mrns/{id}" icon="id-card" color="#3b82f6" href="/api/endpoints/mrns/get">
     Fetch a single active MRN by its internal UUID.
   </Card>
   <Card title="PATCH /mrns/{id}" icon="pen-to-square" color="#0ea5e9" href="/api/endpoints/mrns/update">
-    Update the `external_mrn` JSONB (admin only). Used to backfill `mrn` once the provider issues it.
+    Replace the `external_mrn` JSONB. Admin or the owning benefit provider. Used to backfill `mrn` once the provider issues it.
   </Card>
   <Card title="DELETE /mrns/{id}" icon="trash" color="#dc2626" href="/api/endpoints/mrns/delete">
-    Soft-delete (`status → inactive`). Admin key required.
+    Soft-delete (`status → INACTIVE`). Trusted-backend caller (admin / platform / benefit provider).
   </Card>
 </CardGroup>
 
@@ -142,10 +142,10 @@ Both fields are optional. The `external_mrn` field itself is also optional on cr
 
 | Code | HTTP | Description |
 |------|------|-------------|
-| `MR-900` | 500 | Internal server error |
-| `MR-901` | 404 | MRN not found or inactive |
-| `MR-902` | 403 | JWT user accessing MRN belonging to another user's dependant |
-| `MR-903` | 409 | MRN already exists for this dependant + provider combination |
-| `MR-904` | 404 | Dependant not found or inactive |
-| `MR-905` | 404 | Benefit provider not found or inactive |
-| `MR-906` | 400 | Invalid UUID in filter or request body |
+| `MR_1100` | 500 | Internal server error |
+| `MR_1101` | 404 | MRN not found or inactive |
+| `MR_1102` | 403 | JWT user accessing an MRN belonging to another user's dependant |
+| `MR_1103` | 409 | MRN already exists for this dependant + provider combination |
+| `MR_1104` | 404 | Dependant not found or inactive |
+| `MR_1105` | 404 | Benefit provider not found or inactive |
+| `MR_1106` | 400 | Invalid UUID in filter or request body |

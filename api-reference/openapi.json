@@ -13901,11 +13901,11 @@
         "in": "header",
         "name": "api-key"
       },
-      "Bearer": {
+      "BearerAuth": {
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "JWT access token. Obtain from /auth/otp/verify endpoint."
+        "description": "JWT bearer token. App-user tokens are issued by POST /auth/token (the partner backend calls it as its platform service account); admin and dashboard tokens are issued via OIDC login."
       }
     }
   },

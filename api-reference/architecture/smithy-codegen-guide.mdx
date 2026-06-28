@@ -9,14 +9,14 @@ Smithy is an **Interface Definition Language (IDL)** created by AWS. You write y
 
 In this project, Smithy is the **single source of truth** for:
 - Rust backend DTOs (request/response types)
-- Shared enums used across the backend (Gender, Currency, WalletStatus, etc.)
+- Shared enums used across the backend (`Gender`, `Currency`, `AccountStatus`, `MandateStatus`, etc.)
 - TypeScript interfaces for the frontend
 - Zod runtime validation schemas (optional)
 
 ```mermaid
 flowchart TD
     subgraph SOURCE["Source of Truth"]
-        S["smithy/model/*.smithy<br/>9 files defining the full API"]
+        S["smithy/model/*.smithy<br/>one file per domain defining the full API"]
     end
 
     subgraph BUILD["Build Step"]
@@ -31,8 +31,8 @@ flowchart TD
 
     subgraph OUTPUT["Generated Code"]
         O1["common_enums/src/<br/>generated_enums.rs<br/>diesel_exports.rs"]
-        O2["api_models/src/<br/>auth.rs, user.rs,<br/>customer_wallet.rs,<br/>insurance_*.rs, lib.rs"]
-        O3["dto-ts/<br/>api.ts"]
+        O2["api_models/src/<br/>auth.rs, user.rs, account.rs,<br/>insurance_policy.rs, consultation.rs,<br/>mandate.rs, order.rs, ..., lib.rs"]
+        O3["dto-ts/<br/>sdk.ts, api.ts"]
     end
 
     S --> SB
@@ -50,15 +50,17 @@ flowchart TD
 
 ```
 smithy/model/
-├── main.smithy              # Service definition — lists all resources
+├── main.smithy              # Service definition — lists all resources/namespaces
 ├── codegen-traits.smithy    # Custom traits that control code generation
 ├── common.smithy            # Shared enums (Gender, Currency, etc.) + types
-├── auth.smithy              # Auth operations (OTP, tokens)
+├── auth.smithy              # Token issuance (GenerateToken)
 ├── user.smithy              # User profile operations
-├── wallet.smithy            # Wallet operations (renamed to customer_wallet namespace)
-├── insurance_plans.smithy   # Insurance plan queries
-├── insurance_policy.smithy  # Policy lifecycle (purchase, cancel, etc.)
-└── insurance_claims.smithy  # Claims submission and status
+├── account.smithy           # PBA account / balance / ledger
+├── insurance_policy.smithy  # Policy lifecycle
+├── consultation.smithy      # Chat-doctor consultation
+├── mandate.smithy           # UPI autopay mandates
+├── order.smithy             # Funding orders / contributions
+└── ...                      # benefit, dependant, sponsor, mrn, platform, etc.
 ```
 
 ### Generated Code (never edit these manually)
@@ -67,10 +69,12 @@ smithy/model/
 backend/crates/api_models/src/
 ├── auth.rs                  # ← Generated from auth.smithy
 ├── user.rs                  # ← Generated from user.smithy
-├── customer_wallet.rs       # ← Generated from wallet.smithy
-├── insurance_claims.rs      # ← Generated from insurance_claims.smithy
-├── insurance_plans.rs       # ← Generated from insurance_plans.smithy
+├── account.rs               # ← Generated from account.smithy
 ├── insurance_policy.rs      # ← Generated from insurance_policy.smithy
+├── consultation.rs          # ← Generated from consultation.smithy
+├── mandate.rs               # ← Generated from mandate.smithy
+├── order.rs                 # ← Generated from order.smithy
+├── ...                      # one module per domain (benefit, dependant, sponsor, ...)
 ├── lib.rs                   # ← Generated module declarations
 └── errors.rs                # ← Hand-written (NOT generated)
 
@@ -81,6 +85,7 @@ backend/crates/common_enums/src/
 └── lib.rs                   # ← Hand-written module declarations
 
 backend/smithy-api-model-generated/dto-ts/
+├── sdk.ts                   # ← Generated TypeScript SDK types
 └── api.ts                   # ← Generated TypeScript interfaces
 ```
 
@@ -118,22 +123,25 @@ A Smithy file defines **what** your API looks like — the operations, inputs, o
 ```smithy
 // smithy/model/auth.smithy
 
-@http(method: "POST", uri: "/auth/otp/trigger")
-operation RequestOtp {
-    input: RequestOtpInput
-    output: RequestOtpOutput
+@http(method: "POST", uri: "/auth/generate_token")
+operation GenerateToken {
+    input: GenerateTokenInput
+    output: GenerateTokenOutput
     errors: [ValidationException]
 }
 
-@rustRename(name: "OtpTriggerRequest")
-@rustDerives(["Deserialize", "ToSchema"])
-structure RequestOtpInput {
+@rustRename(name: "GenerateTokenRequest")
+@rustDerives(["Debug", "Serialize", "Deserialize", "ToSchema"])
+structure GenerateTokenInput {
     @required
     @rustSecret
-    phone: String
+    phone_number: String
 
     @required
-    phoneCountryCode: String
+    phone_country_code: String
+
+    @required
+    id_proof: IdProof
 }
 ```
 
@@ -177,40 +185,45 @@ Internally, the codegen tool:
 From this Smithy input:
 
 ```smithy
-@rustRename(name: "OtpTriggerRequest")
-@rustDerives(["Deserialize", "ToSchema"])
-structure RequestOtpInput {
+@rustRename(name: "GenerateTokenRequest")
+@rustDerives(["Debug", "Serialize", "Deserialize", "ToSchema"])
+structure GenerateTokenInput {
     @required
     @rustSecret
-    phone: String
+    phone_number: String
 
     @required
-    phoneCountryCode: String
+    phone_country_code: String
+
+    @required
+    id_proof: IdProof
 }
 ```
 
 **Rust output** (`api_models/src/auth.rs`):
 ```rust
-#[derive(Deserialize, ToSchema)]
-pub struct OtpTriggerRequest {
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct GenerateTokenRequest {
     #[schema(value_type = String)]
-    pub phone: Secret<String>,
+    pub phone_number: Secret<String>,
     pub phone_country_code: String,
+    pub id_proof: IdProof,
 }
 ```
 
-**TypeScript output** (`api.ts`):
+**TypeScript output** (`sdk.ts`):
 ```typescript
-export interface OtpTriggerRequest {
-  phone: string;
+export interface GenerateTokenRequest {
+  phone_number: string;
   phone_country_code: string;
+  id_proof: IdProof;
 }
 ```
 
 Notice:
 - `@rustRename` changed the struct name
-- `@rustSecret` wrapped `phone` in `Secret<T>` (Rust only — TS has no equivalent)
-- `phoneCountryCode` became `phone_country_code` (automatic camelCase → snake_case)
+- `@rustSecret` wrapped `phone_number` in `Secret<T>` (Rust only — TS has no equivalent)
+- camelCase member names are lowered to snake_case automatically (these members are already snake_case)
 - Optional fields (without `@required`) get `Option<T>` in Rust and `?:` in TypeScript
 
 ---
@@ -235,7 +248,7 @@ flowchart TD
     subgraph RUST_OUTPUT["Rust Output"]
         R1["#[derive(Debug, Serialize)]"]
         R2["pub phone: Secret&lt;String&gt;"]
-        R3["pub struct OtpTriggerRequest"]
+        R3["pub struct GenerateTokenRequest"]
         R4["→ common_enums crate"]
         R5["(not generated)"]
         R6["#[strum(serialize_all = ...)]"]
@@ -256,9 +269,9 @@ flowchart TD
 | Trait | Where | What it does | Example |
 |-------|-------|-------------|---------|
 | `@rustDerives` | Shape | Sets `#[derive(...)]` macros | `@rustDerives(["Serialize", "Deserialize", "ToSchema"])` |
-| `@rustRename` | Shape | Changes the generated name | `@rustRename(name: "OtpTriggerRequest")` |
+| `@rustRename` | Shape | Changes the generated name | `@rustRename(name: "GenerateTokenRequest")` |
 | `@rustSkip` | Shape | Don't generate in Rust or TS | Error types that map to `ApiErrorResponse` |
-| `@rustSecret` | Field | Wraps in `masking::Secret<T>` | Phone numbers, OTP codes, tokens |
+| `@rustSecret` | Field | Wraps in `masking::Secret<T>` | Phone numbers, access tokens, id-proof numbers |
 | `@rustType` | Field | Override the Rust type | `@rustType(value: "time::Date")` |
 | `@rustCrate` | Enum | Generate into `common_enums` crate | Shared enums like Gender, Currency |
 | `@rustStrum` | Enum | Add strum string conversion | `@rustStrum(serializeAll: "snake_case")` |
@@ -269,7 +282,7 @@ flowchart TD
 
 ## Shared Enums: The `@rustCrate` Flow
 
-Enums like `Gender`, `Currency`, `WalletStatus` are used across many backend crates — not just `api_models`. They live in the `common_enums` crate.
+Enums like `Gender`, `Currency`, `AccountStatus`, `MandateStatus` are used across many backend crates — not just `api_models`. They live in the `common_enums` crate.
 
 ```mermaid
 flowchart TD
@@ -284,8 +297,8 @@ flowchart TD
 
     subgraph FILES["Generated Files"]
         F1["common_enums/src/generated_enums.rs<br/>#[derive(Debug, Clone, ...)]<br/>#[strum(serialize_all = 'snake_case')]<br/>#[aarokya_derive::diesel_enum]<br/>pub enum Gender { Male, Female, Other }"]
-        F2["common_enums/src/diesel_exports.rs<br/>pub use super::DbGender as Gender;"]
-        F3["api_models/src/user.rs<br/>use common_enums::Gender;<br/>pub struct UserProfile { gender: Gender, ... }"]
+        F2["common_enums/src/diesel_exports.rs<br/>pub use super::DbGender as Gender"]
+        F3["api_models/src/user.rs<br/>use common_enums::Gender<br/>pub struct UserProfile { gender: Gender, ... }"]
     end
 
     SMITHY --> GEN
@@ -370,7 +383,7 @@ sequenceDiagram
     Gen-->>Gen: Regenerates .rs + .ts files
     You->>Code: cargo check → fix compile errors
     You->>Code: Update business logic for new field
-    You->>Test: just codegen-test (57 tests)
+    You->>Test: just codegen-test (snapshot + unit tests)
     You->>Test: just backend test
     You->>CI: Push PR
     CI->>CI: codegen-test (cargo nextest)
@@ -443,7 +456,7 @@ flowchart TD
     PR["Pull Request"] --> J1 & J2 & J3 & J4
 
     subgraph J1["codegen-test"]
-        T1["cargo nextest run<br/>57 snapshot + unit tests"]
+        T1["cargo nextest run<br/>snapshot + unit tests"]
         T2["cargo llvm-cov<br/>coverage report"]
         T1 --> T2
     end

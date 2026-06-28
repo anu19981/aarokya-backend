@@ -4,9 +4,9 @@ description: "Provider-agnostic chat-doctor pipeline. Patients open authenticate
 ---
 
 <Info>
-  **Authentication:** All user-facing endpoints require `Authorization: Bearer <access_token>`. The inbound webhook is **public** (see Security).
+  **Authentication:** All user-facing endpoints require `Authorization: Bearer <access_token>`. Admin (cross-user) endpoints require trusted-backend (admin/operator) auth.
 
-  **External Dependencies:** Narayana Health Conversation Gateway (Aathma). All upstream calls go through the `narayana` crate.
+  **External Dependencies:** Narayana Health Conversation Gateway. All upstream calls go through the `narayana` crate.
 
   **Status:** Shipped (single-provider). Provider-agnostic dispatcher in place for a second provider.
 </Info>
@@ -27,13 +27,14 @@ provider with freshly-minted user-context and participant tokens.
 
 A dependant is eligible for a consultation under a given consultation benefit when:
 
-1. The primary user holds an `Issued` insurance policy whose `InsurancePolicy` benefit
-   shares a `benefit_provider_id` with an active `Consultation` benefit, **and**
-2. The dependant is on the policy's `dependant_ids` list.
+1. The primary user holds an `Issued` `InsurancePolicy` benefit whose provider also
+   offers an active `Consultation` benefit, **and**
+2. The dependant is covered by that policy.
 
-Once eligible, usage is unlimited — a dependant may have multiple concurrent active
-consultations under the same benefit. `eligible_dependants` still reports
-`active_consultation_count` as informational context.
+Only **one active consultation** is allowed per `(dependant, benefit)` pair — a fresh
+`POST /consultations` against a still-`ACTIVE` thread returns `409 CN_1613
+ActiveConsultationExists`. `eligible_dependants` reports `active_consultation_count`
+(0 means creating one starts a new thread).
 
 A future free tier (3 free consultations for users without a policy) will surface
 through the same `eligible_dependants` endpoint.
@@ -42,17 +43,27 @@ through the same `eligible_dependants` endpoint.
 
 ## State Machine
 
+`ConsultationStatus` has five values. Create is two-phase: the row is INSERTed as
+`INITIATED` (no upstream thread yet), then the provider `create_thread` call flips it
+to `ACTIVE` (with the upstream `external_reference_id`) or `FAILED`.
+
 ```mermaid
 stateDiagram-v2
-    [*] --> Active: POST /consultations
-    Active --> Completed: doctor closes upstream
-    Active --> Closed: patient/admin closes upstream
-    Completed --> [*]
-    Closed --> [*]
+    [*] --> INITIATED: "POST /consultations (INSERT)"
+    INITIATED --> ACTIVE: "create_thread Ok / reconcile-adopt"
+    INITIATED --> FAILED: "create_thread Err"
+    ACTIVE --> COMPLETED: "webhook DONE / get_thread drift"
+    ACTIVE --> CLOSED: "webhook CLOSED / 24h auto-reply"
+    FAILED --> [*]
+    COMPLETED --> [*]
+    CLOSED --> [*]
 ```
 
-Upstream Narayana owns the lifecycle; Aarokya mirrors it lazily on every `GET` and
-`LIST` call (see Read-time Sync below).
+`INITIATED` and `FAILED` rows have no `external_reference_id`, so messaging endpoints
+return `400 CN_1616 ConsultationNotReady`. `ACTIVE`/`COMPLETED`/`CLOSED` always carry
+one. Upstream Narayana owns the open/closed lifecycle; Aarokya mirrors `ACTIVE →
+COMPLETED`/`CLOSED` drift lazily on every `GET` and `LIST` call (see Read-time Sync
+below) and on the inbound webhook.
 
 ---
 
@@ -119,28 +130,33 @@ the degradation.
 
 ## Inbound Webhook
 
-`POST /webhooks/consultations/narayana/{benefit_id}` — public, no Bearer token.
+The single inbound provider webhook — `POST /benefits/{benefit_id}/webhook` — is owned
+by the **benefit** module, not this one. `core::benefit::handle_benefit_webhook` loads
+the benefit, enforces benefit-provider-service auth (`require_benefit_provider_service`
+plus a strict `benefit_provider_id` check), and dispatches on `benefit_type`. For a
+`Consultation` benefit it calls into `core::consultation::handle_consultation_webhook`,
+which owns only the consultation-specific work described below.
 
-Called by Narayana when a new message (typically a doctor reply) arrives.
-`{benefit_id}` scopes the callback to the consultation benefit it was registered
-against; the handler cross-checks that the row resolved via
-`chat_conversation_source_id` matches that benefit, logs the result, and **always**
-returns 200.
+Called by Narayana when a new message (typically a doctor reply) arrives. The handler
+resolves the mirror row via the upstream `chat_conversation_source_id` scoped to
+`{benefit_id}`, emits a fields-only audit log (no PHI), and mirrors lifecycle markers
+onto the row:
 
-### Security Caveats
+- `DONE` (doctor marked done) → `ConsultationStatus::Completed`
+- `CLOSED` (24h auto-reply close) → `ConsultationStatus::Closed`
 
-<Warning>
-Narayana does not currently sign or authenticate webhook requests. Integrity relies
-on:
+A row lookup or status-update failure surfaces as **5xx** so Narayana retries; a clean
+"no matching row" or "no lifecycle marker" stays **200** (cross-tenant / stale webhooks
+are legitimate and retrying wouldn't change anything).
 
-- strict payload-shape deserialisation (serde rejects anything else),
-- benefit scoping in the URL (mismatches are observable in logs as `benefit_matches = false`),
-- idempotent handling — the handler is currently a pure log line, so duplicates are cheap,
-- IP allow-listing at the edge / load balancer (deployment concern).
-</Warning>
+<Note>
+The webhook authenticates as a benefit-provider-service; it is **not** a public,
+unauthenticated endpoint. Integrity also relies on strict payload-shape
+deserialisation (serde rejects anything else) and `benefit_id` scoping in the URL.
+</Note>
 
-Side effects on inbound messages (push notifications, last-message cache,
-read-state) are deliberately deferred.
+Inbound new-message side effects (push notifications, last-message cache, read-state)
+are deliberately deferred — only the `DONE`/`CLOSED` lifecycle markers are acted on.
 
 ---
 
@@ -148,23 +164,23 @@ read-state) are deliberately deferred.
 
 | Code | HTTP | Meaning |
 |---|---|---|
-| CN-1600 | 500 | Internal server error |
-| CN-1601 | 404 | Consultation not found |
-| CN-1602 | 403 | Caller is not the consultation owner |
-| CN-1603 | 404 | Dependant not found or inactive |
-| CN-1604 | 403 | Dependant is not eligible for consultations |
-| CN-1605 | 400 | Provider does not accept the dependant's gender |
-| CN-1606 | **502** | Upstream vendor authentication failed |
-| CN-1607 | **502** | Upstream user-context authentication failed |
-| CN-1608 | **502** | Upstream provider error |
-| CN-1609 | 400 | Attachments not supported by this provider |
-| CN-1610 | 400 | Read receipts not supported by this provider |
-| CN-1611 | 400 | Attachment downloads not supported by this provider |
-| CN-1612 | 400 | More than one file attached (single attachment only) |
-| CN-1613 | 409 | An active consultation already exists for this `(dependant, benefit)` |
-| CN-1614 | 404 | Benefit not found |
-| CN-1615 | 400 | Benefit is not a consultation-type benefit (eligibility endpoint) |
-| CN-1616 | 400 | Consultation row exists but has no upstream thread yet (messaging on `INITIATED` / `FAILED`) |
+| CN_1600 | 500 | Internal server error |
+| CN_1601 | 404 | Consultation not found |
+| CN_1602 | 403 | Caller is not the consultation owner |
+| CN_1603 | 404 | Dependant not found or inactive |
+| CN_1604 | 403 | Dependant is not eligible for consultations |
+| CN_1605 | 400 | Provider does not accept the dependant's gender |
+| CN_1606 | **502** | Upstream vendor authentication failed |
+| CN_1607 | **502** | Upstream user-context authentication failed |
+| CN_1608 | **502** | Upstream provider error |
+| CN_1609 | 400 | Attachments not supported by this provider |
+| CN_1610 | 400 | Read receipts not supported by this provider |
+| CN_1611 | 400 | Attachment downloads not supported by this provider |
+| CN_1612 | 400 | More than one file attached (single attachment only) |
+| CN_1613 | 409 | An active consultation already exists for this `(dependant, benefit)` |
+| CN_1614 | 404 | Benefit not found |
+| CN_1615 | 400 | Benefit is not a consultation-type benefit (eligibility endpoint) |
+| CN_1616 | 400 | Consultation row exists but has no upstream thread yet (messaging on `INITIATED` / `FAILED`) |
 
 Upstream variants surface as **502 Bad Gateway**, not 500, so monitoring can
 distinguish "we broke" from "Narayana broke".

@@ -9,8 +9,8 @@ description: "End-to-end system design — how the mobile app, Rust backend, and
 flowchart LR
     subgraph Client["📱 Client Layer"]
         direction TB
-        APP["Expo App\nReact Native"]
-        SDK["Juspay SDK\nPayments"]
+        APP["Expo App<br/>React Native"]
+        SDK["Juspay SDK<br/>Payments"]
     end
 
     subgraph Backend["⚙️ Aarokya Backend — Rust/Actix-web"]
@@ -19,81 +19,77 @@ flowchart LR
             direction LR
             AUTH["🔐 Auth"]
             USER["👤 User"]
-            WALLET["💰 Wallet"]
-            INS["🛡️ Insurance"]
-            DOC["🩺 Call Doctor"]
+            ACCT["💰 Account (PBA)"]
+            INS["🛡️ Insurance Policy"]
+            CONS["🩺 Consultation"]
         end
-        BG["🔄 Retry Worker"]
+        MAND["🔄 Mandate / Autopay"]
         DB[("🗄️ PostgreSQL")]
     end
 
     subgraph Partners["🔌 External Partners"]
         direction TB
-        NY["🚕 Namma Yatri\nHost App + UPI Mandate"]
-        JP["💳 Juspay\nPayments"]
-        NH["🏥 Narayana Health\nInsurance (NHIL)"]
-        NHCT["🏦 NHCT\nAarokya Fund (Transcorp)"]
-        NAMA["🤖 Nama Agent\nAI/LLM"]
-        AATHMA["👨‍⚕️ Aathma\nDoctor Platform"]
-        SMS["📱 ValueFirst\nSMS"]
+        PLAT["🚕 Platform<br/>Host App (e.g. Namma Yatri)"]
+        KC["🔑 Keycloak<br/>OIDC / Service Accounts"]
+        JP["💳 Juspay<br/>Payments + UPI Mandate"]
+        NH["🏥 Narayana Health<br/>Insurance + Consultation"]
     end
 
-    APP -->|"REST + JWT"| API
+    APP -->|"REST + Bearer JWT (app)"| API
+    PLAT -->|"service account → POST /auth/token"| AUTH
     SDK -.->|"checkout"| JP
 
-    AUTH -->|"OTP"| SMS
-    WALLET -->|"execute autopay"| NY
-    WALLET -->|"wallet ops"| JP
-    NY -->|"settle"| NHCT
+    AUTH -->|"OIDC / client_credentials"| KC
+    ACCT -->|"PBA ledger ops"| JP
+    MAND -->|"create / execute mandate"| JP
     INS -->|"policy"| NH
-    NHCT -->|"premium"| NH
-    DOC -->|"triage"| NAMA
-    DOC -->|"referral"| AATHMA
-    BG -->|"retry"| JP
+    CONS -->|"chat-doctor"| NH
 
     API --> DB
-    BG --> DB
+    MAND --> DB
 ```
 
 ---
 
 ## Domain Breakdown
 
+The current domain set is: `account`, `admin_narayana`, `auth`, `benefit`, `benefit_entity`, `benefit_provider`, `benefit_provider_order`, `config`, `consultation`, `daily_contribution`, `dashboard_user`, `dependant`, `event_log`, `insurance_policy`, `mandate`, `mandate_execution`, `mrn`, `order`, `platform`, `sponsor`, and `user`. The cards below highlight the user-facing domains.
+
 <CardGroup cols={2}>
   <Card title="Auth" icon="lock" color="#f59e0b">
-    **Tables:** `users`, `otp_sessions`, `user_sessions`
+    **Tables:** `users`, `user_key_store`
 
-    Phone OTP → JWT pair. Stateless access token (24h) + rotation-based refresh token (30d). Sessions hashed — never plaintext in DB.
+    Bearer JWT end to end. A platform **service account** (authenticated to Keycloak via `client_credentials`) calls `POST /auth/token` with `` `{phone_number, phone_country_code, id_proof}` `` and receives `` `{user_id, access_token}` `` — a stateless, self-contained app JWT (RS256).
 
   </Card>
   <Card title="User Profile" icon="user" color="#3b82f6">
-    **Tables:** `users` (shared with Auth)
+    **Tables:** `users` (shared with Auth), `dependant`
 
-    Reads/writes profile fields. `phone` and `aadhaar` are immutable via this module. Aadhaar returned masked: `XXXX-XXXX-1234`.
-
-  </Card>
-  <Card title="Wallet" icon="wallet" color="#16a34a">
-    **Tables:** `customer_wallets`
-
-    Auto-created async on first login. Tracks Juspay customer ID + wallet ID. Retry worker handles failures (5 attempts, exponential backoff).
+    Reads/writes profile fields (`first_name`, `last_name`, `email`, `dob`, `gender`, `address`). `phone_number` and `id_proof` are set at provisioning. PII is encrypted at rest via a per-user key in `user_key_store`.
 
   </Card>
-  <Card title="Insurance" icon="shield-heart" color="#ec4899">
-    **Tables:** `insurance_plans`, `insurance_policies`, `policy_dependants`
+  <Card title="Account (PBA)" icon="wallet" color="#16a34a">
+    **Tables:** `accounts`, `orders`
 
-    Local plan catalog + purchased policy references. All purchase/claims delegated to Narayana Health APIs.
-
-  </Card>
-  <Card title="Payments" icon="credit-card" color="#06b6d4">
-    **Tables:** `payment_orders`
-
-    Single endpoint for wallet top-up and insurance purchase. Juspay Session API → app opens SDK → poll order status.
+    User money lives in a Prepaid Bank Account (PBA) ledger, surfaced via `GET /users/{user_id}/balance` and `GET /users/{user_id}/ledger`. Contributions flow through `orders`; the `holder` column keys each account to a `user:<id>` or `sponsor:<id>`.
 
   </Card>
-  <Card title="Call Doctor" icon="stethoscope" color="#8b5cf6">
-    **Tables:** `chat_sessions`, `chat_messages`
+  <Card title="Insurance Policy" icon="shield-heart" color="#ec4899">
+    **Tables:** `insurance_policies`, `benefits`
 
-    Nama Agent conversation → clinical summary → Aathma assignment. Session locked after submission.
+    Policy lifecycle under `/users/{user_id}/insurance_policies/*`. Each policy references a `benefit` and covers a set of `dependant_ids`. Purchase/issuance is delegated to Narayana Health.
+
+  </Card>
+  <Card title="Order / Mandate" icon="credit-card" color="#06b6d4">
+    **Tables:** `orders`, `mandates`, `mandate_executions`
+
+    Self-contribution and sponsor-funded top-ups create `orders`. Recurring autopay is driven by a Juspay UPI `mandate`; each scheduled debit lands a row in `mandate_executions`.
+
+  </Card>
+  <Card title="Consultation" icon="stethoscope" color="#8b5cf6">
+    **Tables:** `consultations`, `benefits`
+
+    Provider-agnostic chat-doctor pipeline (currently Narayana Health). A consultation is tied to a `dependant` and a consultation `benefit`; messages are exchanged through the provider gateway. See [ADR-005](/decisions/adr-005-neutral-consultation-message-shape).
 
   </Card>
 </CardGroup>
@@ -107,60 +103,49 @@ flowchart LR
 ```mermaid
 sequenceDiagram
     actor U as Gig Worker
+    participant Plat as Platform (Host App)
     participant App as Expo App
     participant API as Rust Backend
     participant JP as Juspay
     participant NH as Narayana Health
 
     rect rgba(59, 130, 246, 0.15)
-        Note over U,API: 1. Onboarding
-        U->>App: Enter phone number
-        App->>API: POST /auth/otp/trigger
-        API-->>App: OTP sent
-        U->>App: Enter OTP (123456 UAT)
-        App->>API: POST /auth/otp/verify
-        API-->>App: JWT access + refresh tokens
-        API-)API: async: create Juspay customer
-        API-)JP: POST /customers
-        API-)JP: POST /customers/{ref}/wallets
+        Note over U,API: 1. Onboarding (token issuance)
+        U->>Plat: Open Aarokya from host app
+        Plat->>API: POST /auth/token (service-account bearer)<br/>{phone_number, phone_country_code, id_proof}
+        API-->>Plat: {user_id, access_token} (app JWT, RS256)
+        Plat->>App: Hand app JWT to embedded app
     end
 
     rect rgba(34, 197, 94, 0.15)
         Note over U,App: 2. Profile Setup
         U->>App: Fill in name, DOB, etc.
-        App->>API: PATCH /user/profile
+        App->>API: PATCH /users/{user_id} (Bearer app JWT)
         API-->>App: Updated profile
     end
 
     rect rgba(245, 158, 11, 0.15)
-        Note over U,JP: 3. Add Money to Wallet
+        Note over U,JP: 3. Add Money (self-contribution)
         U->>App: Tap "Add Money" → ₹500
-        App->>API: POST /nh/payment/session (WALLET_TOPUP)
-        API->>JP: Create session (with payment_rules)
+        App->>API: POST /users/{user_id}/contributions/self
+        API->>JP: Create order / PBA top-up
         JP-->>API: sdk_payload
         API-->>App: sdk_payload
         App->>JP: HyperCheckout.initiate(sdk_payload)
         JP-->>App: Payment complete
-        App->>API: GET /nh/payment/order-status?order_id=...
-        API->>JP: GET /orders/{id}
-        JP-->>API: wallet.topup.status = SUCCESS
-        API-->>App: Balance updated
+        App->>API: GET /users/{user_id}/orders/{id}
+        API-->>App: status = SUCCESS
+        App->>API: GET /users/{user_id}/balance
+        API-->>App: Updated balance
     end
 
     rect rgba(244, 63, 94, 0.15)
         Note over U,NH: 4. Buy Insurance
-        U->>App: Browse plans → Select Family Plan
-        App->>API: POST /insurance/calculate-premium
-        API-->>App: 9,145 (base + GST)
-        App->>API: POST /nh/payment/session (INSURANCE)
-        API->>JP: Create session (no payment_rules)
-        JP-->>API: sdk_payload
-        App->>JP: HyperCheckout.initiate(sdk_payload)
-        JP-->>App: CHARGED
-        App->>API: GET /nh/payment/order-status
-        API-->>App: SUCCESS
-        App->>API: POST /insurance/purchase
-        API->>NH: Purchase policy API
+        U->>App: Browse benefits → Select policy
+        App->>API: POST /users/{user_id}/insurance_policies/preview
+        API-->>App: Premium amounts (daily / annual)
+        App->>API: POST /users/{user_id}/insurance_policies
+        API->>NH: Purchase / issue policy
         NH-->>API: Policy details
         API-->>App: Policy issued
     end
@@ -168,101 +153,97 @@ sequenceDiagram
 
 ### Automated Flow (Habit Forming — Autopay + Insurance)
 
-This is the primary flow for Namma Yatri drivers. After a one-time consent, the system automatically tops up the wallet and purchases insurance daily — no manual intervention needed.
+This is the primary flow for drivers on a host platform. After a one-time mandate setup, the system automatically tops up the PBA account and purchases insurance on schedule — no manual intervention needed.
 
 ```mermaid
 sequenceDiagram
     actor U as Driver
     participant AK as Aarokya
-    participant NY as Namma Yatri
+    participant JP as Juspay (UPI Mandate)
     participant BANK as UPI / Bank
-    participant W as Wallet
-    participant NHIL as NHIL<br/>(Narayana Health Insurance)
-    participant NHCT as NHCT<br/>(Aarokya Fund, Transcorp)
+    participant PBA as PBA Account
+    participant NH as Narayana Health<br/>(Insurance)
 
     rect rgba(34, 197, 94, 0.15)
-        Note over U,NY: Phase 1 — One-time Consent
-        U->>AK: Consent for ₹20/day autopay
-        AK->>NY: Link to existing UPI mandate (₹35 ceiling)
-        NY-->>AK: Consent registered
+        Note over U,JP: Phase 1 — One-time Mandate Setup
+        U->>AK: Consent for daily autopay
+        AK->>JP: Create UPI mandate (max_amount ceiling)
+        JP-->>AK: Mandate active
     end
 
     rect rgba(59, 130, 246, 0.15)
-        Note over AK,W: Phase 2 — Daily Wallet Top-Up (CRON)
-        AK->>NY: Execute autopay ₹20
-        NY->>BANK: Debit ₹20 (existing mandate)
-        BANK-->>NY: Debit success
-        NY-->>AK: SUCCESS
-        AK->>W: Top up ₹20
-        W-->>AK: Confirmed
+        Note over AK,PBA: Phase 2 — Scheduled Top-Up (job)
+        AK->>JP: Execute mandate debit (records mandate_execution)
+        JP->>BANK: Debit (existing mandate)
+        BANK-->>JP: Debit success
+        JP-->>AK: SUCCESS
+        AK->>PBA: Credit account (order)
+        PBA-->>AK: Confirmed
     end
 
     rect rgba(168, 85, 247, 0.15)
-        Note over AK,NHIL: Phase 3 — Auto Insurance Purchase (CRON)
+        Note over AK,NH: Phase 3 — Auto Insurance Purchase (job)
         AK->>AK: Queue for insurance (batch)
-        AK-->>U: Policy issuance initiated
-        AK->>NHIL: Create policy (auto/manual)
-        NHIL-->>AK: Policy Issued
+        AK->>NH: Create / issue policy
+        NH-->>AK: Policy Issued
         AK-->>U: 🔔 Notification: Policy Issued
-    end
-
-    rect rgba(245, 158, 11, 0.15)
-        Note over NY,NHCT: Settlement
-        NY->>NHCT: Settle wallet funds
-        NHCT->>NHIL: Transfer premium (at intervals)
     end
 ```
 
 ---
 
-## Background Retry Worker
+## Scheduled Autopay (Mandate Execution)
 
-The wallet provisioning worker runs on startup and polls every **10 seconds** for stalled wallet creation jobs.
+Recurring debits are not driven by an in-process worker. An external scheduler (**Kronos**) fires each due mandate into the backend at `POST /mandate/{mandate_id}/execute`, passing a per-firing `X-Mandate-Execution-Id` (the `job_execution_id`). The handler is idempotent: it claims a `mandate_executions` row via `INSERT ... ON CONFLICT (job_execution_id) DO NOTHING RETURNING *`, so a Kronos retry of the same firing replays rather than double-charges.
 
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> PENDING : User logs in (first time)
-    PENDING --> IN_PROGRESS : Worker picks up job
-    IN_PROGRESS --> COMPLETED : Juspay API success
-    IN_PROGRESS --> RETRYING : Juspay API failure
-    RETRYING --> IN_PROGRESS : next_retry_at elapsed
-    RETRYING --> FAILED : attempt > 5
-    COMPLETED --> [*]
+    [*] --> INITIATED : Kronos fires, claim row inserted
+    INITIATED --> PENDING : Order minted, /txns sent to Juspay
+    PENDING --> SUCCESS : Debit confirmed, account credited
+    PENDING --> FAILED : Provider declined or timed out
+    SUCCESS --> [*]
     FAILED --> [*]
 
-    note right of RETRYING
-        Backoff: 5s × 3^attempt
-        Capped at 300s
-        Max 5 retries
+    note right of PENDING
+        Provider order_id = orders.id
+        Juspay per-order dedup
+        collapses any duplicate charge
     end note
 ```
+
+The `MandateExecutionStatus` enum is `initiated | pending | success | failed`. Each firing also mints an `orders` row (the funding ledger entry) before the provider charge, satisfying the `mandate_executions.order_id` foreign key.
 
 ---
 
 ## Security Model
 
 <CardGroup cols={2}>
-  <Card title="JWT Access Token" icon="key" color="#7c3aed">
-    24-hour expiry. Claims: `user_id`, `phone`. Validated on every protected
-    endpoint via middleware.
+  <Card title="App JWT (mobile)" icon="key" color="#7c3aed">
+    RS256-signed app token issued by `POST /auth/token`. Validated on every
+    protected endpoint by the auth middleware. Stateless — verified by
+    signature alone, with no per-request DB lookup.
   </Card>
-  <Card title="Refresh Token Rotation" icon="arrows-rotate" color="#dc2626">
-    30-day opaque token. Stored as **SHA-256 hash** only — never plaintext. Old
-    session revoked atomically before new pair issued.
+  <Card title="Platform Service Accounts" icon="arrows-rotate" color="#dc2626">
+    Only a platform **service account** may call `POST /auth/token`. It
+    authenticates to Keycloak via `client_credentials` and presents a bearer
+    JWT with `actor_type: "platform_service"`.
   </Card>
-  <Card title="OTP Security" icon="shield-check" color="#0891b2">
-    OTP hash stored (never plaintext). Single-use via `verified_at`. Attempt
-    counter prevents brute force.
+  <Card title="Admin / Dashboard OIDC" icon="shield-check" color="#0891b2">
+    Admin, dashboard, and other service actors authenticate via **Keycloak
+    OIDC**. Tokens are JWKS-verified (signature + `iss` + `aud` + `exp`) and
+    the `actor_type` claim drives role-based access.
   </Card>
   <Card title="PII Protection" icon="eye-slash" color="#059669">
-    Aadhaar stored as last 4 digits only. All PII fields encrypted at rest
-    (application-level). Masked in all API responses.
+    PII fields are encrypted at rest with a per-user data key in
+    `user_key_store` (application-level). Secret fields (phone, tokens) are
+    wrapped in `Secret<T>` and never logged in plaintext.
   </Card>
 </CardGroup>
 
-<Warning>
-  **UAT Note:** In UAT/sandbox mode, the OTP is hardcoded as `123456` — no SMS
-  is sent. In production, ValueFirst (or equivalent) SMS provider sends the real
-  OTP.
-</Warning>
+<Note>
+  Token issuance is entirely service-account driven — the host platform
+  exchanges the user's `{phone_number, phone_country_code, id_proof}` for an
+  app JWT on the user's behalf.
+</Note>

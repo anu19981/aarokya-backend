@@ -17,8 +17,8 @@ In a traditional setup, API contracts drift between backend and frontend: the Ru
     nobody keeps in sync.
   </Card>
   <Card title="After: 1 Source of Truth" icon="circle-check" color="#16a34a">
-    One `.smithy` model file generates **everything** — Rust server traits,
-    TypeScript SDK, and DTO types.
+    The `.smithy` models generate **everything** — Rust server traits, the
+    TypeScript SDK, and the shared DTO + enum types.
   </Card>
   <Card title="Zero Drift" icon="lock" color="#0891b2">
     If the Smithy model doesn't compile, nothing builds. Contract mismatch
@@ -32,19 +32,19 @@ In a traditional setup, API contracts drift between backend and frontend: the Ru
 
 ```mermaid
 flowchart TD
-    A["📄 .smithy Model Files\n(in.aarokya.api#AarokyaService)\nSource of Truth"] --> B{smithy build}
+    A["📄 .smithy Model Files<br/>(in.aarokya.api#AarokyaService)<br/>Source of Truth"] --> B{smithy build}
 
-    B -->|"--projection server-rust"| C["🦀 smithy-rs\nRust Server Crate\naarokya_server_api\n(v0.1.0)"]
-    B -->|"--projection client-typescript"| D["📦 smithy-typescript\n@aarokya/api-client\n(npm package)"]
+    B -->|"projection server-rust"| C["🦀 smithy-rs<br/>Rust Server Crate<br/>aarokya_server_api<br/>(v0.1.0)"]
+    B -->|"projection client-typescript"| D["📦 smithy-typescript<br/>@aarokya/api-client<br/>(npm package)"]
     B -->|"model.json artifact"| E
 
-    C --> F["cargo run --release\n(smithy-codegen)"]
-    F --> G["📄 dto.rs\nRust DTO types\n(backend/smithy-api-model-generated/)"]
-    F --> H["📄 api.ts\nTypeScript DTO types\n(same folder)"]
-    E["model.json"] --> F
+    E["model.json"] --> F["smithy-dto-gen generate<br/>(custom Rust tool)"]
+    F --> G["📄 api_models/src/*.rs<br/>Rust DTO types"]
+    F --> G2["📄 common_enums/src/<br/>generated_enums.rs + diesel_exports.rs"]
+    F --> H["📄 dto-ts/sdk.ts + api.ts<br/>TypeScript DTO types"]
 
-    C --> I["Actix-web handlers\nimplement generated\nserver traits"]
-    D --> J["Expo App\nconstructs client with\nbase URL + auth headers"]
+    C --> I["Actix-web handlers<br/>implement generated<br/>server traits"]
+    D --> J["Expo App<br/>constructs client with<br/>base URL + auth headers"]
 
     I --> K[(PostgreSQL)]
     J --> I
@@ -57,20 +57,14 @@ flowchart TD
 
 <Steps>
   <Step title="Define the contract in Smithy IDL">
-    API shapes, operations, and errors are described once in `.smithy` files under `smithy/model/`. The service is `in.aarokya.api#AarokyaService`.
+    API shapes, operations, and errors are described once in `.smithy` files under `smithy/model/` (one file per domain — `auth.smithy`, `account.smithy`, `insurance_policy.smithy`, `consultation.smithy`, …). The service is `in.aarokya.api#AarokyaService`, assembled from per-domain namespaces in `main.smithy`.
 
-    ```yaml
-    @restJson1
-    service AarokyaService {
-        version: "2025-01-01"
-        operations: [TriggerOtp, VerifyOtp, GetWallet, ...]
-    }
-
-    @http(method: "POST", uri: "/auth/otp/trigger")
-    operation TriggerOtp {
-        input: TriggerOtpInput
-        output: TriggerOtpOutput
-        errors: [ValidationException, InternalServerError]
+    ```smithy
+    @http(method: "POST", uri: "/auth/generate_token")
+    operation GenerateToken {
+        input: GenerateTokenInput
+        output: GenerateTokenOutput
+        errors: [ValidationException]
     }
     ```
 
@@ -98,16 +92,20 @@ flowchart TD
 
   </Step>
 
-  <Step title="Generate DTO types (Rust + TypeScript)">
+  <Step title="Generate DTO types + shared enums (Rust + TypeScript)">
     ```bash
     cd smithy-codegen
-    cargo run --release -- \
-      --model ../smithy/build/smithy/server-rust/model/model.json
+    cargo run --release -- generate --emit-lib \
+      --common-enums-out ../backend/crates/common_enums/src \
+      --ts-sdk-out ../backend/smithy-api-model-generated/dto-ts/sdk.ts
     ```
 
-    Outputs:
-    - `backend/smithy-api-model-generated/dto-rust/dto.rs`
-    - `backend/smithy-api-model-generated/dto-ts/api.ts`
+    The custom `smithy-dto-gen` tool reads `model.json` and emits:
+    - `backend/crates/api_models/src/*.rs` — per-domain Rust DTO modules
+    - `backend/crates/common_enums/src/generated_enums.rs` + `diesel_exports.rs` — shared enums
+    - `backend/smithy-api-model-generated/dto-ts/sdk.ts` (and `api.ts`) — TypeScript types
+
+    In practice you run the whole thing with **`just gen`** (smithy build → `smithy-dto-gen generate` → `rustfmt` → `npm install`).
 
   </Step>
 
@@ -128,9 +126,9 @@ flowchart TD
 
 | Projection          | Maven Plugin                           | Output                            | Used By               |
 | ------------------- | -------------------------------------- | --------------------------------- | --------------------- |
-| `server-rust`       | `smithy-rs:codegen-server:0.1.6`       | Rust crate with server traits     | Actix-web backend     |
+| `server-rust`       | `codegen-server:0.1.6`                 | Rust crate with server traits     | Actix-web backend     |
 | `client-typescript` | `smithy-aws-typescript-codegen:0.47.0` | npm package `@aarokya/api-client` | Expo React Native app |
-| `(codegen binary)`  | `cargo run` (Rust binary)              | `dto.rs` + `api.ts`               | Both ends             |
+| `smithy-dto-gen`    | `cargo run` (custom Rust binary)       | `api_models/*.rs`, `common_enums`, `dto-ts/sdk.ts` | Both ends |
 
 ---
 
@@ -145,10 +143,10 @@ This means the Smithy model is the authoritative contract, not an OpenAPI docume
 
 ```mermaid
 flowchart LR
-    S["Smithy IDL\n(source of truth)"] -->|"smithy-rs"| R["Rust\nServer"]
-    S -->|"smithy-typescript"| T["TypeScript\nClient"]
-    R -->|"utoipa annotations"| O["OpenAPI JSON\n(docs only)"]
-    O -->|"Swagger UI"| DEV["Developer\nTooling"]
+    S["Smithy IDL<br/>(source of truth)"] -->|"smithy-rs"| R["Rust<br/>Server"]
+    S -->|"smithy-typescript"| T["TypeScript<br/>Client"]
+    R -->|"utoipa annotations"| O["OpenAPI JSON<br/>(docs only)"]
+    O -->|"Swagger UI"| DEV["Developer<br/>Tooling"]
 
 ```
 

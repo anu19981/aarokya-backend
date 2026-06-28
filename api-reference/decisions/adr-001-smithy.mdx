@@ -80,14 +80,14 @@ We needed a single place where the contract lives, with *mechanical enforcement*
 
 ```mermaid
 flowchart TD
-    S["📄 Smithy IDL\n(one model, one truth)"]
+    S["📄 Smithy IDL<br/>(one model, one truth)"]
 
-    S -->|"smithy-rs"| R["🦀 Rust server stubs\n(aarokya_server_api crate)"]
-    S -->|"smithy-typescript"| T["📦 TypeScript client\n(@aarokya/api-client)"]
-    S -->|"smithy-codegen binary"| D["dto.rs + api.ts\n(shared DTO types)"]
+    S -->|"smithy-rs"| R["🦀 Rust server stubs<br/>(aarokya_server_api crate)"]
+    S -->|"smithy-typescript"| T["📦 TypeScript client<br/>(@aarokya/api-client)"]
+    S -->|"smithy-dto-gen binary"| D["api_models/*.rs + common_enums<br/>+ dto-ts/sdk.ts (shared DTO types)"]
 
-    R --> I["Actix-web handlers\ncompiler enforces contract"]
-    T --> E["Expo app\ncompiler enforces contract"]
+    R --> I["Actix-web handlers<br/>compiler enforces contract"]
+    T --> E["Expo app<br/>compiler enforces contract"]
 
 ```
 

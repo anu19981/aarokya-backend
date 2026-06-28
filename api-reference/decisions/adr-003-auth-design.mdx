@@ -1,92 +1,73 @@
 ---
 title: "ADR-003: JWT Auth Design"
-description: "Stateless access tokens, refresh token rotation, OTP hashing, and per-device sessions."
+description: "Bearer JWT end to end — platform-service-account token issuance for app users, and Keycloak OIDC for admin/dashboard/service actors."
 ---
 
 <Note>
   **Status:** Accepted · **Date:** 2025-Q1 · **Deciders:** Aarokya Engineering
 </Note>
 
+<Info>
+  This design evolved. An earlier draft proposed a phone-OTP flow with refresh-token rotation and per-device session rows (`otp_sessions`, `user_sessions`). That was **not** what shipped — there is no OTP, no refresh token, and no server-side session table in the codebase. The Decision below documents what actually runs today.
+</Info>
+
 ## Context
 
-Aarokya targets gig workers who primarily use smartphones. Auth requirements:
-- **Phone-first**: no passwords — OTP via SMS
-- **Multi-device**: a user can be logged in on multiple devices simultaneously
-- **Offline-tolerant**: access tokens must be verifiable without a DB round-trip
-- **Revocable**: logout must work even if the access token hasn't expired
+Aarokya is embedded inside a host platform (for example a driver app). The user never types a password or an OTP into Aarokya — the host platform already knows who they are. Auth requirements:
+- **Platform-mediated identity**: the host platform vouches for the user and exchanges their identity for an app token.
+- **Offline-tolerant**: app access tokens must be verifiable without a DB round-trip.
+- **Separate admin plane**: admin, dashboard, and service actors authenticate through a central IdP with role information on the token.
 
 ---
 
 ## Decisions Made
 
-### 1. Phone OTP (not password-based)
+### 1. App Token Issuance via Platform Service Account
 
-Gig workers often share devices and don't remember passwords. OTP to SMS is the lowest-friction auth method for this demographic.
+There is exactly one token-issuance endpoint for app users: `POST /auth/token`. A **platform service account** (not the end user) calls it with the user's `{phone_number, phone_country_code, id_proof}` and receives `{user_id, access_token}`. The `access_token` is an app JWT signed RS256 by the backend.
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant App
-    participant API
-    participant SMS as ValueFirst SMS
-
-    U->>App: Enter +91XXXXXXXXXX
-    App->>API: POST /auth/otp/trigger
-    API->>SMS: Send OTP (production)
-    Note over API,SMS: UAT: OTP hardcoded = 123456, no SMS sent
-    U->>App: Enter OTP
-    App->>API: POST /auth/otp/verify
-    API-->>App: access_token + refresh_token
-```
-
-### 2. Stateless JWT Access Tokens (24h)
-
-Access tokens are signed JWTs. Claims: `{ user_id, phone }`. No DB lookup needed on every request — the middleware just verifies the signature.
-
-**Why 24h expiry?**
-Shorter than typical (1h) because gig workers check the app irregularly. A 1h token would require frequent re-authentication mid-shift. The refresh token (30d) handles silent re-auth.
-
-### 3. Refresh Token Rotation
-
-<Warning>
-  Refresh tokens are **single-use**. On every refresh, the old token is revoked and a new pair is issued atomically. If a stolen token is used, the legitimate user's next refresh attempt will fail (their token was already rotated).
-</Warning>
+The service account authenticates to Aarokya with a bearer JWT minted by Keycloak via the `client_credentials` grant; the route requires `actor_type: "platform_service"`.
 
 ```mermaid
 sequenceDiagram
-    participant App
-    participant API
-    participant DB
+    participant Plat as Platform Service
+    participant KC as Keycloak
+    participant API as Aarokya
+    participant U as User row
 
-    App->>API: POST /auth/token/refresh (refresh_token_A)
-    API->>DB: Hash token_A, find session
-    DB-->>API: session found, not revoked
-    API->>DB: REVOKE session (token_A)
-    API->>DB: CREATE new session (token_B)
-    API-->>App: new access_token + refresh_token_B
+    Plat->>KC: client_credentials grant
+    KC-->>Plat: bearer JWT (actor_type platform_service)
+    Plat->>API: POST /auth/token (Bearer)<br/>{phone_number, phone_country_code, id_proof}
+    API->>U: upsert user (status onboarding)
+    API-->>Plat: {user_id, access_token} (app JWT, RS256)
 ```
 
-### 4. OTP Stored as Hash (Never Plaintext)
+### 2. Stateless RS256 App JWT
+
+The app token is a signed JWT verified on every protected request by the auth middleware — no DB lookup, no server-side session row. The app is purely a bearer of this token. There is no refresh token; when the token expires the platform re-issues one through `POST /auth/token`.
+
+The signing algorithm is pinned per issuer (`APP_JWT_ALGORITHM = RS256`) as a defense against algorithm-confusion attacks.
+
+### 3. Keycloak OIDC for Admin / Dashboard / Service Actors
+
+Admin, dashboard, benefit-provider, platform, and callback actors authenticate through **Keycloak OIDC**. Their tokens are JWKS-verified (signature + `iss` + `aud` + `exp`), and an `actor_type` claim drives role-based access. The `actor_type` discriminator covers app users plus admin, readonly-admin, admin-service, benefit-provider (human + service), platform (human + service), and callback-service roles.
 
 ```mermaid
-flowchart LR
-    A["OTP: 123456"] -->|"bcrypt / SHA-256\nhash"| B["otp_hash: $2b$12$..."]
-    B --> C[(otp_sessions table)]
-    A -.->|"NEVER"| C
+sequenceDiagram
+    participant Actor as Admin / Service
+    participant KC as Keycloak (OIDC)
+    participant API as Aarokya
 
+    Actor->>KC: OIDC login / client_credentials
+    KC-->>Actor: JWT (actor_type claim)
+    Actor->>API: Request with Bearer JWT
+    API->>API: JWKS verify (iss, aud, exp) + role check
+    API-->>Actor: Authorized response
 ```
 
-**Additional protections on `otp_sessions`:**
-- `expires_at` — OTP expires after a configurable window
-- `verified_at` — set once on successful verify; prevents reuse
-- `attempts` counter — limits brute-force attempts
+### 4. No OTP, No Refresh Token, No Session Table
 
-### 5. Per-Device Sessions in `user_sessions`
-
-Each device gets its own row in `user_sessions`. This enables:
-- **Selective logout** (`POST /auth/logout`) — revoke just the current device's session
-- **Logout all** — revoke all rows for a user
-- **Audit trail** — `device_info`, `ip_address`, `last_used_at` per session
+The app auth path has no SMS step, no OTP, and no refresh token. There are no `otp_sessions` or `user_sessions` tables — app sessions are entirely stateless JWTs. (A separate dashboard OIDC flow does use Keycloak-managed refresh cookies for browser sessions, but that is the IdP's mechanism, not an Aarokya-owned token store.)
 
 ---
 
@@ -94,12 +75,11 @@ Each device gets its own row in `user_sessions`. This enables:
 
 | Property | How Achieved |
 |---------|-------------|
-| OTP not guessable | Short-lived, hashed, single-use, attempt-limited |
-| Access token forgery prevention | HMAC-SHA256 signed, secret only on server |
-| Refresh token theft detection | Rotation — reuse of revoked token signals compromise |
-| Session hijacking via stolen refresh token | Hashed in DB — raw token never persisted |
-| Mass logout on compromise | Single DB query revokes all user sessions |
-| Replay attacks on OTP | `verified_at` set on first use blocks reuse |
+| App token forgery prevention | RS256-signed; private key only on server, algorithm pinned per issuer |
+| Admin/service token integrity | JWKS-verified (signature + `iss` + `aud` + `exp`) against Keycloak |
+| Authorization | `actor_type` claim checked per route (e.g. `require_platform_service`) |
+| User cannot self-mint tokens | Only a `platform_service` actor may call `POST /auth/token` |
+| Secrets in transit/at rest | Phone numbers and access tokens wrapped in `Secret<T>`; never logged plaintext |
 
 ---
 
@@ -107,14 +87,14 @@ Each device gets its own row in `user_sessions`. This enables:
 
 <CardGroup cols={2}>
   <Card title="Gained" icon="circle-check" color="#16a34a">
-    - Stateless access token verification — no DB on every request
-    - Per-device control — selective logout works
-    - Refresh token rotation provides theft detection
-    - No plaintext secrets in DB
+    - Stateless app token verification — no DB on every request
+    - No OTP/SMS dependency or delivery-latency tuning
+    - One central IdP (Keycloak) for all admin/service roles
+    - No session/OTP tables to secure, rotate, or reconcile
   </Card>
   <Card title="Trade-offs accepted" icon="triangle-exclamation" color="#f59e0b">
-    - Access tokens cannot be revoked mid-life (24h window)
-    - Must store `user_sessions` table for refresh token management (not purely stateless)
-    - OTP expiry window must be tuned for SMS delivery latency in India
+    - App tokens cannot be revoked mid-life — re-issuance is platform-driven
+    - Auth depends on the host platform's service-account integrity
+    - Keycloak is a hard runtime dependency for the admin/service plane
   </Card>
 </CardGroup>

@@ -20,8 +20,8 @@ as a URN string — `user:<12-digit-id>` or `sponsor:<uuid>`. The same
 encoding is used everywhere: DB storage, API responses, admin filters,
 audit logs.
 
-Accounts are created with `status = pending` by default and soft-deleted
-via admin `DELETE` (status flips to `inactive`; rows are never removed).
+Accounts are created with `status = PENDING` by default and soft-deleted
+via admin `DELETE` (status flips to `INACTIVE`; rows are never removed).
 
 ---
 
@@ -42,13 +42,13 @@ error.
 
 | Value       | Description                              | Legal holders |
 | ----------- | ---------------------------------------- | ------------- |
-| `savings`   | Real-world bank account                  | user, sponsor |
-| `hsa`       | PBA-backed Health Savings Account        | user          |
-| `education` | PBA-backed education savings account     | user          |
-| `sponsor`   | Sponsor's contribution-funding wallet    | sponsor       |
+| `SAVINGS`   | Real-world bank account                  | user, sponsor |
+| `HSA`       | PBA-backed Health Savings Account        | user          |
+| `EDUCATION` | PBA-backed education savings account     | user          |
+| `SPONSOR`   | Sponsor's PBA normal account (funds contributions) | sponsor   |
 
 `(holder, account_type)` legality is enforced at create time and at
-list-filter time. An illegal combination returns 400 (`AE-807`)
+list-filter time. An illegal combination returns 400 (`AE_807`)
 rather than a silent empty list.
 
 ---
@@ -63,7 +63,7 @@ rather than a silent empty list.
 | `GET /accounts`                         | admin       | Filter by `holder`, `holder_kind`, `status`, `account_type` |
 | `GET /accounts/{id}`                    | admin       | Fetch any account by UUID                      |
 | `PATCH /accounts/{id}`                  | admin       | Update `status`, `external_account_id`, `account_details` |
-| `DELETE /accounts/{id}`                 | admin       | Soft-delete (status → inactive)                |
+| `DELETE /accounts/{id}`                 | admin       | Soft-delete (status → INACTIVE)                |
 | `GET /users/{user_id}/balance`          | bearer (self) | PBA balance proxy                             |
 | `GET /users/{user_id}/ledger`           | bearer (self) | PBA transaction ledger proxy                  |
 
@@ -76,9 +76,9 @@ Admin routes return 403 if the caller is not an admin.
 
 ```mermaid
 flowchart LR
-    Create[POST /users/{user_id}/accounts] --> Pending[status=pending]
-    Pending -->|admin PATCH status=active| Active[status=active]
-    Active -->|admin PATCH status=inactive| Inactive[status=inactive]
+    Create[POST /users/{user_id}/accounts] --> Pending[status=PENDING]
+    Pending -->|admin PATCH status=ACTIVE| Active[status=ACTIVE]
+    Active -->|admin PATCH status=INACTIVE| Inactive[status=INACTIVE]
     Pending -->|admin DELETE| Inactive
     Active -->|admin DELETE| Inactive
 ```
@@ -93,8 +93,8 @@ Soft delete only — rows persist for audit.
 | -------------- | ------------------------------------------------ | --------- |
 | `holder`       | URN string (`user:<12d>` / `sponsor:<uuid>`)     | Exact-holder filter (btree equality) |
 | `holder_kind`  | `user` \| `sponsor`                              | Kind-scan filter; ignored when `holder` is set |
-| `status`       | `active` \| `inactive` \| `pending`              | |
-| `account_type` | `savings` \| `hsa` \| `education` \| `sponsor`   | Returns 400 if combined with a `holder` of an incompatible kind |
+| `status`       | `ACTIVE` \| `INACTIVE` \| `PENDING`              | |
+| `account_type` | `SAVINGS` \| `HSA` \| `EDUCATION` \| `SPONSOR`   | Returns 400 if combined with a `holder` of an incompatible kind |
 | `limit`        | `i32`                                            | default 50, max 200 |
 | `offset`       | `i32`                                            | default 0 |
 
@@ -137,7 +137,7 @@ curl -X POST http://localhost:8080/users/047382910564/accounts \
 curl -G http://localhost:8080/accounts \
   -H 'Authorization: Bearer eyJhbGci...admin-jwt...' \
   --data-urlencode 'holder_kind=user' \
-  --data-urlencode 'account_type=hsa'
+  --data-urlencode 'account_type=HSA'
 ```
 
 ```bash Admin activates an account
@@ -160,11 +160,11 @@ curl -X DELETE http://localhost:8080/accounts/01926b3a-7c2e-7d4f-a1b2-c3d4e5f600
 
 | Code     | HTTP | Description                                                 |
 | -------- | ---- | ----------------------------------------------------------- |
-| `AE-800` | 500  | Internal server error                                       |
-| `AE-801` | 404  | Account not found                                           |
-| `AE-802` | 400  | Validation error                                            |
-| `AE-803` | 500  | Upstream PBA call failed                                    |
-| `AE-804` | 500  | PBA is not configured for this environment                  |
-| `AE-805` | 404  | No PBA-backed account exists for user                       |
-| `AE-806` | 404  | Holder not found                                            |
-| `AE-807` | 400  | `(holder, account_type)` combination is not allowed         |
+| `AE_800` | 500  | Internal server error                                       |
+| `AE_801` | 404  | Account not found                                           |
+| `AE_802` | 400  | Validation error                                            |
+| `AE_803` | 500  | Upstream PBA call failed                                    |
+| `AE_804` | 500  | PBA is not configured for this environment                  |
+| `AE_805` | 404  | No PBA-backed account exists for user                       |
+| `AE_806` | 404  | Holder not found                                            |
+| `AE_807` | 400  | `(holder, account_type)` combination is not allowed         |

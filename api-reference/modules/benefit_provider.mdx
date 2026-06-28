@@ -1,18 +1,19 @@
 ---
 title: "Benefit Provider Module"
-description: "Admin-managed catalogue of companies and entities that deliver benefits to users. Every benefit must belong to an active provider."
+description: "Catalogue of companies and entities that deliver benefits to users, plus their machine credentials and dashboard users. Every benefit must belong to an active provider."
 ---
 
 <Info>
-  **Auth guard:** admin JWT bearer (`Authorization: Bearer <admin-jwt>`) required for all endpoints. No user JWT or partner key access.
+  **Auth guard:** all endpoints require a first-party Keycloak OIDC bearer token (`Authorization: Bearer <token>`). Provider CRUD is open to any trusted-backend actor (admin or benefit-provider, human or service); the credentials and dashboard-user sub-resources are scoped per provider (admin, or a benefit-provider human user belonging to that provider). No app-user (mobile JWT) path.
 </Info>
 
 ## Overview
 
 A **benefit provider** is a company or entity (e.g. a diagnostic chain, insurer, or telemedicine platform) that offers one or more benefits to Aarokya users. Providers are the top-level catalogue entry — every `Benefit` row has a `provider_id` FK referencing a provider.
 
-- **Name uniqueness is global.** No two providers may share the same name.
-- **Delete is guarded.** A provider with associated benefits cannot be deleted — remove benefits first.
+- **Name uniqueness is global.** No two active providers may share the same name. Soft-deleted providers free their name immediately (status flips to `INACTIVE`).
+- **Delete is guarded.** A provider with any associated benefit (active or inactive) cannot be deleted — soft-delete the benefits first.
+- **Each provider can mint machine credentials** (Basic-auth tokens backed by a Keycloak service-account client) and **provision dashboard users** scoped to itself.
 
 ---
 
@@ -20,45 +21,91 @@ A **benefit provider** is a company or entity (e.g. a diagnostic chain, insurer,
 
 ```mermaid
 flowchart LR
-    Admin -->|POST /benefit_providers| BP[BenefitProvider\nstatus=active]
-    BP -->|POST /benefits| B[Benefit]
-    B -->|linked via provider_id| BP
-    Admin -->|DELETE /benefit_providers/id| Guard{Has benefits?}
-    Guard -->|Yes| E[409 Conflict]
-    Guard -->|No| Soft[status=inactive]
+    Admin -->|"POST /benefit_providers"| BP["BenefitProvider<br/>status=ACTIVE"]
+    BP -->|"POST /benefits"| B[Benefit]
+    B -->|"linked via provider_id"| BP
+    Admin -->|"DELETE /benefit_providers/id"| Guard{Has benefits?}
+    Guard -->|Yes| E["409 Conflict"]
+    Guard -->|No| Soft["status=INACTIVE"]
 ```
 
 ---
 
 ## Auth Guards by Endpoint
 
-| Endpoint | Admin key | Notes |
-|----------|-----------|-------|
-| `POST /benefit_providers` | ✓ | Name must be unique |
-| `GET /benefit_providers` | ✓ | Filter by `status` |
-| `GET /benefit_providers/{id}` | ✓ | |
-| `PATCH /benefit_providers/{id}` | ✓ | Only `name` is updatable |
-| `DELETE /benefit_providers/{id}` | ✓ | Blocked if benefits exist |
+| Endpoint | Guard | Who passes |
+|----------|-------|------------|
+| `POST /benefit_providers` | `require_trusted_backend(false)` | Admin or benefit-provider (human/service) |
+| `GET /benefit_providers` | `require_trusted_backend(true)` | Above, plus read-only admin |
+| `GET /benefit_providers/{benefit_provider_id}` | `require_benefit_provider_strict(true, id)` | Admin, or BP actor scoped to this provider |
+| `PATCH /benefit_providers/{benefit_provider_id}` | `require_trusted_backend(false)` | Admin or benefit-provider (human/service) |
+| `DELETE /benefit_providers/{benefit_provider_id}` | `require_trusted_backend(false)` | Admin or benefit-provider (human/service) |
+| `POST` / `GET` / `DELETE` `…/credentials` | `require_benefit_provider_user_strict` | Admin, or BP **human** user scoped to this provider |
+| `POST` / `GET` / `DELETE` `…/users` | `require_benefit_provider_user_strict` | Admin, or BP **human** user scoped to this provider |
 
 ---
 
-## Endpoints
+## Provider Endpoints
 
 <CardGroup cols={2}>
   <Card title="POST /benefit_providers" icon="plus" color="#16a34a" href="/api/endpoints/benefit_providers/create">
-    Create a new benefit provider. Name must be unique.
+    Create a provider. Requires `name` (globally unique) and a URL-safe `slug`.
   </Card>
   <Card title="GET /benefit_providers" icon="list" color="#3b82f6" href="/api/endpoints/benefit_providers/list">
-    Paginated list. Filter by `status`.
+    Paginated list. Filter by `status`; supports `sort_on`/`sort_by`, `start_time`/`end_time`, `limit`/`offset`.
   </Card>
   <Card title="GET /benefit_providers/{id}" icon="building" color="#3b82f6" href="/api/endpoints/benefit_providers/get">
     Fetch a single provider by UUID.
   </Card>
   <Card title="PATCH /benefit_providers/{id}" icon="pen" color="#8b5cf6" href="/api/endpoints/benefit_providers/update">
-    Rename a provider. New name must not conflict.
+    Rename a provider. Only `name` is updatable; `slug` is immutable. New name must not conflict.
   </Card>
   <Card title="DELETE /benefit_providers/{id}" icon="trash" color="#dc2626" href="/api/endpoints/benefit_providers/delete">
-    Soft-delete (`status → inactive`). Fails if provider has benefits.
+    Soft-delete (`status → INACTIVE`). Fails with 409 if the provider has benefits.
+  </Card>
+</CardGroup>
+
+<Note>
+  `slug` is a lowercase URL/Keycloak-safe identifier (`[a-z0-9-]`, 2–40 chars) used as part of the service-account `clientId`. It is set at creation and is **immutable** thereafter.
+</Note>
+
+---
+
+## Credentials Sub-resource
+
+Each provider can hold multiple machine credentials. A credential is a Keycloak service-account client returning a `basic_token` (HTTP Basic auth) the provider's backend uses to call Aarokya.
+
+<CardGroup cols={2}>
+  <Card title="POST /benefit_providers/{id}/credentials" icon="key" color="#16a34a" href="/api/endpoints/benefit_providers/credentials_create">
+    Mint a new credential. The `basic_token` is returned **once** and is never retrievable afterwards.
+  </Card>
+  <Card title="GET /benefit_providers/{id}/credentials" icon="list" color="#3b82f6" href="/api/endpoints/benefit_providers/credentials_list">
+    List `credential_id`s for this provider. Never returns secrets.
+  </Card>
+  <Card title="DELETE /benefit_providers/{id}/credentials/{credential_id}" icon="trash" color="#dc2626" href="/api/endpoints/benefit_providers/credentials_revoke">
+    Revoke one credential. Idempotent: `revoked: false` if no such credential existed.
+  </Card>
+</CardGroup>
+
+<Warning>
+  Creating credentials always mints a fresh `credential_id` — there is no idempotency and no 409. The `basic_token` is shown only in the create response; store it immediately. There is no path that re-reads it.
+</Warning>
+
+---
+
+## Dashboard Users Sub-resource
+
+Provision human dashboard users scoped to a single provider.
+
+<CardGroup cols={2}>
+  <Card title="POST /benefit_providers/{id}/users" icon="user-plus" color="#16a34a" href="/api/endpoints/benefit_providers/users_create">
+    Provision a dashboard user (`email`, `first_name`, `last_name`). The `temporary_password` is shown **once**.
+  </Card>
+  <Card title="GET /benefit_providers/{id}/users" icon="users" color="#3b82f6" href="/api/endpoints/benefit_providers/users_list">
+    List dashboard users scoped to this provider.
+  </Card>
+  <Card title="DELETE /benefit_providers/{id}/users/{keycloak_user_id}" icon="user-minus" color="#dc2626" href="/api/endpoints/benefit_providers/users_disable">
+    Disable a dashboard user. Idempotent: `disabled: false` if no matching user.
   </Card>
 </CardGroup>
 
@@ -69,18 +116,26 @@ flowchart LR
 <CodeGroup>
 ```bash Create a provider
 curl -X POST http://localhost:8080/benefit_providers \
-  -H 'Authorization: Bearer eyJhbGci...admin-jwt...' \
+  -H 'Authorization: Bearer eyJhbGci...oidc-token...' \
   -H 'Content-Type: application/json' \
-  -d '{ "name": "Apollo Diagnostics" }'
+  -d '{ "name": "Narayana Health", "slug": "narayana-health" }'
 ```
 
 ```json Response 201
 {
   "id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
-  "name": "Apollo Diagnostics",
+  "name": "Narayana Health",
+  "slug": "narayana-health",
   "status": "ACTIVE",
   "created_at": "2026-04-12T10:00:00Z",
   "last_modified_at": "2026-04-12T10:00:00Z"
+}
+```
+
+```json Credentials POST 200
+{
+  "credential_id": "018f4c2a-9c0d-7e1f-aa2b-3c4d5e6f7a8b",
+  "basic_token": "<shown once — store it now>"
 }
 ```
 </CodeGroup>
@@ -91,8 +146,10 @@ curl -X POST http://localhost:8080/benefit_providers \
 
 | Code | HTTP | Description |
 |------|------|-------------|
-| `BPE-400` | 500 | Internal server error |
-| `BPE-401` | 404 | Provider not found |
-| `BPE-402` | 409 | Name already exists |
-| `BPE-403` | 409 | Provider has associated benefits — delete benefits first |
-| `BPE-404` | 400 | Validation error (e.g. empty name) |
+| `BPE_400` | 500 | Internal server error |
+| `BPE_401` | 404 | Provider not found |
+| `BPE_402` | 409 | Name already exists |
+| `BPE_403` | 409 | Provider has associated benefits — delete benefits first |
+| `BPE_404` | 400 | Validation error (e.g. empty name) |
+| `BPE_405` | 500 | Keycloak is not configured for this deployment |
+| `BPE_406` | 500 | Upstream Keycloak request failed |

@@ -92,7 +92,13 @@
                   "api/endpoints/platforms/list",
                   "api/endpoints/platforms/get",
                   "api/endpoints/platforms/update",
-                  "api/endpoints/platforms/delete"
+                  "api/endpoints/platforms/delete",
+                  "api/endpoints/platforms/credentials_create",
+                  "api/endpoints/platforms/credentials_list",
+                  "api/endpoints/platforms/credentials_revoke",
+                  "api/endpoints/platforms/users_create",
+                  "api/endpoints/platforms/users_list",
+                  "api/endpoints/platforms/users_disable"
                 ]
               },
               {
@@ -112,7 +118,13 @@
                   "api/endpoints/benefit_providers/list",
                   "api/endpoints/benefit_providers/get",
                   "api/endpoints/benefit_providers/update",
-                  "api/endpoints/benefit_providers/delete"
+                  "api/endpoints/benefit_providers/delete",
+                  "api/endpoints/benefit_providers/credentials_create",
+                  "api/endpoints/benefit_providers/credentials_list",
+                  "api/endpoints/benefit_providers/credentials_revoke",
+                  "api/endpoints/benefit_providers/users_create",
+                  "api/endpoints/benefit_providers/users_list",
+                  "api/endpoints/benefit_providers/users_disable"
                 ]
               },
               {
@@ -148,6 +160,8 @@
                   "api/endpoints/accounts/create",
                   "api/endpoints/accounts/list",
                   "api/endpoints/accounts/get",
+                  "api/endpoints/accounts/balance",
+                  "api/endpoints/accounts/ledger",
                   "api/endpoints/accounts/admin_list",
                   "api/endpoints/accounts/admin_get",
                   "api/endpoints/accounts/update",
@@ -176,7 +190,11 @@
                   "api/endpoints/insurance_policies/admin_get",
                   "api/endpoints/insurance_policies/download_document",
                   "api/endpoints/insurance_policies/admin_list",
-                  "api/endpoints/insurance_policies/admin_update"
+                  "api/endpoints/insurance_policies/admin_update",
+                  "api/endpoints/insurance_policies/list_with_benefit_details",
+                  "api/endpoints/insurance_policies/admin_update_status",
+                  "api/endpoints/insurance_policies/admin_bulk_update",
+                  "api/endpoints/insurance_policies/admin_export"
                 ]
               },
               {
@@ -201,7 +219,9 @@
                   "api/endpoints/mandate/update",
                   "api/endpoints/mandate/start",
                   "api/endpoints/mandate/pause",
-                  "api/endpoints/mandate/resume"
+                  "api/endpoints/mandate/resume",
+                  "api/endpoints/mandate/revoke",
+                  "api/endpoints/mandate/admin-list"
                 ]
               },
               {
@@ -209,14 +229,17 @@
                 "pages": [
                   "api/endpoints/mandate-execution/execute",
                   "api/endpoints/mandate-execution/status-check",
-                  "api/endpoints/mandate-execution/list"
+                  "api/endpoints/mandate-execution/list",
+                  "api/endpoints/mandate-execution/get",
+                  "api/endpoints/mandate-execution/admin-list"
                 ]
               },
               {
                 "group": "Orders",
                 "pages": [
                   "api/endpoints/orders/self-contribution",
-                  "api/endpoints/orders/order-status"
+                  "api/endpoints/orders/order-status",
+                  "api/endpoints/orders/admin-list"
                 ]
               },
               {
@@ -244,6 +267,7 @@
                   "api/endpoints/consultations/admin_list",
                   "api/endpoints/consultations/admin_get",
                   "api/endpoints/consultations/list_messages",
+                  "api/endpoints/consultations/send_message",
                   "api/endpoints/consultations/read_receipt",
                   "api/endpoints/consultations/attachment"
                 ]

@@ -4,19 +4,21 @@ description: "External orders placed with a benefit provider — an insurance-pr
 ---
 
 <Info>
-  **Auth:** all routes use a benefit-provider (trusted-backend) actor. There is
-  no `user_id` in the path — the owning user is derived server-side — and the
-  sole authorization boundary is a strict per-order check against the order's
-  `benefit_provider_id`.
+  **Auth:** all routes use a benefit-provider actor. Reads (`get`/`list`) accept
+  readonly admins too. There is no `user_id` in the path — the owning user is
+  derived server-side — and the authorization boundary is a strict per-order
+  check against the order's `benefit_provider_id` (`require_benefit_provider_strict`):
+  admins are cross-tenant, a benefit-provider actor is pinned to its own provider.
 </Info>
 
 ## Overview
 
 A benefit provider order is an external purchase placed with a benefit
 provider. Today the only flavour is an **insurance-premium payment**: the order
-names an `insurance_policy:<id>` entity, the server derives the owning user and
-the provider behind the policy, charges the premium out of the user's PBA-backed
-(HSA) account via PBA `MakePayment`, and tracks the outcome in `wallet_txn_data`.
+names a `benefit_entity_id` (an insurance policy id), the server derives the
+owning user and the provider behind the policy, charges the premium out of the
+user's PBA-backed (HSA) account via PBA `MakePayment`, and tracks the outcome
+in the `wallet_txn_data` column.
 
 There is no `user_id` in any path. On **create** the user is read from the named
 policy's `primary_user_id`; on **get**/**sync** it is read from the order row.
@@ -25,39 +27,115 @@ policy's `primary_user_id`; on **get**/**sync** it is read from the order row.
 
 ## `benefit_entity_id`
 
-Every order targets a tagged entity reference, `<benefit_type>:<entity_id>`:
+On the **request body**, `benefit_entity_id` is a bare policy UUID — the server
+builds the internal tagged reference `insurance_policy:<id>` from it. On
+responses (and the list query filter) it is the tagged form, `<benefit_type>:<entity_id>`:
 
 | `benefit_entity_id` value           | Meaning                                                          |
 | ----------------------------------- | ---------------------------------------------------------------- |
-| `insurance_policy:<policy-uuid>`    | Pay the premium for an insurance policy. The policy must exist and not be expired/rejected. |
+| `insurance_policy:<policy-uuid>`    | Pay the premium for an insurance policy. The policy must exist and not be `Expired`/`Rejected`. |
+
+Only `insurance_policy` is supported today; `consultation:<id>` is rejected for
+orders.
+
+---
+
+## Endpoints
+
+<CardGroup cols={2}>
+  <Card title="POST /benefit_provider_orders" icon="plus" color="#16a34a" href="/api/endpoints/benefit_provider_orders/create">
+    Create an order, charge the premium from the user's PBA account, and record the outcome.
+  </Card>
+  <Card title="GET /benefit_provider_orders/{id}" icon="magnifying-glass" color="#16a34a" href="/api/endpoints/benefit_provider_orders/get">
+    Read a single order by its globally-unique id.
+  </Card>
+  <Card title="GET /benefit_provider_orders" icon="list" color="#16a34a" href="/api/endpoints/benefit_provider_orders/list">
+    Paginated list, scoped to the providers the actor can access. Optional filters.
+  </Card>
+  <Card title="PATCH /benefit_provider_orders/{id}/sync" icon="rotate" color="#16a34a" href="/api/endpoints/benefit_provider_orders/sync">
+    Recovery — re-attempt a create-time payment that failed or never reached PBA.
+  </Card>
+</CardGroup>
+
+---
+
+## Create request
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `benefit_entity_id` | UUID | Yes | Bare insurance-policy id; server builds `insurance_policy:<id>`. |
+| `external_order_id` | string | Yes | The order id in the benefit provider's external system. |
+| `external_ref_id` | string | No | Free-form caller reference. |
+| `amount` | integer | Yes | **Minor units (paise)** — exact integer, no boundary conversion. Service-to-service. |
+| `currency` | string | Yes | ISO-4217 the minor-unit `amount` is denominated in. |
+
+<Note>
+  Unlike the user-facing modules, the create `amount` is in **minor units**
+  (paise), not rupees. This is a service-to-service API, so the amount is an
+  exact integer paired with `currency` — no major-unit float rounding at the
+  boundary.
+</Note>
 
 ---
 
 ## Order lifecycle
 
 1. **Create** — `POST /benefit_provider_orders`. The body names the entity via
-   `benefit_entity_id`. The server loads the policy, derives the owning user
-   (`primary_user_id`) and the provider (`policy → benefit → provider`),
-   authorizes the actor strictly against that provider, inserts the row with
-   `wallet_txn_data = pending`, pays the premium, then updates `wallet_txn_data`
-   to `success:<payment_id>` / `failed`.
+   `benefit_entity_id`. The server loads the policy (must exist and not be
+   `Expired`/`Rejected`), derives the owning user (`primary_user_id`) and the
+   provider (`policy → benefit → provider`), authorizes the actor strictly
+   against that provider, inserts the row with `wallet_txn_data = initiated`,
+   pays the premium from the user's HSA account, then updates `wallet_txn_data`
+   to `success:<payment_id>` / `failed`. An indeterminate PBA upstream error
+   leaves the row at its inserted state for `sync` to recover.
 2. **Get** — `GET /benefit_provider_orders/{id}`. Reads a single order by its
    globally-unique id.
 3. **List** — `GET /benefit_provider_orders`. Reads from the local DB with
-   optional `benefit_entity_id`, `start_time`/`end_time`, and `limit`/`offset`
-   filters; results are further filtered to the providers the actor can access.
+   optional `benefit_entity_id`, `benefit_provider_id`, `start_time`/`end_time`,
+   and `limit`/`offset` filters; results are further filtered to the providers
+   the actor can access. (`benefit_provider_id` is honoured only for
+   admin/trusted callers — a benefit-provider actor is always force-scoped to
+   its own provider.) Paginated: returns `data`, `total`, `limit`, `offset`.
 4. **Sync** — `PATCH /benefit_provider_orders/{id}/sync`. Recovery endpoint —
    re-attempts the PBA payment for an order whose create-time payment failed or
-   never reached PBA. Idempotent on the order id; a no-op once `success`.
+   never reached PBA. The order id is the PBA idempotency key, so this is
+   idempotent; a no-op once `success`.
 
 ---
 
 ## `wallet_txn_data`
 
-The PBA payment outcome, stored as a tagged string:
+The PBA payment outcome. On the **response** it is a tagged object
+`{ status, detail }`, where `status` is one of `INITIATED` / `PENDING` /
+`SUCCESS` / `VOIDED` / `FAILED` and `detail` carries the PBA payment id when
+present:
 
-| Value                  | Meaning                                              |
-| ---------------------- | ---------------------------------------------------- |
-| `pending`              | Inserted, payment not yet settled.                   |
-| `success:<payment_id>` | Premium paid; carries PBA's payment id.              |
-| `failed`               | Payment failed (and was determinate enough to mark). |
+| Response `status` | `detail` | Meaning |
+| --- | --- | --- |
+| `INITIATED` | — | Row inserted, no wallet call settled yet. |
+| `PENDING` | deposit id | Two-phase Phase 1 succeeded; finalisation pending. |
+| `SUCCESS` | payment id | Premium paid; carries PBA's payment id. |
+| `VOIDED` | deposit id | A parked `PENDING` deposit was voided. |
+| `FAILED` | — | Payment failed before any wallet movement. |
+
+In **storage** the same value is a tagged string in a `VARCHAR` column —
+`initiated` / `pending:<id>` / `success:<id>` / `voided:<id>` / `failed`. The
+`wallet_txn_data` name is a column on the `benefit_provider_orders` table; there
+is no standalone wallet surface. The debit always hits the user's PBA-backed
+(HSA) account.
+
+---
+
+## Response shape
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | UUID | Order id (globally unique). |
+| `user_id` | string | Derived owner (12-digit). |
+| `account_id` | UUID | The user's PBA-backed (HSA) account that was charged. |
+| `benefit_provider_id` | UUID | Provider derived from the policy. |
+| `benefit_entity_id` | string | Tagged: `insurance_policy:<id>`. |
+| `external_order_id` | string | Provider's external order id. |
+| `amount` | `AmountResponse` | `{ value, currency }` — major-unit float + currency. |
+| `wallet_txn_data` | object | `{ status, detail }` — see above. |
+| `created_at` / `last_modified_at` | string | ISO-8601. |

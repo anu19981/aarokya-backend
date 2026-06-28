@@ -15,7 +15,7 @@ We document significant architectural decisions as **Architecture Decision Recor
     Why Rust over Go/Node for the backend, and why Actix-web + Diesel over Axum or SQLx.
   </Card>
   <Card title="ADR-003: JWT Auth Design" icon="lock" href="/decisions/adr-003-auth-design" color="#0891b2">
-    Token rotation, OTP hashing, device-level sessions, and the stateless access token approach.
+    Platform-service-account token issuance, stateless app JWTs (RS256), and Keycloak OIDC for admin/dashboard actors.
   </Card>
   <Card title="ADR-004: Provider-Keyed Consultation Messages" icon="comments" href="/decisions/adr-004-provider-keyed-consultation-messages" color="#7c3aed">
     Per-provider chat message contracts via a discriminated union. **Superseded by ADR-005** for the wire shape.
@@ -33,7 +33,7 @@ We document significant architectural decisions as **Architecture Decision Recor
 |---|----------|--------|------|
 | ADR-001 | Smithy IDL as API source of truth | Accepted | 2025-Q1 |
 | ADR-002 | Rust + Actix-web + Diesel + PostgreSQL | Accepted | 2025-Q1 |
-| ADR-003 | JWT stateless auth with token rotation | Accepted | 2025-Q1 |
+| ADR-003 | Bearer JWT auth (service-account issuance + Keycloak OIDC) | Accepted | 2025-Q1 |
 | ADR-004 | Provider-Keyed Consultation Messages | Superseded by ADR-005 (wire) | 2026-Q2 |
 | ADR-005 | Neutral Consultation Message Shape | Accepted | 2026-05 |
 
@@ -43,11 +43,11 @@ We document significant architectural decisions as **Architecture Decision Recor
 
 ```mermaid
 flowchart LR
-    A["Problem\nIdentified"] --> B["List\nOptions"]
-    B --> C["Evaluate\nTrade-offs"]
-    C --> D["Team\nAlignment"]
-    D --> E["Write ADR\n(Context + Decision\n+ Consequences)"]
+    A["Problem<br/>Identified"] --> B["List<br/>Options"]
+    B --> C["Evaluate<br/>Trade-offs"]
+    C --> D["Team<br/>Alignment"]
+    D --> E["Write ADR<br/>(Context + Decision<br/>+ Consequences)"]
     E --> F["Implement"]
-    F --> G["Review\n(if outcome differs)"]
+    F --> G["Review<br/>(if outcome differs)"]
 
 ```

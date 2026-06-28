@@ -15,17 +15,20 @@ User rows are **created by the Auth module** on first `POST /auth/token`. This m
 
 ## Onboarding Flow
 
-New users start with `status = onboarding`. Calling `POST /users/{user_id}/complete_onboarding` transitions them to `active` and returns a fresh JWT.
+New users start with `status = ONBOARDING`. Calling `POST /users/{user_id}/complete_onboarding` transitions them to `ACTIVE` and returns a fresh JWT.
 
 ```mermaid
 flowchart LR
-    A[POST /auth/token\nfirst call] --> B[status = onboarding]
-    B --> C[PATCH /users/id\nfill fields optionally]
-    C --> D[POST /users/id/complete_onboarding\nsubmit required fields]
-    D --> E[status = active\nfresh JWT returned]
+    A[POST /auth/token<br/>first call] --> B[status = ONBOARDING]
+    B --> C[POST /users/id/complete_onboarding<br/>submit required fields]
+    C --> D[status = ACTIVE<br/>fresh JWT returned]
 ```
 
-Required fields for `complete_onboarding`: `first_name`, `last_name`, `dob`, `gender`, `address`.
+Required fields for `complete_onboarding`: `salutation`, `first_name`, `last_name`, `dob`, `gender`, `address`, and `bank_details` (`ifsc_code` + `account_number`). `email` is optional. Submitting these also seeds the user's accounts and creates the system-managed `SELF` dependant.
+
+<Note>
+`PATCH /users/{user_id}` is **not** part of the onboarding path — an app user can only `PATCH` once they are `ACTIVE`. While `ONBOARDING`, profile fields are submitted through `complete_onboarding`.
+</Note>
 
 ---
 
@@ -33,11 +36,15 @@ Required fields for `complete_onboarding`: `first_name`, `last_name`, `dob`, `ge
 
 | Endpoint | JWT user | Admin key | Notes |
 |----------|----------|-----------|-------|
-| `GET /users` | — | ✓ | Admin only |
-| `GET /users/{user_id}` | ✓ own only | ✓ | 403 if `jwt.sub != user_id` |
-| `PATCH /users/{user_id}` | ✓ own only | ✓ | Allowed while `onboarding` |
-| `POST /users/{user_id}/complete_onboarding` | ✓ only | — | No admin path |
-| `DELETE /users/{user_id}` | — | ✓ | Admin only |
+| `GET /users` | — | ✓ | Admin only (`require_admin`, readonly admin allowed) |
+| `GET /users/{user_id}` | ✓ | ✓ | No per-handler owner check — see note below |
+| `PATCH /users/{user_id}` | ✓ own only | ✓ | App user must be `ACTIVE` and own the record |
+| `POST /users/{user_id}/complete_onboarding` | ✓ own only | — | App user must own the record and be `ONBOARDING`; caller must be platform-associated |
+| `DELETE /users/{user_id}` | — | ✓ | Admin only (non-readonly) |
+
+<Note>
+`GET /users/{user_id}` currently has no owner assertion at the handler or core layer — any authenticated caller who knows a `user_id` can read that profile. Treat ownership scoping as enforced only on the write and onboarding paths.
+</Note>
 
 ---
 
@@ -53,7 +60,7 @@ filters are **case-insensitive prefix** matches (`starts-with`), not substring.
 | `user_id` | 12-digit user-id prefix (partial ids accepted) | `?user_id=0123` |
 | `statuses` | Comma-separated `UserStatus` (`IN (...)`) | `?statuses=ACTIVE,ONBOARDING` |
 | `start_time` / `end_time` | `created_at` range | `?start_time=2026-01-01T00:00:00` |
-| `by` / `on` | Sort column / direction (default `created_at` / `desc`) | `?by=created_at&on=asc` |
+| `sort_on` / `sort_by` | Sort column / direction (default `created_at` / `desc`) | `?sort_on=created_at&sort_by=asc` |
 | `limit` / `offset` | Pagination (limit clamped to the server max) | `?limit=20&offset=40` |
 
 <Note>
@@ -76,13 +83,13 @@ least 3 alphanumeric characters** — shorter or symbol-only terms (e.g. a blank
     Fetch a user profile. JWT users can only fetch their own record.
   </Card>
   <Card title="PATCH /users/{user_id}" icon="pen" color="#8b5cf6" href="/api/endpoints/users/update">
-    Partial profile update. Send only changed fields. Allowed while `onboarding` or `active`.
+    Partial profile update. Send only changed fields (`first_name`, `last_name`, `email`, `dob`, `gender`, `address`). App user must be `ACTIVE`.
   </Card>
   <Card title="POST /users/{user_id}/complete_onboarding" icon="circle-check" color="#16a34a" href="/api/endpoints/users/complete-onboarding">
-    Submit required fields and transition `status → active`. Returns fresh JWT.
+    Submit required fields and transition `status → ACTIVE`. Returns fresh JWT.
   </Card>
   <Card title="DELETE /users/{user_id}" icon="trash" color="#dc2626" href="/api/endpoints/users/delete">
-    **Admin only.** Soft-delete a user (`status → deactivated`).
+    **Admin only.** Soft-delete a user (`status → DEACTIVATED`).
   </Card>
 </CardGroup>
 
@@ -96,6 +103,7 @@ curl -X POST http://localhost:8080/users/047382910564/complete_onboarding \
   -H 'Authorization: Bearer eyJhbGci...' \
   -H 'Content-Type: application/json' \
   -d '{
+    "salutation": "MR",
     "first_name": "Ravi",
     "last_name": "Kumar",
     "dob": "1990-05-15",
@@ -106,11 +114,16 @@ curl -X POST http://localhost:8080/users/047382910564/complete_onboarding \
       "state": "Karnataka",
       "pincode": "560034",
       "country": "IN"
-    }
+    },
+    "bank_details": {
+      "ifsc_code": "HDFC0001234",
+      "account_number": "50100123456789"
+    },
+    "email": "ravi.kumar@example.com"
   }'
 ```
 
-```json Response 201
+```json Response 200
 {
   "user": { "user_id": "047382910564", "status": "ACTIVE", "..." : "..." },
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -124,7 +137,10 @@ curl -X POST http://localhost:8080/users/047382910564/complete_onboarding \
 
 | Code | HTTP | Description |
 |------|------|-------------|
-| `UE-100` | 500 | Internal server error |
-| `UE-101` | 404 | User not found |
-| `UE-102` | 400 | Validation error |
-| `UE-103` | 500 | Encryption error |
+| `UE_100` | 500 | Internal server error |
+| `UE_101` | 404 | User not found |
+| `UE_102` | 400 | Validation error |
+| `UE_103` | 400 | A user with the supplied email or phone number already exists |
+| `UE_104` | 500 | Failed to allocate a unique user id |
+| `UE_105` | 500 | Upstream PBA call failed during onboarding |
+| `UE_106` | 500 | Failed to persist onboarding state |

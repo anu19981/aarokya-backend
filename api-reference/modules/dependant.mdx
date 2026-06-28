@@ -4,7 +4,7 @@ description: "Manage family members linked to a user — immutable append-only r
 ---
 
 <Info>
-  **Immutable rows** — dependant fields are never updated in place. Every change produces a new row (`status = active`); the old row becomes `status = discarded`. Follow `previous_version_id` links to walk version history.
+  **Immutable rows** — dependant fields are never updated in place. Every change produces a new row (`status = ACTIVE`); the old row becomes `status = DISCARDED`. Follow `previous_version_id` links to walk version history.
 </Info>
 
 ## Overview
@@ -17,15 +17,19 @@ A dependant represents a family member linked to a primary user (spouse, child, 
 
 ```mermaid
 flowchart LR
-    A[id: uuid-A\nstatus: discarded\nfirst_name: Mary] -->|previous_version_id| B[id: uuid-B\nstatus: active\nfirst_name: Mary J]
-    PATCH[PATCH /dependants/uuid-A] --> A
+    A[id: uuid-A<br/>status: DISCARDED<br/>first_name: Mary]
+    B[id: uuid-B<br/>status: ACTIVE<br/>first_name: Mary J]
+    B -->|previous_version_id = uuid-A| A
+    PATCH[PATCH .../dependants/uuid-A] --> A
     PATCH --> B
 ```
 
-When you `PATCH /dependants/{id}`, the server:
-1. Sets the old row `status → discarded`
+When you `PATCH /users/{user_id}/dependants/{id}`, the server:
+1. Sets the old row `status → DISCARDED`
 2. Inserts a new row with a fresh UUID and `previous_version_id = old_id`
 3. Returns the new (current) row
+
+The new row's `previous_version_id` points **back** to the discarded row, so version history is walked newest-to-oldest.
 
 ---
 
@@ -33,18 +37,18 @@ When you `PATCH /dependants/{id}`, the server:
 
 | Endpoint | JWT user | Admin key | Notes |
 |----------|----------|-----------|-------|
-| `POST /users/{user_id}/dependants` | ✓ own only | ✓ | `relationship = self` not allowed |
-| `POST /users/{user_id}/dependants/bulk` | ✓ own only | ✓ | Atomic batch insert, max 50. `relationship = self` not allowed |
-| `GET /users/{user_id}/dependants` | ✓ own only | ✓ | Defaults to `status = active` |
+| `POST /users/{user_id}/dependants` | ✓ own only | ✓ | `relationship = SELF` not allowed |
+| `POST /users/{user_id}/dependants/bulk` | ✓ own only | ✓ | Atomic batch insert, max 50. `relationship = SELF` not allowed |
+| `GET /users/{user_id}/dependants` | ✓ own only | ✓ | Returns `ACTIVE` rows; filter by `relationship` |
 | `GET /users/{user_id}/dependants/{id}` | ✓ own only | ✓ | 403 if accessing another user's |
 | `PATCH /users/{user_id}/dependants/{id}` | ✓ own only | ✓ | SELF not allowed |
-| `DELETE /users/{user_id}/dependants/{id}` | ✓ own only | ✓ | Sets `status → discarded`. SELF not allowed |
+| `DELETE /users/{user_id}/dependants/{id}` | ✓ own only | ✓ | Sets `status → DISCARDED`. SELF not allowed |
 
 ---
 
 ## SELF Dependant
 
-Every user has exactly one active `relationship = self` dependant. It is created automatically on `POST /users/{user_id}/complete_onboarding` (which also accepts an optional `salutation` field) and re-versioned when `PATCH /users/{user_id}` changes `first_name`, `last_name`, `dob`, or `gender`. Attempting to create, update, or delete SELF via the dependants API returns `400 DE-603`.
+Every user has exactly one active `relationship = SELF` dependant. It is created automatically on `POST /users/{user_id}/complete_onboarding` (which takes a **required** `salutation` field) and re-versioned when `PATCH /users/{user_id}` changes `first_name`, `last_name`, `dob`, or `gender`. Attempting to create, update, or delete SELF via the dependants API returns `400 DE_603`.
 
 ---
 
@@ -63,27 +67,27 @@ This makes draft re-submissions and network retries idempotent without requiring
 
 | Value | Description |
 |-------|-------------|
-| `self` | The user themselves (system-managed) |
-| `spouse` | Husband or wife |
-| `mother` | Mother |
-| `father` | Father |
-| `child` | Son or daughter |
-| `father_in_law` | Father-in-law |
-| `mother_in_law` | Mother-in-law |
-| `sibling` | Brother or sister |
+| `SELF` | The user themselves (system-managed) |
+| `SPOUSE` | Husband or wife |
+| `MOTHER` | Mother |
+| `FATHER` | Father |
+| `CHILD` | Son or daughter |
+| `FATHER_IN_LAW` | Father-in-law |
+| `MOTHER_IN_LAW` | Mother-in-law |
+| `SIBLING` | Brother or sister |
 
 ---
 
 ## Salutation Values
 
-An optional `salutation` field is available on create, update, and response objects:
+`salutation` is **required** on create and present on every response; it is optional on update (send it only to change it):
 
 | Value | Description |
 |-------|-------------|
-| `mr` | Mr |
-| `mrs` | Mrs |
-| `ms` | Ms |
-| `master` | Master (typically for young males) |
+| `MR` | Mr |
+| `MRS` | Mrs |
+| `MS` | Ms |
+| `MASTER` | Master (typically for young males) |
 
 ---
 
@@ -91,13 +95,13 @@ An optional `salutation` field is available on create, update, and response obje
 
 <CardGroup cols={2}>
   <Card title="POST /users/{user_id}/dependants" icon="plus" color="#16a34a" href="/api/endpoints/dependants/create">
-    Add a new dependant. `relationship = self` not allowed.
+    Add a new dependant. `relationship = SELF` not allowed.
   </Card>
   <Card title="POST /users/{user_id}/dependants/bulk" icon="layer-group" color="#16a34a" href="/api/endpoints/dependants/bulk-create">
-    Atomically insert up to 50 dependants in one request. `relationship = self` not allowed.
+    Atomically insert up to 50 dependants in one request. `relationship = SELF` not allowed.
   </Card>
   <Card title="GET /users/{user_id}/dependants" icon="list" color="#3b82f6" href="/api/endpoints/dependants/list">
-    Paginated list. Defaults to `status = active`. JWT users see only their own.
+    Paginated list. Defaults to `status = ACTIVE`. JWT users see only their own.
   </Card>
   <Card title="GET /users/{user_id}/dependants/{id}" icon="user-group" color="#3b82f6" href="/api/endpoints/dependants/get">
     Fetch a single dependant by UUID.
@@ -106,7 +110,7 @@ An optional `salutation` field is available on create, update, and response obje
     Update fields. Produces a new immutable row; old row is discarded.
   </Card>
   <Card title="DELETE /users/{user_id}/dependants/{id}" icon="trash" color="#dc2626" href="/api/endpoints/dependants/delete">
-    Discard a dependant (`status → discarded`). SELF not allowed.
+    Discard a dependant (`status → DISCARDED`). SELF not allowed.
   </Card>
 </CardGroup>
 
@@ -214,9 +218,9 @@ curl -X POST http://localhost:8080/users/047382910564/dependants/bulk \
 
 | Code | HTTP | Description |
 |------|------|-------------|
-| `DE-600` | 500 | Internal server error |
-| `DE-601` | 404 | Dependant not found |
-| `DE-602` | 403 | JWT user accessing another user's dependant |
-| `DE-603` | 400 | Operation not allowed on SELF dependant |
-| `DE-604` | 400 | No fields provided to update |
-| `DE-605` | 400 | Validation error |
+| `DE_600` | 500 | Internal server error |
+| `DE_601` | 404 | Dependant not found |
+| `DE_602` | 403 | JWT user accessing another user's dependant |
+| `DE_603` | 400 | Operation not allowed on SELF dependant |
+| `DE_604` | 400 | No fields provided to update |
+| `DE_605` | 400 | Validation error |

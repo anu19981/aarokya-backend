@@ -613,6 +613,43 @@
         }
       }
     },
+    "/admin/mandate_executions/backfill_sponsor_contribution": {
+      "post": {
+        "tags": [
+          "MandateExecution"
+        ],
+        "summary": "One-time operational backfill for successful debit executions whose sponsor\n(trust) leg was never settled. Takes an explicit list of `execution_id`s and\nre-drives the idempotent sponsor settle for each; per-id `outcome`\n(`SETTLED`/`SKIPPED`/`FAILED`) is returned so a partial failure doesn't sink\nthe batch. Admin-gated. Safe to re-run — an already-settled id no-ops.",
+        "operationId": "backfill_sponsor_contributions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackfillSponsorContributionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Per-execution backfill outcomes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillSponsorContributionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — admin only"
+          }
+        }
+      }
+    },
     "/admin/mandates": {
       "get": {
         "tags": [
@@ -8942,6 +8979,64 @@
       "AppConfigResponse": {
         "type": "object",
         "description": "Feature flags consumed by the mobile app to enable/disable UI affordances.\n\nA verbatim passthrough of every key in the dedicated app-facing\nSuperposition workspace (`[superposition].app_workspace_id`). The backend\ndoes not interpret these values — adding a flag is purely a Superposition\nchange (admin UI + app fallback TOML), no backend redeploy. The app owns\nthe default for any key absent from the map."
+      },
+      "BackfillSponsorContributionsRequest": {
+        "type": "object",
+        "required": [
+          "execution_ids"
+        ],
+        "properties": {
+          "execution_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BackfillSponsorContributionsResponse": {
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BackfillSponsorResult"
+            }
+          }
+        }
+      },
+      "BackfillSponsorOutcome": {
+        "type": "string",
+        "description": "Per-id outcome of the sponsor-contribution backfill (`POST /admin/mandate_executions/backfill_sponsor_contribution`): `SETTLED` (sponsor leg settled, or already settled — idempotent), `SKIPPED` (not a settle-able row — e.g. not a successful debit), or `FAILED` (a transient error; safe to re-run).",
+        "enum": [
+          "SETTLED",
+          "SKIPPED",
+          "FAILED"
+        ]
+      },
+      "BackfillSponsorResult": {
+        "type": "object",
+        "required": [
+          "execution_id",
+          "outcome"
+        ],
+        "properties": {
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "execution_id": {
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/BackfillSponsorOutcome"
+          }
+        }
       },
       "BankDetails": {
         "type": "object",

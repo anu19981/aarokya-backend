@@ -72,7 +72,7 @@ Codes are grouped by domain prefix. The table below lists the prefix, the domain
 | `DE` | Dependant | `DE_601` dependant not found, `DE_602` may only access own dependants, `DE_603` cannot mutate a SELF dependant |
 | `AE` (800s) | Account | `AE_801` account not found, `AE_805` no PBA-backed account for user, `AE_807` account type not allowed for holder kind |
 | `EL` | Event log | `EL_900`, `EL_901` |
-| `IP` | Insurance policy | `IP_1001` policy not found, `IP_1008` active policy already exists, `IP_1012` not permitted, `IP_1014` provider registration failed |
+| `IP` | Insurance policy | `IP_1001` policy not found, `IP_1008` active policy already exists, `IP_1012` not permitted, `IP_1014` provider registration failed, `IP_1021` invalid status transition |
 | `MR` | MRN | `MR_1101` MRN not found, `MR_1102` not your dependant's MRN, `MR_1103` MRN already exists |
 | `ME` | Mandate | `ME_1201` mandate not found, `ME_1210` invalid status transition, `ME_1214` mandate setup not completed upstream |
 | `OE` | Order | `OE_1301` order not found, `OE_1305` payment provider error |
@@ -128,7 +128,7 @@ A few high-traffic codes you will handle in most clients:
 |------|-------|------------|
 | `PE_202` / `BPE_402` | Name already exists | Fetch the existing record instead of creating |
 | `MR_1103` / `IP_1008` / `CN_1613` | A matching active resource already exists | Reuse the existing resource |
-| `ME_1210` | Illegal mandate status transition | Re-read the mandate state before retrying |
+| `ME_1210` / `IP_1021` | Illegal status transition | Re-read the resource state before retrying |
 
 ### 422 — Unprocessable Entity
 

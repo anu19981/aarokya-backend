@@ -111,28 +111,48 @@ On every response, `premium_amounts` is serialized with each money field as an `
 
 `PolicyStatus` has exactly eight states: `PENDING`, `APPROVED`, `ISSUED`, `REQUIRES_CUSTOMER_RENEWAL_IN_GRACE`, `REQUIRES_POLICY_REISSUANCE`, `REQUIRES_CUSTOMER_RENEWAL`, `EXPIRED`, `REJECTED`.
 
-Transitions fall into two groups:
+Transitions fall into two independent groups:
 
-- **Human decisions** (admin/provider via `PATCH .../status`): `PENDING → APPROVED`, `PENDING → REJECTED`, and `APPROVED → ISSUED`. The issuance transition requires `external_policy_id`, `start_date`, and `end_date` in the body. These are the only transitions the status endpoint accepts.
+- **Human decisions** (admin/provider via `PATCH .../status`) — a guarded state machine; a rejected pair returns `IP_1021`:
+
+  | From | Allowed `to` |
+  |---|---|
+  | `PENDING` | `APPROVED`, `REJECTED` |
+  | `APPROVED` | `ISSUED` (requires `external_policy_id` + `start_date` + `end_date`) |
+  | `ISSUED` | `REQUIRES_CUSTOMER_RENEWAL_IN_GRACE`, `REQUIRES_CUSTOMER_RENEWAL`, `REQUIRES_POLICY_REISSUANCE`, `EXPIRED` |
+  | `REQUIRES_CUSTOMER_RENEWAL_IN_GRACE` | `ISSUED`, `REQUIRES_CUSTOMER_RENEWAL`, `REQUIRES_POLICY_REISSUANCE`, `EXPIRED` |
+  | `REQUIRES_CUSTOMER_RENEWAL` | `ISSUED`, `REQUIRES_POLICY_REISSUANCE`, `EXPIRED` |
+  | `REQUIRES_POLICY_REISSUANCE`, `EXPIRED`, `REJECTED` | terminal |
+
+  Only `APPROVED → ISSUED` carries a body payload. Every other transition is a payload-free status flip that preserves the stored `external_policy_id`/dates, so a renewal-state → `ISSUED` reactivation keeps the original carrier reference.
 - **Provider-authoritative** (insurer webhooks): once a policy is `ISSUED`, the live in-force lifecycle is driven by the insurer — `inforced → ISSUED`, `grace_period → REQUIRES_CUSTOMER_RENEWAL_IN_GRACE`, and `lapsed → EXPIRED` once the policy's `end_date` has passed, otherwise `REQUIRES_POLICY_REISSUANCE` (still within term).
+
+The diagram below shows the human `/status` state machine:
 
 ```mermaid
 stateDiagram-v2
     [*] --> PENDING: create
-    PENDING --> APPROVED: admin approve
-    PENDING --> REJECTED: admin reject
-    APPROVED --> ISSUED: admin issue (external_policy_id, start_date, end_date)
-    ISSUED --> REQUIRES_CUSTOMER_RENEWAL_IN_GRACE: webhook grace_period
-    ISSUED --> EXPIRED: webhook lapsed (past end_date)
-    ISSUED --> REQUIRES_POLICY_REISSUANCE: webhook lapsed (still in term)
-    REQUIRES_CUSTOMER_RENEWAL_IN_GRACE --> ISSUED: webhook inforced
-    REQUIRES_CUSTOMER_RENEWAL_IN_GRACE --> EXPIRED: webhook lapsed (past end_date)
-    REJECTED --> [*]
+    PENDING --> APPROVED: approve
+    PENDING --> REJECTED: reject
+    APPROVED --> ISSUED: issue (payload)
+    ISSUED --> REQUIRES_CUSTOMER_RENEWAL_IN_GRACE
+    ISSUED --> REQUIRES_CUSTOMER_RENEWAL
+    ISSUED --> REQUIRES_POLICY_REISSUANCE
+    ISSUED --> EXPIRED
+    REQUIRES_CUSTOMER_RENEWAL_IN_GRACE --> ISSUED
+    REQUIRES_CUSTOMER_RENEWAL_IN_GRACE --> REQUIRES_CUSTOMER_RENEWAL
+    REQUIRES_CUSTOMER_RENEWAL_IN_GRACE --> REQUIRES_POLICY_REISSUANCE
+    REQUIRES_CUSTOMER_RENEWAL_IN_GRACE --> EXPIRED
+    REQUIRES_CUSTOMER_RENEWAL --> ISSUED
+    REQUIRES_CUSTOMER_RENEWAL --> REQUIRES_POLICY_REISSUANCE
+    REQUIRES_CUSTOMER_RENEWAL --> EXPIRED
+    REQUIRES_POLICY_REISSUANCE --> [*]
     EXPIRED --> [*]
+    REJECTED --> [*]
 ```
 
 <Note>
-  `REJECTED`, `EXPIRED`, and `REQUIRES_POLICY_REISSUANCE` are frozen against in-force webhook signals — a provider in-force event will not reopen them. A pre-issue policy (`PENDING` / `APPROVED`) ignores every webhook signal. `REQUIRES_CUSTOMER_RENEWAL` is an admin-driven in-force state. Unknown provider statuses (the provider's own vocabulary outside our enum) are mapped to a no-op and leave the policy unchanged — they never appear as a `PolicyStatus`.
+  The human `/status` machine and the webhook machine are independent. `REJECTED`, `EXPIRED`, and `REQUIRES_POLICY_REISSUANCE` are terminal for the `/status` endpoint and are also frozen against in-force webhook signals — neither reopens them. Reissuance mints a brand-new policy, so the old record stays terminal (it is also excluded from the bulk-activation flow). `REQUIRES_CUSTOMER_RENEWAL[_IN_GRACE] → ISSUED` is an in-place reactivation — the driver tops up their balance within the grace window — reusing the stored `external_policy_id`/dates rather than a fresh carrier issuance. A pre-issue policy (`PENDING` / `APPROVED`) ignores every webhook signal. Unknown provider statuses are a webhook no-op and never appear as a `PolicyStatus`.
 </Note>
 
 ---
@@ -539,3 +559,4 @@ For each member without an existing MRN at this provider, the server calls the u
 | `IP_1018` | 404 | Health card requested for a member not on this policy |
 | `IP_1019` | 400 | Policy documents are not available for this policy yet (e.g. still `PENDING`/`REJECTED`) |
 | `IP_1020` | 400 | Reserved — no longer emitted (CIS is now a static download); kept for the error-code contract |
+| `IP_1021` | 400 | Invalid status transition on `PATCH .../status` — the `from`/`to` pair is not allowed |

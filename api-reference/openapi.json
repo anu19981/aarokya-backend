@@ -2560,6 +2560,158 @@
         ]
       }
     },
+    "/benefit_providers/{benefit_provider_id}/verification_operators": {
+      "get": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "list_benefit_provider_verification_operators",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of verification operators scoped to this benefit provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUserListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is neither admin nor a benefit-provider user scoped to this BP"
+          },
+          "404": {
+            "description": "Benefit provider not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "create_benefit_provider_verification_operator",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDashboardUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Verification operator provisioned — temporary_password shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUserCredentialsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is neither admin nor a benefit-provider user scoped to this BP"
+          },
+          "404": {
+            "description": "Benefit provider not found"
+          },
+          "409": {
+            "description": "A user with the given email already exists"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/benefit_providers/{benefit_provider_id}/verification_operators/{keycloak_user_id}": {
+      "delete": {
+        "tags": [
+          "BenefitProvider"
+        ],
+        "operationId": "disable_benefit_provider_verification_operator",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "path",
+            "description": "Benefit provider ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "keycloak_user_id",
+            "in": "path",
+            "description": "Keycloak user UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disable result — idempotent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisableDashboardUserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is neither admin nor a benefit-provider user scoped to this BP"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/benefits": {
       "get": {
         "tags": [
@@ -2991,6 +3143,14 @@
             "example": "ACTIVE,COMPLETED"
           },
           {
+            "name": "consultation_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": false,
@@ -3001,6 +3161,21 @@
                 },
                 {
                   "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
                 }
               ]
             }
@@ -3343,6 +3518,134 @@
         ]
       }
     },
+    "/insurance_policies/verification_queue": {
+      "get": {
+        "tags": [
+          "Insurance Policy (Admin)"
+        ],
+        "operationId": "list_insurance_policy_verification_queue",
+        "parameters": [
+          {
+            "name": "benefit_provider_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "phone",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "mrn",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Sort"
+                }
+              ]
+            }
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verification queue rows (Pending + Verification), enriched with primary user + MRN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListInsurancePolicyVerificationQueueResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a dashboard user or provider"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/insurance_policies/{insurance_policy_id}": {
       "get": {
         "tags": [
@@ -3484,6 +3787,64 @@
           },
           "403": {
             "description": "Caller is not an admin or benefit provider"
+          },
+          "404": {
+            "description": "Insurance policy not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/insurance_policies/{insurance_policy_id}/verification": {
+      "patch": {
+        "tags": [
+          "Insurance Policy (Admin)"
+        ],
+        "operationId": "transition_insurance_policy_verification",
+        "parameters": [
+          {
+            "name": "insurance_policy_id",
+            "in": "path",
+            "description": "Insurance Policy ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionInsurancePolicyVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Insurance policy verification status updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsurancePolicyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Requested transition is not Pending ↔ Verification"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin or verification-operator benefit provider"
           },
           "404": {
             "description": "Insurance policy not found"
@@ -5597,6 +5958,64 @@
         ]
       }
     },
+    "/users/{user_id}/add_details": {
+      "post": {
+        "tags": [
+          "User"
+        ],
+        "operationId": "add_details",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddDetailsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Onboarding completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteOnboardingResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Required fields still missing or invalid bank details"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Not owner or not in onboarding status"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/users/{user_id}/balance": {
       "get": {
         "tags": [
@@ -5797,6 +6216,21 @@
               ]
             },
             "example": "ACTIVE,COMPLETED"
+          },
+          {
+            "name": "time_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/TimeRange"
+                }
+              ]
+            }
           },
           {
             "name": "limit",
@@ -8162,33 +8596,91 @@
           "SPONSOR"
         ]
       },
-      "AddressDetails": {
+      "AddDetailsRequest": {
         "type": "object",
-        "description": "Structured address details for user profiles and insurance documents.",
         "properties": {
-          "city": {
+          "address": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AddressDetails"
+              }
+            ]
+          },
+          "bank_details": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BankDetails"
+              }
+            ]
+          },
+          "dob": {
             "type": [
               "string",
               "null"
             ],
+            "example": "2000-01-15"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Gender"
+              }
+            ]
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AddressDetails": {
+        "type": "object",
+        "description": "Structured address details for user profiles and insurance documents.\n\nAll fields except `line2` are **required** — serde rejects a structured address\nmissing any of `line1`, `city`, `state`, `country`, or `pincode` (presence is\nenforced by the type, not by a value-level validator). A fully free-text\naddress is captured via [`AddressDetailsOuter::Raw`] instead.",
+        "required": [
+          "line1",
+          "city",
+          "state",
+          "pincode",
+          "country"
+        ],
+        "properties": {
+          "city": {
+            "type": "string",
             "description": "City, district, or town.",
             "example": "Bengaluru",
             "maxLength": 50
           },
           "country": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Two-letter country code (ISO 3166-1 alpha-2). Defaults to \"IN\".",
+            "type": "string",
+            "description": "Two-letter country code (ISO 3166-1 alpha-2).",
             "example": "IN",
             "maxLength": 2
           },
           "line1": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "Street address or P.O. Box (line 1).",
             "example": "123, MG Road"
           },
@@ -8197,27 +8689,53 @@
               "string",
               "null"
             ],
-            "description": "Apartment, suite, unit, or building (line 2).",
+            "description": "Apartment, suite, unit, or building (line 2). Optional.",
             "example": "Flat 4B, Sunrise Apartments"
           },
           "pincode": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "Postal code (6-digit Indian pincode).",
             "example": "560001"
           },
           "state": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "State or union territory.",
             "example": "Karnataka",
             "maxLength": 50
           }
         }
+      },
+      "AddressDetailsOuter": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AddressDetails"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "raw"
+                ],
+                "properties": {
+                  "raw": {
+                    "type": "string"
+                  }
+                }
+              }
+            ],
+            "description": "Original free text plus the structured fields derived from it."
+          },
+          {
+            "$ref": "#/components/schemas/AddressDetails",
+            "description": "A structured address object."
+          },
+          {
+            "type": "string",
+            "description": "A single free-text address string."
+          }
+        ],
+        "description": "A user-submitted address as captured: either the structured form, a single\nfree-text string, or both (the original text plus whatever was structured\nfrom it). `#[serde(untagged)]` keeps the wire shape natural — a bare object\nor a bare string — so existing structured clients are unaffected.\n\n`raw` is `Secret` because a free-text address is PII (it embeds the same\ndata masked elsewhere as `line1` / `pincode`)."
       },
       "AdminBulkUpdateInsurancePoliciesRequest": {
         "type": "object",
@@ -9442,7 +9960,7 @@
         ],
         "properties": {
           "address": {
-            "$ref": "#/components/schemas/AddressDetails"
+            "$ref": "#/components/schemas/AddressDetailsOuter"
           },
           "bank": {
             "oneOf": [
@@ -9488,7 +10006,7 @@
         ],
         "properties": {
           "address": {
-            "$ref": "#/components/schemas/AddressDetails"
+            "$ref": "#/components/schemas/AddressDetailsOuter"
           },
           "bank": {
             "oneOf": [
@@ -9656,7 +10174,7 @@
         ],
         "properties": {
           "address": {
-            "$ref": "#/components/schemas/AddressDetails"
+            "$ref": "#/components/schemas/AddressDetailsOuter"
           },
           "bank_details": {
             "$ref": "#/components/schemas/BankDetails"
@@ -10232,9 +10750,13 @@
         "type": "object",
         "required": [
           "name",
-          "slug"
+          "slug",
+          "address"
         ],
         "properties": {
+          "address": {
+            "$ref": "#/components/schemas/AddressDetails"
+          },
           "name": {
             "type": "string"
           },
@@ -11002,8 +11524,53 @@
           "id_proof"
         ],
         "properties": {
+          "address": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AddressDetailsOuter"
+              }
+            ]
+          },
+          "dob": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "2000-01-15"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gender": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Gender"
+              }
+            ]
+          },
           "id_proof": {
             "$ref": "#/components/schemas/IdProof"
+          },
+          "last_name": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "phone_country_code": {
             "type": "string",
@@ -11426,6 +11993,12 @@
           "last_modified_at": {
             "type": "string"
           },
+          "master_policy_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "metadata": {
             "oneOf": [
               {
@@ -11695,6 +12268,35 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ListInsurancePolicyVerificationQueueResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VerificationQueueEntry"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -12602,10 +13204,14 @@
           "name",
           "slug",
           "status",
+          "address",
           "created_at",
           "last_modified_at"
         ],
         "properties": {
+          "address": {
+            "$ref": "#/components/schemas/AddressDetails"
+          },
           "created_at": {
             "type": "string"
           },
@@ -12689,6 +13295,7 @@
         "description": "Insurance policy lifecycle status.",
         "enum": [
           "PENDING",
+          "VERIFICATION",
           "APPROVED",
           "ISSUED",
           "REQUIRES_CUSTOMER_RENEWAL_IN_GRACE",
@@ -13527,6 +14134,17 @@
           }
         }
       },
+      "TransitionInsurancePolicyVerificationRequest": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PolicyStatus"
+          }
+        }
+      },
       "UpdateBenefitProviderRequest": {
         "type": "object",
         "properties": {
@@ -13683,6 +14301,16 @@
       "UpdatePlatformRequest": {
         "type": "object",
         "properties": {
+          "address": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AddressDetails"
+              }
+            ]
+          },
           "name": {
             "type": [
               "string",
@@ -13737,7 +14365,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AddressDetails"
+                "$ref": "#/components/schemas/AddressDetailsOuter"
               }
             ]
           },
@@ -13829,7 +14457,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AddressDetails"
+                "$ref": "#/components/schemas/AddressDetailsOuter"
               }
             ]
           },
@@ -13901,6 +14529,43 @@
           "ACTIVE",
           "DEACTIVATED"
         ]
+      },
+      "VerificationQueueEntry": {
+        "type": "object",
+        "required": [
+          "insurance_policy_id",
+          "primary_user_name",
+          "phone_number",
+          "phone_country_code",
+          "status",
+          "last_modified_at"
+        ],
+        "properties": {
+          "insurance_policy_id": {
+            "type": "string"
+          },
+          "last_modified_at": {
+            "type": "string"
+          },
+          "phone_country_code": {
+            "type": "string"
+          },
+          "phone_number": {
+            "type": "string"
+          },
+          "primary_mrn": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "primary_user_name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PolicyStatus"
+          }
+        }
       },
       "WalletTxnStatus": {
         "oneOf": [

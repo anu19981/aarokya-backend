@@ -108,6 +108,7 @@
                   "api/endpoints/users/get",
                   "api/endpoints/users/update",
                   "api/endpoints/users/complete-onboarding",
+                  "api/endpoints/users/add-details",
                   "api/endpoints/users/delete"
                 ]
               },

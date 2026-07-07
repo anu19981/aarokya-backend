@@ -13,6 +13,7 @@ A **platform** is a logical tenant — it represents a partner app integrated wi
 
 - **Name uniqueness is scoped to active platforms.** A deleted platform's name can be reused.
 - **`slug` is immutable.** Set at creation, lowercase `[a-z0-9-]{2,40}`, used to build the Keycloak service-account `clientId`.
+- **`address` is required on create.** A **structured** address object (`line1`, `line2`, `city`, `state`, `pincode`, `country`). It is the tenant-level **fallback address** printed on insurance documents when a user under this platform has no address of their own — because it is mandatory, an insurance address always resolves. Required on `POST /platforms`; optional on `PATCH` (omitting it leaves the stored value unchanged).
 - **Soft delete via status.** Deleting a platform sets `status → INACTIVE`; it does not remove the row.
 
 ---
@@ -38,7 +39,7 @@ A platform is created with no credentials. An admin (or a platform user scoped t
 | `POST /platforms` | Admin | Name must be unique among active platforms |
 | `GET /platforms` | Admin (read-only admin OK) | Filter by `status` |
 | `GET /platforms/{id}` | Admin, or platform actor for this `id` | |
-| `PATCH /platforms/{id}` | Admin | Only `name` updatable |
+| `PATCH /platforms/{id}` | Admin | `name` and/or `address` updatable |
 | `DELETE /platforms/{id}` | Admin | Sets `status → INACTIVE` |
 | `POST /platforms/{id}/credentials` | Admin, or platform user for this `id` | Mints a new credential each call |
 | `GET /platforms/{id}/credentials` | Admin, or platform user for this `id` | Lists credential ids only |
@@ -64,7 +65,7 @@ A platform is created with no credentials. An admin (or a platform user scoped t
     Fetch a single platform by UUID.
   </Card>
   <Card title="PATCH /platforms/{id}" icon="pen" color="#8b5cf6" href="/api/endpoints/platforms/update">
-    Rename a platform. New name must not conflict.
+    Update a platform's `name` and/or `address`. A new name must not conflict.
   </Card>
   <Card title="DELETE /platforms/{id}" icon="trash" color="#dc2626" href="/api/endpoints/platforms/delete">
     Soft-delete a platform (`status → INACTIVE`).
@@ -108,7 +109,18 @@ A platform is created with no credentials. An admin (or a platform user scoped t
 curl -X POST http://localhost:8080/platforms \
   -H 'Authorization: Bearer <admin-jwt>' \
   -H 'Content-Type: application/json' \
-  -d '{ "name": "Namma Yatri", "slug": "namma-yatri" }'
+  -d '{
+        "name": "Namma Yatri",
+        "slug": "namma-yatri",
+        "address": {
+          "line1": "3rd Floor, Tower B, Prestige Tech Park",
+          "line2": "Marathahalli",
+          "city": "Bengaluru",
+          "state": "Karnataka",
+          "pincode": "560103",
+          "country": "IN"
+        }
+      }'
 ```
 
 ```json Response 201
@@ -117,6 +129,14 @@ curl -X POST http://localhost:8080/platforms \
   "name": "Namma Yatri",
   "slug": "namma-yatri",
   "status": "ACTIVE",
+  "address": {
+    "line1": "3rd Floor, Tower B, Prestige Tech Park",
+    "line2": "Marathahalli",
+    "city": "Bengaluru",
+    "state": "Karnataka",
+    "pincode": "560103",
+    "country": "IN"
+  },
   "created_at": "2026-04-12T10:00:00Z",
   "last_modified_at": "2026-04-12T10:00:00Z"
 }

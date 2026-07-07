@@ -186,10 +186,15 @@ sequenceDiagram
   **Authentication:** `Authorization: Bearer <access_token>`. Auth gate is `actor.require_self_or_trusted_backend(&user_id)` — same as `preview` and `create`.
 </Info>
 
+<Note>
+  **Tenant (`platform_id`) is required.** Both `preview_enrollment_form` and `create` need to know the platform the policy belongs to — an app/platform token carries it automatically; an **admin** must send it via the `x-platform-id` header (a UUID), else **400**. It decides the fallback address: when the user has no address of their own, the enrollment form prints the **platform's** stored address. Since a platform's address is **mandatory**, this always resolves — the address is never blank. On `create` the resolved `platform_id` is recorded on the benefit-utilization ledger, so document downloads (and the bulk-issuance export) later resolve the same tenant without a header.
+</Note>
+
 **What happens server-side**
 
 - Loads the benefit + provider, asserts it is `Active` and of type `InsurancePolicy`.
 - Resolves the caller-supplied dependant ids (ownership-checked) and **auto-includes the SELF dependant** at the head of the member list.
+- Resolves the applicant address with the tenant fallback: the user's own address if present, else the platform's stored address (always resolves — the platform address is mandatory).
 - Derives the `plan_code` from the member list (adults/children) and looks up the matching `PlanVariant` in the benefit. Unsupported combinations return **400 `IP_1009 PlanVariantNotAvailable`**.
 - Validates the nominee per plan: required when the matched variant's `nominee_required` flag is `true` (surfaced as `nominee_required` in the premium-preview response — do not infer it from the plan code). Missing returns **400 `IP_1015 NomineeRequiredForPlan`**. When a nominee is present — on any plan — it must be the policyholder's spouse (`relationship = SPOUSE`), else **400 `IP_1010`**.
 - Reads `daily_premium_amount` / `annual_premium_amount` / `coverage_amount` / `currency` / `grace_period_days` from the matched variant (no on-the-fly bracket calc).
@@ -402,6 +407,7 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies \
   "benefit_id": "018f4c2a-1b3e-7d8f-9a0b-2c3d4e5f6a7b",
   "benefit_name": "Narayana Health Shield",
   "external_policy_id": null,
+  "master_policy_number": "NY00001-100001-001",
   "dependant_ids": [
     "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60099",
     "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001"
@@ -483,6 +489,10 @@ Policy responses carry the policyholder identity and full dependant roster as st
 <Note>
   `dependants` includes the SELF entry (the policyholder represented as a dependant on the policy roster). UIs that want to surface only the *additional* covered family members should filter by `relationship !== "SELF"`.
 </Note>
+
+### `master_policy_number` — group-scheme identifier
+
+`master_policy_number` is the shared master group-scheme policy number — the same value across every member of the scheme. It is sourced from Superposition (not stored per policy) so it can be updated without a redeploy, and is `null` when no value is configured. This is distinct from `external_policy_id`, which is the per-policy certificate number the insurer assigns at issuance.
 
 ### `documents` — backend-owned download URLs
 

@@ -3567,6 +3567,21 @@
             }
           },
           {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/PolicyStatus"
+                }
+              ]
+            }
+          },
+          {
             "name": "sort",
             "in": "query",
             "required": false,

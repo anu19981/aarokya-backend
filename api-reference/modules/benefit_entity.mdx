@@ -23,6 +23,7 @@ has this user (or every user) utilized, and when?"
 | `entity_type` | enum | `INSURANCE_POLICY` or `CONSULTATION`. |
 | `benefit_id` | `string` (UUID) | The benefit that was utilized. |
 | `user_id` | `string` | The user (12-digit id) who utilized the benefit. |
+| `platform_id` | `string` (UUID) | The platform (tenant) the benefit instance was created under. Stamped once at creation, never mutated. |
 | `created_at` | `string` (ISO 8601) | When the utilization was recorded. |
 
 <Note>
@@ -43,6 +44,7 @@ ledger records utilization attempts.
 `GET /benefit_entities` returns the standard paginated envelope
 (`{ data, total, limit, offset }`) and supports:
 
+- `entity_id` — narrow to one benefit instance (the utilized policy / consultation id).
 - `user_id` — scope to a single user (omit to list across all users).
 - `entity_type` — `INSURANCE_POLICY` or `CONSULTATION`.
 - `benefit_id` — a specific benefit.
@@ -63,6 +65,7 @@ curl -s "$BASE_URL/benefit_entities?entity_type=INSURANCE_POLICY&limit=20" \
       "entity_type": "INSURANCE_POLICY",
       "benefit_id": "0194e0f3-1111-7123-8f4a-9d5e2c8b1a3d",
       "user_id": "012345678901",
+      "platform_id": "0194e0f3-2222-7123-8f4a-9d5e2c8b1a3d",
       "created_at": "2026-06-14T07:18:00Z"
     }
   ],
@@ -71,3 +74,37 @@ curl -s "$BASE_URL/benefit_entities?entity_type=INSURANCE_POLICY&limit=20" \
   "offset": 0
 }
 ```
+
+## Resolving a benefit instance's tenant
+
+The ledger is the only place a benefit instance's `platform_id` is recorded, so
+`?entity_id=` doubles as a point lookup for "which platform was this policy created
+under?".
+
+This matters for the enrollment-form preview
+(`POST /users/{user_id}/insurance_policies/preview_enrollment_form`), which needs a
+tenant to decide the fallback address printed on the form when the user has none of
+their own. App and platform callers carry the tenant in their token; an **admin**
+does not, and must name one via the `x-platform-id` header — which the backend
+honors **only** for admin actors. So an admin client resolves it from the ledger
+first:
+
+```bash
+# 1. Which platform was this policy created under?
+curl -s "$BASE_URL/benefit_entities?entity_id=$POLICY_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# 2. Preview the enrollment form for that tenant.
+curl -s -X POST "$BASE_URL/users/$USER_ID/insurance_policies/preview_enrollment_form" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "x-platform-id: $PLATFORM_ID" \
+  -H "Content-Type: application/json" \
+  -d '{ "benefit_id": "...", "dependant_ids": ["..."] }'
+```
+
+<Note>
+  Document **downloads** need no such dance — they are policy-scoped, so the backend
+  resolves the tenant from the ledger itself. The preview is the exception because it
+  is callable *before* a policy exists (the app's pre-purchase flow), where there is
+  no ledger row to read.
+</Note>

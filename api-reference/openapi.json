@@ -1649,6 +1649,17 @@
         "operationId": "list_benefit_entities",
         "parameters": [
           {
+            "name": "entity_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
             "name": "user_id",
             "in": "query",
             "required": false,
@@ -1681,9 +1692,12 @@
           {
             "name": "benefit_id",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -9673,6 +9687,7 @@
           "entity_type",
           "benefit_id",
           "user_id",
+          "platform_id",
           "created_at"
         ],
         "properties": {
@@ -9687,6 +9702,9 @@
           },
           "entity_type": {
             "$ref": "#/components/schemas/BenefitType"
+          },
+          "platform_id": {
+            "type": "string"
           },
           "user_id": {
             "$ref": "#/components/schemas/UserId"
@@ -12114,12 +12132,18 @@
           },
           {
             "type": "object",
-            "required": [
-              "benefit_id"
-            ],
             "properties": {
               "benefit_id": {
-                "type": "string"
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "entity_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "entity_type": {
                 "oneOf": [

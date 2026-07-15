@@ -11047,6 +11047,20 @@
           }
         }
       },
+      "DeductionSchedule": {
+        "type": "string",
+        "description": "When a `PlanAdditionalCharge` on an insurance plan variant is deducted. A dedicated enum rather than reusing `MandateFrequency` because it must express fixed timing anchors — `START_OF_POLICY`, `END_OF_YEAR`, `END_OF_POLICY` — that a recurring debit cadence has no vocabulary for. Serde-only: serialized inside the `benefit_details` JSONB, not a standalone DB column, so no diesel_enum.",
+        "enum": [
+          "ONE_TIME",
+          "MONTHLY",
+          "QUARTERLY",
+          "HALF_YEARLY",
+          "YEARLY",
+          "START_OF_POLICY",
+          "END_OF_YEAR",
+          "END_OF_POLICY"
+        ]
+      },
       "DeleteAccountResponse": {
         "type": "object",
         "required": [
@@ -13145,6 +13159,35 @@
           }
         }
       },
+      "PlanAdditionalCharge": {
+        "type": "object",
+        "required": [
+          "code",
+          "label",
+          "amount",
+          "schedule"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/AmountResponse"
+          },
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/DeductionSchedule"
+          }
+        }
+      },
       "PlanVariant": {
         "type": "object",
         "required": [
@@ -13154,6 +13197,15 @@
           "nominee_required"
         ],
         "properties": {
+          "additional_charges": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PlanAdditionalCharge"
+            }
+          },
           "annual_premium_amount": {
             "$ref": "#/components/schemas/AmountResponse"
           },

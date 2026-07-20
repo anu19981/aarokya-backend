@@ -155,6 +155,10 @@ stateDiagram-v2
   The human `/status` machine and the webhook machine are independent. `REJECTED`, `EXPIRED`, and `REQUIRES_POLICY_REISSUANCE` are terminal for the `/status` endpoint and are also frozen against in-force webhook signals — neither reopens them. Reissuance mints a brand-new policy, so the old record stays terminal (it is also excluded from the bulk-activation flow). `REQUIRES_CUSTOMER_RENEWAL[_IN_GRACE] → ISSUED` is an in-place reactivation — the driver tops up their balance within the grace window — reusing the stored `external_policy_id`/dates rather than a fresh carrier issuance. A pre-issue policy (`PENDING` / `APPROVED`) ignores every webhook signal. Unknown provider statuses are a webhook no-op and never appear as a `PolicyStatus`.
 </Note>
 
+<Info>
+  The insurer webhook (`POST /benefits/{benefit_id}/webhook`, insurance branch) responds **200** with the full `InsurancePolicyResponse` body reflecting the post-transition status — the same shape as `GET /insurance_policies/{id}`. A no-op signal returns the policy unchanged. The consultation branch of the same endpoint returns an empty **200**. (The endpoint's OpenAPI output stays opaque because the body shape depends on the benefit type.)
+</Info>
+
 ---
 
 ## Pre-purchase confirmation

@@ -205,7 +205,8 @@
                   "api/endpoints/benefit_provider_orders/create",
                   "api/endpoints/benefit_provider_orders/list",
                   "api/endpoints/benefit_provider_orders/get",
-                  "api/endpoints/benefit_provider_orders/sync"
+                  "api/endpoints/benefit_provider_orders/sync",
+                  "api/endpoints/benefit_provider_orders/backfill_split"
                 ]
               },
               {

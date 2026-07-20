@@ -55,6 +55,9 @@ orders.
   <Card title="PATCH /benefit_provider_orders/{id}/sync" icon="rotate" color="#16a34a" href="/api/endpoints/benefit_provider_orders/sync">
     Recovery — re-attempt a create-time payment that failed or never reached PBA.
   </Card>
+  <Card title="POST /admin/benefit_provider_orders/backfill_split" icon="wand-magic-sparkles" color="#7c3aed" href="/api/endpoints/benefit_provider_orders/backfill_split">
+    Admin one-time backfill — fill the self/others payment split on settled orders that predate the split columns.
+  </Card>
 </CardGroup>
 
 ---
@@ -137,5 +140,29 @@ is no standalone wallet surface. The debit always hits the user's PBA-backed
 | `benefit_entity_id` | string | Tagged: `insurance_policy:<id>`. |
 | `external_order_id` | string | Provider's external order id. |
 | `amount` | `AmountResponse` | `{ value, currency }` — major-unit float + currency. |
+| `from_self` | `AmountResponse` \| null | Portion of `amount` drawn from the self-contribution pool (PBA-reported). `null` until the payment settles or the split backfill fills it. |
+| `from_others` | `AmountResponse` \| null | Portion drawn from the others (trust/sponsor) pool. With `from_self`, sums to `amount`. Same `null` semantics. |
 | `wallet_txn_data` | object | `{ status, detail }` — see above. |
 | `created_at` / `last_modified_at` | string | ISO-8601. |
+
+---
+
+## Self / others payment split
+
+Each order records how PBA drew the charge across the account's contribution
+pools — `from_self` and `from_others` (each an `AmountResponse`, together summing
+to `amount`). PBA is the source of truth: its payment response carries the split,
+and `create` / `sync` persist it on payment success.
+
+Both are `null` on orders whose payment never settled, and on legacy rows created
+before the split was tracked. The admin backfill fills the legacy rows:
+
+<Card title="POST /admin/benefit_provider_orders/backfill_split" icon="wand-magic-sparkles" href="/api/endpoints/benefit_provider_orders/backfill_split">
+  Admin-only, sweep-all. For each settled order still missing the split, PBA's
+  payment is re-queried idempotently (keyed on the order id, so it can never
+  double-charge) and the split is persisted. Returns summary counts
+  (`total_processed` / `filled` / `skipped` / `failed`) plus a `results` list of
+  the non-filled orders — each `{ order_id, outcome, detail }` with `outcome` a
+  plain string (`SKIPPED` / `FAILED`). Optional `limit` caps a run. Safe to
+  re-run — filled rows drop out of the candidate set.
+</Card>

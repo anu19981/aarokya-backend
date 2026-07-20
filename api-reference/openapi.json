@@ -1597,6 +1597,50 @@
         ]
       }
     },
+    "/auth/contributor_token": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "generate_contributor_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateContributorTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Contributor token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateContributorTokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown user_id"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a platform service"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/auth/token": {
       "post": {
         "tags": [
@@ -10567,6 +10611,51 @@
           }
         }
       },
+      "ContributorReference": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "The customer's phone number (PII → masked in logs).",
+            "required": [
+              "value",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "PHONE"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "description": "The customer's phone number (PII → masked in logs)."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The platform's own identifier for the customer.",
+            "required": [
+              "value",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "CUSTOMER_ID"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "description": "The platform's own identifier for the customer."
+              }
+            }
+          }
+        ],
+        "description": "A typed reference to the contributing customer, adjacently tagged on the wire\nas `{ \"type\": \"PHONE\" | \"CUSTOMER_ID\", \"value\": \"…\" }`. Passthrough context —\ncarried in the contributor token; the backend does not resolve the customer\nfrom it (yet)."
+      },
       "CreateAccountRequest": {
         "type": "object",
         "required": [
@@ -11562,6 +11651,44 @@
           "FEMALE",
           "OTHER"
         ]
+      },
+      "GenerateContributorTokenRequest": {
+        "type": "object",
+        "required": [
+          "beneficiary_identifier"
+        ],
+        "properties": {
+          "beneficiary_identifier": {
+            "type": "string"
+          },
+          "contribution_channel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contributor_ref": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ContributorReference"
+              }
+            ]
+          }
+        }
+      },
+      "GenerateContributorTokenResponse": {
+        "type": "object",
+        "required": [
+          "contributor_token"
+        ],
+        "properties": {
+          "contributor_token": {
+            "type": "string"
+          }
+        }
       },
       "GenerateTokenRequest": {
         "type": "object",

@@ -82,7 +82,8 @@
               {
                 "group": "Auth",
                 "pages": [
-                  "api/endpoints/auth/generate-token"
+                  "api/endpoints/auth/generate-token",
+                  "api/endpoints/auth/generate-contributor-token"
                 ]
               },
               {

@@ -27,16 +27,27 @@ policy's `primary_user_id`; on **get**/**sync** it is read from the order row.
 
 ## `benefit_entity_id`
 
-On the **request body**, `benefit_entity_id` is a bare policy UUID — the server
-builds the internal tagged reference `insurance_policy:<id>` from it. On
-responses (and the list query filter) it is the tagged form, `<benefit_type>:<entity_id>`:
+`benefit_entity_id` is a **bare UUID everywhere on the wire** — request body,
+response, and the list query filter alike:
 
-| `benefit_entity_id` value           | Meaning                                                          |
-| ----------------------------------- | ---------------------------------------------------------------- |
-| `insurance_policy:<policy-uuid>`    | Pay the premium for an insurance policy. The policy must exist and not be `Expired`/`Rejected`. |
+| Surface                          | Value                                                            |
+| -------------------------------- | ---------------------------------------------------------------- |
+| `POST` request body              | The policy UUID to pay for. It must exist and not be `Expired`/`Rejected`. |
+| Response                         | The same bare UUID, echoed back from the stored order.           |
+| `GET` list filter                | A bare UUID; matches regardless of the entity's type.            |
 
-Only `insurance_policy` is supported today; `consultation:<id>` is rejected for
-orders.
+The column is a native `uuid`; the entity's *type* is recorded once on
+`benefit_entities.entity_type`, which the server reads on create to decide how
+to process the order. Sending anything that is not a UUID to the list filter is
+a `400`.
+
+<Note>
+  Because the response carries only the id, it does not tell you which kind of
+  entity was purchased. **Only insurance policies are payable today**, so every
+  `benefit_entity_id` on an order is an insurance policy id — the type is
+  implied. If more benefit types become payable, this response will need a type
+  discriminator; it does not have one today.
+</Note>
 
 ---
 
@@ -66,7 +77,7 @@ orders.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `benefit_entity_id` | UUID | Yes | Bare insurance-policy id; server builds `insurance_policy:<id>`. |
+| `benefit_entity_id` | UUID | Yes | Bare insurance-policy id. The server resolves its type from the `benefit_entities` ledger. |
 | `external_order_id` | string | Yes | The order id in the benefit provider's external system. |
 | `external_ref_id` | string | No | Free-form caller reference. |
 | `amount` | integer | Yes | **Minor units (paise)** — exact integer, no boundary conversion. Service-to-service. |
@@ -137,7 +148,7 @@ is no standalone wallet surface. The debit always hits the user's PBA-backed
 | `user_id` | string | Derived owner (12-digit). |
 | `account_id` | UUID | The user's PBA-backed (HSA) account that was charged. |
 | `benefit_provider_id` | UUID | Provider derived from the policy. |
-| `benefit_entity_id` | string | Tagged: `insurance_policy:<id>`. |
+| `benefit_entity_id` | UUID | Bare id of the purchased entity. No type discriminator — only insurance policies are payable today, so this is an insurance policy id. |
 | `external_order_id` | string | Provider's external order id. |
 | `amount` | `AmountResponse` | `{ value, currency }` — major-unit float + currency. |
 | `from_self` | `AmountResponse` \| null | Portion of `amount` drawn from the self-contribution pool (PBA-reported). `null` until the payment settles or the split backfill fills it. |

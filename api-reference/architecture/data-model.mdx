@@ -148,7 +148,7 @@ erDiagram
         varchar user_id FK
         uuid account_id FK
         uuid benefit_provider_id FK
-        varchar benefit_entity_id "polymorphic URN"
+        uuid benefit_entity_id "polymorphic (no FK)"
         varchar external_order_id
         bigint amount
         Currency currency
@@ -212,7 +212,7 @@ erDiagram
 ```
 
 <Note>
-  `benefit_entities.entity_id` and `benefit_provider_orders.benefit_entity_id` are **polymorphic** — they reference either an `insurance_policies.id` or a `consultations.id` (URN-encoded on the order). There is no database foreign key on those columns; referential integrity is enforced at write time.
+  `benefit_entities.entity_id` and `benefit_provider_orders.benefit_entity_id` are **polymorphic** — they reference either an `insurance_policies.id` or a `consultations.id`. Both are bare `uuid` columns; the entity's *type* is recorded once on `benefit_entities.entity_type`. There is no database foreign key on those columns; referential integrity is enforced at write time.
 </Note>
 
 ---

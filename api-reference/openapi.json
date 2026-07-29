@@ -810,6 +810,53 @@
         }
       }
     },
+    "/admin/namma_yatri/drivers/enable": {
+      "post": {
+        "tags": [
+          "AdminNammaYatri"
+        ],
+        "operationId": "enable_driver",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnableNammaYatriDriverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Driver resolved and tag applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnableNammaYatriDriverResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not an admin"
+          },
+          "404": {
+            "description": "No Namma Yatri driver matches that mobile number"
+          },
+          "502": {
+            "description": "Namma Yatri was unreachable or rejected the update"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/admin/narayana/auth_status": {
       "get": {
         "tags": [
@@ -11649,6 +11696,52 @@
           }
         }
       },
+      "EnableNammaYatriDriverRequest": {
+        "type": "object",
+        "required": [
+          "mobile_number",
+          "mobile_country_code",
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "mobile_country_code": {
+            "type": "string",
+            "example": "91"
+          },
+          "mobile_number": {
+            "type": "string"
+          }
+        }
+      },
+      "EnableNammaYatriDriverResponse": {
+        "type": "object",
+        "required": [
+          "driver_id",
+          "enabled",
+          "status",
+          "driver_tags"
+        ],
+        "properties": {
+          "driver_id": {
+            "type": "string"
+          },
+          "driver_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NammaYatriDriverTagStatus"
+          }
+        }
+      },
       "EnrollerBank": {
         "type": "object",
         "required": [
@@ -13241,6 +13334,13 @@
         "enum": [
           "ACTIVE",
           "INACTIVE"
+        ]
+      },
+      "NammaYatriDriverTagStatus": {
+        "type": "string",
+        "enum": [
+          "ENABLED",
+          "DISABLED"
         ]
       },
       "NarayanaAuthStatusResponse": {
@@ -15104,6 +15204,10 @@
     {
       "name": "AdminUser",
       "description": "Admin dashboard user management"
+    },
+    {
+      "name": "AdminNammaYatri",
+      "description": "Admin-only proxy to the Namma Yatri dashboard (BPP driver-offer) API"
     },
     {
       "name": "AdminNarayana",

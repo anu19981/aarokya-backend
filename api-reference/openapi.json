@@ -14081,9 +14081,10 @@
       },
       "SortOn": {
         "type": "string",
-        "description": "Field-name half of a [`Sort`]. Closed enum of the sortable columns\nacross the app — when a new sortable column is needed (e.g.\n`last_modified_at`), add a variant here. Storage layers exhaustively\nmatch on this so adding a variant forces a compile error at every call\nsite that needs to translate it.",
+        "description": "Field-name half of a [`Sort`]. Closed enum of the sortable columns\nacross the app — when a new sortable column is needed, add a variant\nhere. Storage layers exhaustively match on this so adding a variant\nforces a compile error at every call site that needs to translate it.\n\nNot every table carries every column: an append-only ledger has no\n`last_modified_at`, so its `list()` maps that variant back to the\ndefault rather than growing a column it must not have.",
         "enum": [
-          "created_at"
+          "created_at",
+          "last_modified_at"
         ]
       },
       "SponsorBalanceResponse": {

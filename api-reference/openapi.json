@@ -5648,6 +5648,48 @@
         ]
       }
     },
+    "/telemetry/events": {
+      "post": {
+        "tags": [
+          "Telemetry"
+        ],
+        "operationId": "push_telemetry",
+        "requestBody": {
+          "description": "Analytics batch, forwarded verbatim to hyper-analytics (`{ session, events: [...] }`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Batch accepted for forwarding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushTelemetryOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Batch exceeds the per-request event limit"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
     "/users": {
       "get": {
         "tags": [
@@ -13802,6 +13844,17 @@
           }
         }
       },
+      "PushTelemetryOutput": {
+        "type": "object",
+        "required": [
+          "accepted"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          }
+        }
+      },
       "Question": {
         "type": "object",
         "description": "A single yes/no question definition (benefit side, no answer attached).",
@@ -15133,6 +15186,10 @@
     {
       "name": "Config",
       "description": "App feature-flag config"
+    },
+    {
+      "name": "Telemetry",
+      "description": "Analytics event proxy"
     },
     {
       "name": "Auth",

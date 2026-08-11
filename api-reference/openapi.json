@@ -841,7 +841,7 @@
             "description": "Missing or invalid bearer token"
           },
           "403": {
-            "description": "Caller is not an admin"
+            "description": "Caller is not an admin, or belongs to a platform this tool is switched off for"
           },
           "404": {
             "description": "No Namma Yatri driver matches that mobile number"
@@ -3240,6 +3240,37 @@
           },
           "401": {
             "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/config/dashboard": {
+      "get": {
+        "tags": [
+          "Config"
+        ],
+        "operationId": "get_dashboard_config",
+        "responses": {
+          "200": {
+            "description": "Resolved dashboard feature flags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetAppConfigOutput"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Caller is not a first-party dashboard actor"
           }
         },
         "security": [
@@ -12040,6 +12071,15 @@
           "user_id": {
             "$ref": "#/components/schemas/UserId"
           }
+        }
+      },
+      "GetAppConfigOutput": {
+        "type": "object",
+        "required": [
+          "flags"
+        ],
+        "properties": {
+          "flags": {}
         }
       },
       "GetBalanceResponse": {

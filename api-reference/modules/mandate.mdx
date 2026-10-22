@@ -250,7 +250,7 @@ Also: the user must have a non-null `email` (the Juspay session needs it; else
 | `ME_1214` | 400 | Mandate not completed | Setup not completed on the payment provider (caller-recoverable) |
 | `ME_1215` | 400 | Goal not active | *Reserved — no longer emitted.* The `→ LIVE` precondition moved onto the benefit entity. |
 | `ME_1216` | 400 | Benefit entity not active | A `→ LIVE` target (`start` / `resume` / `update`) whose funded benefit entity is not `ACTIVE` |
-
+| `ME_1217` | 403 | Forbidden | Caller is not authorized for this mandate operation |
 ---
 
 ## Gotchas

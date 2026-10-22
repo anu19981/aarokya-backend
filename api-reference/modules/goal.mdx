@@ -26,7 +26,7 @@ description: "User savings goals with an evaluation cadence, backed by the user'
 | `GET /goals/{goal_id}/mandate/active` | any authenticated caller | the goal's live mandate, if any |
 | `POST /goals/{goal_id}/mandate/set`, `.../unlink` | callback service | link / unlink `goals.mandate_id` |
 | `POST /goals/{goal_id}/contribution/self/manual` | app user | a one-off top-up: order + Juspay session |
-| `POST /goals/{goal_id}/contribution/self/auto` | Kronos | the daily autopay debit — see [autopay](#autopay) |
+| `POST /goals/{goal_id}/contribution/self/auto` | Kronos | the autopay debit (daily, or on the platform's fixed cron) — see [autopay](#autopay) |
 | `POST /goals/{goal_id}/contribution/sponsor` | callback service | match a settled self contribution with the sponsor's share — see [sponsor matching](#sponsor-matching) |
 | `POST /goals/{goal_id}/contribution/tip/indirect` | `INDIRECT` contributor token | record a tip given on a platform's own surface — see [indirect tips](#indirect-tips) |
 | `POST /goals/{goal_id}/contribution/tip/direct` | `DIRECT` contributor token | tip by paying our payment page — see [direct tips](#direct-tips) |
@@ -38,7 +38,8 @@ description: "User savings goals with an evaluation cadence, backed by the user'
 ## Autopay
 
 Once a goal has a linked, `LIVE` mandate, Kronos fires
-`POST /goals/{goal_id}/contribution/self/auto` on a daily cron. Each firing:
+`POST /goals/{goal_id}/contribution/self/auto` on the platform's autopay cron —
+daily by default, or a fixed day each month where configured. Each firing:
 
 1. resolves the goal's mandate through **`goals.mandate_id`** — the explicit
    link, so a mandate the goal was never linked to is never charged;

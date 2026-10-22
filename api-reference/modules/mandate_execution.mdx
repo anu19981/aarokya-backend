@@ -251,7 +251,8 @@ UI without a redeploy.
 |-------------------|--------------|---------|
 | `mandate_execution.autopay.endpoint_name` | `aarokya-goal-auto-self-contribution` | Kronos-registered endpoint for autopay firings |
 | `mandate_execution.autopay.initial_delay_secs` | `3600` | Offset from `Active → Live` for the first autopay firing |
-| `mandate_execution.autopay.interval_minutes_override` | `0` | `0` → daily-IST baseline; `n > 0` → fire every `n` minutes |
+| `mandate_execution.autopay.interval_minutes_override` | `0` | Test mode: `0` → the configured schedule; `n > 0` → fire every `n` minutes. Ignored when `cron_expression` is set |
+| `mandate_execution.autopay.cron_expression` | `""` | Fixed autopay cron (UTC) per platform, e.g. `0 11 5 * *`, sent to Kronos verbatim; the first firing waits for the first match. Empty → daily at the time autopay started. Not validated here: a cron Kronos rejects fails `→ LIVE` with `ME_1206`, and a day of 29–31 skips short months. Applies to goals that fund a benefit instance; each firing still charges the per-firing amount |
 | `mandate_execution.autopay.scheduling_enabled` | `true` | Kill-switch for autopay scheduling |
 | `order.settlement_poll.endpoint_name` | `aarokya-mandate-execution-status-check` | Kronos endpoint for the reconciliation cron. Must be registered against the order-sync URL template (the Kronos job input supplies the order id) — the autopay rail reconciles on the order seam |
 | `order.settlement_poll.initial_delay_secs` | `60` | First reconciliation poll |

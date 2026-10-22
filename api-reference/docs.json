@@ -280,8 +280,7 @@
                   "api/endpoints/goals/indirect-tip-contribution",
                   "api/endpoints/goals/direct-tip-contribution",
                   "api/endpoints/goals/contribute",
-                  "api/endpoints/goals/spend",
-                  "api/endpoints/goals/backfill"
+                  "api/endpoints/goals/spend"
                 ]
               },
               {

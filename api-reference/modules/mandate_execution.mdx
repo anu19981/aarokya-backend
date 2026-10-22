@@ -164,8 +164,8 @@ they belong to:
 
 The charge amount comes off the **order**, never a freshly recomputed figure: an
 order that pre-exists from an earlier attempt is the single source of truth, so a
-sponsor-share change between retries can't make the charge, the order row, and
-the execution row disagree.
+change to `insurance.user_contribution` between retries can't make the charge, the
+order row, and the execution row disagree.
 
 The reconciliation arm adds a further guard: a **terminal-state fast-path**. If the
 execution's status is already terminal (`Success | Failed`), it returns the order
@@ -199,18 +199,16 @@ SCREAMING_SNAKE_CASE (`INITIATED` / `PENDING` / `SUCCESS` / `FAILED`).
 
 ## Debit amount
 
-The amount Aarokya charges per firing is the **user's share** of the daily
-premium on their single `Issued` insurance policy:
+The amount Aarokya charges per firing is the Superposition key
+`insurance.user_contribution` (paise), resolved on the user's single `Issued` insurance
+policy — its plan, benefit and the platform it was created under. There is no premium
+maths: each plan (and each platform that differs) carries its own figure, and the
+sponsor match is configured separately (`insurance.sponsor_contribution`).
 
-```text
-debit = max(0, policy.premium_amounts.daily - sponsor_contribution)
-```
-
-`sponsor_contribution` is resolved from Superposition (`insurance.sponsor_contribution`,
-keyed by `plan_code` / `benefit_id` / purchase date; default `0`). The
-subtraction is exact `MinorUnit` (paise) math, floored at zero. A zero user share
-(sponsor covers the full premium), or a user with zero / multiple `Issued`
-policies, fails the firing — there's no policy linkage on the mandate row today.
+Default `0`: a plan with no configured user contribution, or a user with zero /
+multiple `Issued` policies, fails the firing — there's no policy linkage on the
+mandate row today. Key the value on `plan_code` / `platform_slug` only, never a status
+dimension: the goal stamps it at creation, the debit reads it once the policy is issued.
 
 Because the debit runs on the goal rail, those failures reach the caller as the
 **goal** module's codes, not the `MXE_16xx` ones below; see
@@ -234,7 +232,7 @@ stay reserved and are never reused.
 | `MXE_1605` | 400 | Mandate not active | Mandate is not in `LIVE` state — cannot execute |
 | `MXE_1606` | 404 | Execution not found | `execution_id` row doesn't exist |
 | `MXE_1607` | 404 | Job execution not found | Claimed row missing (race / DB inconsistency) |
-| `MXE_1608` | 400 | Zero debit amount | *Retired* — surfaces on the goal rail |
+| `MXE_1608` | 400 | Zero debit amount | *Retired* — surfaces on the goal rail as `GLE_1827` |
 | `MXE_1609` | 400 | No issued policy | *Retired* — surfaces on the goal rail |
 | `MXE_1610` | 400 | Ambiguous policies | *Retired* — surfaces on the goal rail |
 

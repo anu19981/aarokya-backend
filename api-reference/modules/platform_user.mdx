@@ -1,17 +1,14 @@
 ---
 title: "Platform Users"
-description: "Which users belong to which platform (tenant). Two writers (login + admin backfill); one read of its own (admin, or a platform-scoped token pinned to it)."
+description: "Which users belong to which platform (tenant). One writer (login); one read of its own (admin, or a platform-scoped token pinned to it)."
 ---
 
 The `platform_users` table records **membership**: which users belong to which
 platform (tenant).
 
 <Info>
-  **No mutation API** for memberships. Rows are written in only two ways:
-
-  1. `POST /auth/token` — automatically, on every login. See below.
-  2. `POST /platform_users/backfill` — admin-only, one-shot, run once
-     per environment after deploy.
+  **No mutation API** for memberships. Rows are written in only one way:
+  `POST /auth/token` — automatically, on every login. See below.
 
   Reads go through one endpoint of its own (admin, or a platform-scoped
   token pinned to it); `GET /platforms` and `GET /users/details/basic`
@@ -131,75 +128,6 @@ The token wins over the query: a pinned filter takes the token's value, whatever
 curl "$BASE_URL/platform_users" \
   -H "Authorization: Bearer $CONTRIBUTOR_TOKEN"
 ```
-
-## Backfilling historical memberships
-
-`POST /platform_users/backfill` is a one-shot admin endpoint. The
-migration ships **schema only**; this endpoint fills in the `(user, platform)`
-pairs that predate the table.
-
-Run it with `dry_run` first to see exactly what it would do, then for real:
-
-```bash Dry run
-curl -X POST "$BASE_URL/platform_users/backfill" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"dry_run": true}'
-```
-
-```json Response
-{
-  "total_processed": 3,
-  "succeeded": 0,
-  "skipped": 3,
-  "failed": 0,
-  "results": [
-    {
-      "user_id": "012345678901",
-      "platform_id": "0194e0f3-4b2a-7123-8f4a-9d5e2c8b1a3d",
-      "outcome": "DRY_RUN",
-      "detail": "would link to platform 0194e0f3-4b2a-7123-8f4a-9d5e2c8b1a3d (from the ledger)"
-    },
-    {
-      "user_id": "012345678902",
-      "platform_id": "0194e0f3-4b2a-7123-8f4a-9d5e2c8b1a3d",
-      "outcome": "DRY_RUN",
-      "detail": "would link to platform 0194e0f3-4b2a-7123-8f4a-9d5e2c8b1a3d (fallback: oldest active)"
-    },
-    {
-      "user_id": "012345678903",
-      "platform_id": "0194e0f3-4b2a-7123-8f4a-9d5e2c8b1a3d",
-      "outcome": "DRY_RUN",
-      "detail": "would link to platform 0194e0f3-4b2a-7123-8f4a-9d5e2c8b1a3d (fallback: oldest active)"
-    }
-  ]
-}
-```
-
-Every candidate is read once, then each is linked on its own, so a failing
-candidate is reported and the run carries on. `results` lists only the users
-that were **not** linked:
-
-| `outcome` | Meaning |
-|---|---|
-| `DRY_RUN` | Resolved cleanly; nothing written because `dry_run` was set. |
-| `SKIPPED` | No active platform to fall back to (`platform_id` absent). |
-| `FAILED` | The write failed; `detail` says why. Safe to re-run. |
-
-Two steps:
-
-| Step | What it does |
-|---|---|
-| **1. From the ledger** | Every `(user_id, platform_id)` pair `benefit_entities` proves that has no membership yet. `created_at` is copied from the ledger's oldest matching row. |
-| **2. Fallback** | Users with no membership and no ledger rows get the **oldest active** platform. Exact in a single-tenant environment, a placeholder otherwise — **operators must correct these on multi-tenant targets**; the dry run lists exactly which users they are. |
-
-**Re-runnable.** A user–platform pair that already has a membership row (even a revoked one) is never a candidate, so once everything
-is linked a rerun reports `succeeded: 0`, and a run interleaved with logins
-covers only the pairs login has not linked yet. A user whose ledger insert
-failed is not pushed onto the fallback platform; the next run retries it.
-
-`created_at` is copied from the source row, so it records when the membership
-began rather than when the backfill ran. A revoked pair is left revoked.
 
 ## Revoking a membership
 

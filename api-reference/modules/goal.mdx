@@ -43,9 +43,9 @@ daily by default, or a fixed day each month where configured. Each firing:
 
 1. resolves the goal's mandate through **`goals.mandate_id`** — the explicit
    link, so a mandate the goal was never linked to is never charged;
-2. computes the user's share of the daily premium (a sponsor covering the whole
-   premium leaves nothing to charge, and the firing stops with a 400 rather than
-   sending Juspay a doomed zero-amount debit);
+2. reads the configured user contribution (`insurance.user_contribution`, per plan /
+   platform) — none configured leaves nothing to charge, and the firing stops with a
+   400 rather than sending Juspay a doomed zero-amount debit;
 3. mints the funding order on the goal's own HSA pool, with `goal_id` set and
    `channel = mandate`;
 4. hands that order to the shared execution core — PBA hold, Juspay `/txns`
@@ -344,7 +344,7 @@ raised only by the internal flow that creates goals, never by a route here.
 |---|---|---|---|
 | `GLE_1800` | 500 | Internal error | every route |
 | `GLE_1801` | 404 | Goal not found | every route |
-| `GLE_1802` | 400 | Validation error | goal not active, non-positive contribution, zero autopay debit, dead mandate |
+| `GLE_1802` | 400 | Validation error | goal not active, non-positive contribution, dead mandate |
 | `GLE_1803` | 409 | User has no active savings account | goal-creating flow only |
 | `GLE_1804` | 500 | Amount conversion failed | any route returning a goal |
 | `GLE_1805` | 500 | Failed to provision the PBA account for the goal | goal-creating flow only |
@@ -366,3 +366,4 @@ raised only by the internal flow that creates goals, never by a route here.
 | `GLE_1821` | 409 | Purchase is not settled | `spend` |
 | `GLE_1822` | 409 | Purchase carries no self/sponsor split | `spend` |
 | `GLE_1823` | 409 | Order is not a self contribution | `contribution/sponsor` |
+| `GLE_1827` | 400 | No user contribution configured | `contribution/self/auto` — `insurance.user_contribution` resolves to `0` for the goal's plan / platform |

@@ -548,43 +548,6 @@
         ]
       }
     },
-    "/admin/goals/backfill": {
-      "post": {
-        "tags": [
-          "Goal"
-        ],
-        "summary": "TODO: This is a temporary admin-only endpoint for operational backfill. Once the\nbackfill is complete, this endpoint should be removed.",
-        "operationId": "backfill_goals",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BackfillGoalsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Per-policy backfill outcomes",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BackfillGoalsResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden — admin only"
-          }
-        }
-      }
-    },
     "/admin/namma_yatri/drivers/enable": {
       "post": {
         "tags": [
@@ -4149,7 +4112,7 @@
             }
           },
           "400": {
-            "description": "Goal not active, mandate not live, or missing/empty execution-id header"
+            "description": "Goal not active, mandate not live, no user contribution configured, or missing/empty execution-id header"
           },
           "401": {
             "description": "Unauthorized"
@@ -5539,7 +5502,7 @@
             }
           },
           "400": {
-            "description": "Mandate not live, zero debit, missing/empty idempotency-key header, unknown order, or an order that does not belong to this mandate"
+            "description": "Mandate not live, missing/empty idempotency-key header, unknown order, or an order that does not belong to this mandate"
           },
           "401": {
             "description": "Unauthorized"
@@ -6615,47 +6578,6 @@
           },
           "403": {
             "description": "Caller's token type may not list platform users"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ]
-      }
-    },
-    "/platform_users/backfill": {
-      "post": {
-        "tags": [
-          "PlatformUser"
-        ],
-        "operationId": "backfill_platform_users",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BackfillPlatformUsersRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Per-row backfill outcomes",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BackfillPlatformUsersResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid bearer token"
-          },
-          "403": {
-            "description": "Caller is not an admin"
           }
         },
         "security": [
@@ -11129,141 +11051,6 @@
           "total": {
             "type": "integer",
             "format": "int64"
-          }
-        }
-      },
-      "BackfillGoalsRequest": {
-        "type": "object",
-        "properties": {
-          "dry_run": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          }
-        }
-      },
-      "BackfillGoalsResponse": {
-        "type": "object",
-        "required": [
-          "total_processed",
-          "succeeded",
-          "skipped",
-          "failed",
-          "results"
-        ],
-        "properties": {
-          "failed": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "results": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/BackfillGoalsResult"
-            }
-          },
-          "skipped": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "succeeded": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "total_processed": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "BackfillGoalsResult": {
-        "type": "object",
-        "required": [
-          "policy_id",
-          "outcome",
-          "detail"
-        ],
-        "properties": {
-          "detail": {
-            "type": "string"
-          },
-          "outcome": {
-            "type": "string"
-          },
-          "policy_id": {
-            "type": "string"
-          }
-        }
-      },
-      "BackfillPlatformUsersRequest": {
-        "type": "object",
-        "properties": {
-          "dry_run": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          }
-        }
-      },
-      "BackfillPlatformUsersResponse": {
-        "type": "object",
-        "required": [
-          "total_processed",
-          "succeeded",
-          "skipped",
-          "failed",
-          "results"
-        ],
-        "properties": {
-          "failed": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "results": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/BackfillPlatformUsersResult"
-            }
-          },
-          "skipped": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "succeeded": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "total_processed": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "BackfillPlatformUsersResult": {
-        "type": "object",
-        "required": [
-          "user_id",
-          "outcome",
-          "detail"
-        ],
-        "properties": {
-          "detail": {
-            "type": "string"
-          },
-          "outcome": {
-            "type": "string"
-          },
-          "platform_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "user_id": {
-            "type": "string",
-            "example": "012345678901"
           }
         }
       },
@@ -17814,7 +17601,7 @@
     },
     {
       "name": "PlatformUser",
-      "description": "Token-scoped list and admin backfill over the platform_users table"
+      "description": "Token-scoped list over the platform_users table"
     },
     {
       "name": "EventLog",

@@ -116,14 +116,14 @@ flowchart TD
   <Card title="Benefit" icon="stethoscope" color="#7c3aed" href="/modules/benefit">
     **Provider / admin write · authenticated read**
 
-    Catalogue offerings — `CONSULTATION` or `INSURANCE_POLICY` — linked to a provider, with typed `benefit_details`.
+    Catalogue offerings — `CONSULTATION`, `INSURANCE_POLICY`, or `HEALTH_CHECKUP` — linked to a provider, with typed `benefit_details`.
 
     **Tables:** `benefits`
   </Card>
   <Card title="Benefit Entity" icon="layer-group" color="#7c3aed" href="/modules/benefit_entity">
     **Admin read**
 
-    Append-only record of a benefit granted to a user (the join between a user and a `CONSULTATION` or `INSURANCE_POLICY` benefit instance).
+    Append-only record of a benefit granted to a user (the join between a user and a `CONSULTATION`, `INSURANCE_POLICY`, or `HEALTH_CHECKUP` benefit instance).
 
     **Tables:** `benefit_entities`
   </Card>
@@ -223,14 +223,14 @@ When a token expires the issuer re-authenticates — the partner backend simply 
 stateDiagram-v2
     direction LR
     [*] --> ONBOARDING: POST /auth/token (first call)
-    ONBOARDING --> ACTIVE: complete_onboarding
+    ONBOARDING --> ACTIVE: add_details
     ACTIVE --> DEACTIVATED: DELETE /users/id (admin)
     DEACTIVATED --> [*]
 ```
 
 | Status | Meaning | Allowed operations |
 |--------|---------|-------------------|
-| `ONBOARDING` | Created, profile incomplete | `POST /users/{user_id}/complete_onboarding` only — `PATCH` is rejected until active |
+| `ONBOARDING` | Created, profile incomplete | `POST /users/{user_id}/add_details` only — `PATCH` is rejected until active |
 | `ACTIVE` | Fully onboarded | All user endpoints |
 | `DEACTIVATED` | Soft-deleted | None |
 
@@ -256,7 +256,7 @@ stateDiagram-v2
 
 <CardGroup cols={2}>
   <Card title="Amounts" icon="indian-rupee-sign" color="#16a34a">
-    Stored internally as integer minor units (`MinorUnit`) with a `Currency` enum. At the API boundary an amount is an `AmountResponse` object — `{ "value": 99.99, "currency": "INR" }` — value in major units.
+    Stored internally as integer minor units (`MinorUnit`) with a `Currency` enum. At the API boundary an amount is an `AmountType` object — `{ "value": 9999, "currency": "INR" }` — value in **minor** units, the same integer as storage. (`benefit_provider_order` is the one legacy exception, still on major-unit `AmountResponse`.)
   </Card>
   <Card title="Identifiers" icon="fingerprint" color="#3b82f6">
     User IDs are 12-digit numeric strings (printable on a card). Every other entity uses a UUID v7 (time-sortable). IDs are always generated server-side — never client-supplied.

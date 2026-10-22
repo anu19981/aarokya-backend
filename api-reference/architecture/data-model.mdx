@@ -19,11 +19,11 @@ erDiagram
         date dob
         Gender gender
         jsonb address
-        IdProofType id_proof_type
-        varchar id_proof_number
         UserStatus status
         timestamp created_at
         timestamp last_modified_at
+        varchar id_proof "nullable, `<type>:<number>`"
+        varchar occupation "nullable, Occupation enum stored as text"
     }
 
     accounts {
@@ -123,7 +123,7 @@ erDiagram
         bigint amount
         Currency currency
         MandateExecutionStatus status
-        varchar job_execution_id UK
+        varchar idempotency_key UK
         uuid order_id FK
         timestamp created_at
         timestamp last_modified_at
@@ -137,7 +137,7 @@ erDiagram
         uuid account_id FK
         varchar user_id FK
         OrderStatus status
-        varchar source "self_contribution or sponsor URN"
+        varchar source "self_contribution, sponsor:uuid or tip:uuid"
         varchar wallet_txn_data
         timestamp created_at
         timestamp last_modified_at
@@ -162,6 +162,35 @@ erDiagram
         BenefitType entity_type
         varchar user_id FK
         timestamp created_at
+    }
+
+    clinic_queue {
+        uuid benefit_entity_id PK "schema: clinic. = benefit_entities.entity_id"
+        text entity_type
+        varchar user_id
+        uuid benefit_id
+        uuid benefit_provider_id
+        ClinicQueueStatus status
+        timestamp created_at
+        timestamp last_modified_at
+    }
+
+    platforms {
+        uuid id PK
+        varchar name
+        varchar slug
+        PlatformStatus status
+        jsonb address
+        timestamp created_at
+        timestamp last_modified_at
+    }
+
+    platform_users {
+        varchar user_id PK,FK
+        uuid platform_id PK,FK
+        PlatformUserStatus status
+        timestamp created_at
+        timestamp last_modified_at
     }
 
     mrns {
@@ -196,6 +225,8 @@ erDiagram
     users ||--o{ benefit_provider_orders : "user_id"
     users ||--o{ benefit_entities : "user_id"
     users ||--o{ mrns : "primary_user_id"
+    users ||--o{ platform_users : "user_id"
+    platforms ||--o{ platform_users : "platform_id"
     dependants ||--o{ consultations : "dependant_id"
     dependants ||--o{ mrns : "dependant_id"
     benefit_providers ||--o{ benefits : "provider_id"
@@ -213,6 +244,8 @@ erDiagram
 
 <Note>
   `benefit_entities.entity_id` and `benefit_provider_orders.benefit_entity_id` are **polymorphic** — they reference either an `insurance_policies.id` or a `consultations.id`. Both are bare `uuid` columns; the entity's *type* is recorded once on `benefit_entities.entity_type`. There is no database foreign key on those columns; referential integrity is enforced at write time.
+
+  `clinic.clinic_queue` lives in a **separate Postgres schema** — the only non-`public` one — and therefore carries no foreign keys at all, including to `benefit_entities`. Its columns are denormalised at admission rather than joined, because Diesel emits `allow_tables_to_appear_in_same_query!` per schema and a cross-schema join does not compile.
 </Note>
 
 ---
@@ -228,7 +261,7 @@ erDiagram
   <Card title="Account owns" icon="wallet" color="#16a34a">
     - `accounts` — the PBA holder row (`holder` keys a `user:<id>` or `sponsor:<id>`)
     - `orders` — funding ledger; self-contribution or sponsor-funded
-    - Balance and ledger are read from the PBA via `/users/{user_id}/balance` and `/users/{user_id}/ledger`
+    - Balance and ledger are read from the PBA per goal via `/goals/{goal_id}/balance` and `/goals/{goal_id}/ledger`
   </Card>
   <Card title="Insurance Policy owns" icon="file-medical" color="#ec4899">
     - `insurance_policies` — purchased policies, `dependant_ids` array for coverage
@@ -238,10 +271,11 @@ erDiagram
     - `benefit_providers`, `benefits` — provider catalog + benefit definitions
     - `benefit_entities` — append-only utilization ledger (one row per issued policy / consultation)
     - `benefit_provider_orders` — provider-side funding ledger
+    - `clinic.clinic_queue` — the clinic front-desk queue (own schema; tracks the visit, not the entitlement)
   </Card>
   <Card title="Mandate / Order owns" icon="credit-card" color="#06b6d4">
     - `mandates` — Juspay UPI autopay authorization
-    - `mandate_executions` — one row per scheduled debit (idempotent on `job_execution_id`)
+    - `mandate_executions` — one row per scheduled debit (idempotent on `idempotency_key`)
   </Card>
   <Card title="Consultation owns" icon="stethoscope" color="#8b5cf6">
     - `consultations` — chat-doctor sessions tied to a `dependant` + consultation `benefit`
@@ -260,20 +294,20 @@ erDiagram
 | Field | Storage Rule | API Response |
 |-------|-------------|-------------|
 | `phone_number` | `Secret<String>`, encrypted at rest via per-user key | Returned as set |
-| `id_proof_number` | Encrypted at rest; `id_proof_type` enum kept alongside | Returned per access control |
+| `id_proof` | Optional text `<type>:<number>`; the pair is indivisible so it is one column | Never returned in any response |
 | `address`, PII JSONB | Encrypted at rest (`user_key_store` data key) | Returned per access control |
 | `access_token` | App JWT (RS256) — never persisted server-side | Returned once from `POST /auth/token` |
-| Money (`amount`, `max_amount`, …) | `BIGINT` minor units (paise) internally | `AmountResponse` = `{ "value": <major-units float>, "currency": "INR" }` |
+| Money (`amount`, `max_amount`, …) | `BIGINT` minor units (paise) internally | `AmountType` = `{ "value": <minor-units integer>, "currency": "INR" }` — same integer as storage |
 
 <Note>
-  Identity is captured as `id_proof_type` + `id_proof_number`, and auth is a stateless bearer JWT.
+  Identity is captured in the optional `id_proof` text column (`<type>:<number>`), and auth is a stateless bearer JWT.
 </Note>
 
 ---
 
 ## Soft-Delete & Timestamps
 
-Every domain table uses a **`status` enum for soft-delete** — there is no `deleted_at` column. Records are retired by transitioning `status` (e.g. `active → inactive`, `active → discarded`, `active → deactivated`) rather than being physically removed. Each table carries `created_at` and `last_modified_at` (not `updated_at`). The append-only ledgers (`benefit_entities`) are the exception — they have only `created_at` and no `status`.
+Every domain table uses a **`status` enum for soft-delete** — there is no `deleted_at` column. Records are retired by transitioning `status` (e.g. `active → inactive`, `active → discarded`, `active → deactivated`) rather than being physically removed. Each table carries `created_at` and `last_modified_at` (not `updated_at`). The append-only ledgers (`benefit_entities`) are the exception — they have only `created_at` and no `status`. `clinic.clinic_queue` has both, but retires a row by reaching the terminal `COMPLETED` rather than an inactive variant.
 
 Every domain table feeds `public.event_log` through an `*_audit` trigger that calls `public.event_logger()`, capturing the action (`INSERT`/`UPDATE`/`DELETE`), the old/new row as JSON, and the originating query. `event_log` is `RANGE`-partitioned by `timestamp` (monthly partitions).
 
@@ -301,15 +335,22 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    A[INITIATED] --> B[PENDING]
+    E[EXPRESSED] --> A[INITIATED]
+    E --> F[DECLINED]
+    A --> B[PENDING]
     B --> C[SUCCESS]
     B --> D[FAILED]
 
 ```
 
+`EXPRESSED` and `DECLINED` are **tip-only** and sit outside the main arc. Every other
+funding flow starts at `INITIATED`.
+
 | `OrderStatus` | Meaning |
 |--------|-------------|
+| `expressed` | Tip declared against a ride, but the ride has not ended — nothing is collectable yet. Tip orders only. |
 | `initiated` | Order row created, awaiting payment |
 | `pending` | Submitted to Juspay, not yet terminal |
-| `success` | Provider settled and PBA credited |
-| `failed` | Provider declined or the PBA leg failed |
+| `success` | Provider settled. For a **goal-linked** order that is all it means — crediting the pool is `POST /goals/{goal_id}/contribute`'s step, so check `wallet_txn_data` for the PBA leg. For a legacy user-scoped order it also implies PBA credited. |
+| `failed` | Provider declined, or the PBA leg failed. A parked hold is released on both rails. |
+| `declined` | Terminal, tip orders only: the ride ended with no tip collected. Distinct from `failed` (a collection was attempted and refused) and from the Juspay `JUSPAY_DECLINED` external status (a declined *payment*). |

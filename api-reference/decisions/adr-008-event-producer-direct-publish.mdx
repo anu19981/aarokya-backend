@@ -1,0 +1,155 @@
+---
+title: "ADR-008: Direct Kafka Publish for Domain Events"
+description: "Why domain events are published inline post-commit rather than through a transactional outbox — and what we accept in exchange."
+---
+
+## Context
+
+Aarokya needs to publish domain facts — a contribution order succeeding, a policy activating, a
+benefit being utilised — so downstream reactions decouple from the request path.
+
+Two properties drove the decision:
+
+1. **Some flows publish more than one event**, and a consumer must see them in the order they
+   happened. A consumer that saw "order settled" before "order created" would act on a state that
+   never existed.
+2. **A publish failure must never fail the user's request.** The transaction has already committed;
+   the fact is true whether or not the broker heard about it.
+
+<Note>
+Domain events are **not** `public.event_log`. That table is the Postgres audit trail fed by per-table
+triggers, recording row mutations for compliance. Domain events are business facts on a Kafka topic
+for downstream consumers. Similar names, unrelated mechanisms.
+</Note>
+
+## Options Considered
+
+<AccordionGroup>
+  <Accordion title="Option A — Transactional outbox, drained by Kronos">
+    Write the event to an `outbox` table inside the same transaction as the domain change, then let a
+    Kronos worker poll and dispatch it.
+
+    **Pros**
+    - No dual-write gap: the event is committed atomically with the fact it describes.
+    - A crash between commit and publish loses nothing — the row is still there.
+
+    **Cons**
+    - **Fails the ordering requirement.** We verified the Kronos service's own worker pool
+      (`worker/poller.rs` + `worker/dispatcher/kafka.rs` in the Kronos repo, not this one): it claims rows with
+      `FOR UPDATE SKIP LOCKED` and dispatches through N independent, racing producers. Two events for
+      the same entity can be claimed by different workers and land out of order. `SKIP LOCKED` is
+      precisely what makes the pool scale, and precisely what makes per-entity ordering impossible.
+    - Adds a table, a migration, a polling worker, and drain-lag as a new failure mode.
+
+    **Verdict** — rejected. It solves the durability problem but breaks the ordering requirement,
+    which is the harder of the two to work around.
+  </Accordion>
+
+  <Accordion title="Option B — Direct inline publish, post-commit (chosen)">
+    Commit the transaction, then publish the flow's events straight to Kafka through one idempotent
+    producer keyed by `aggregate_id`.
+
+    **Pros**
+    - **Hard per-entity ordering.** `enable.idempotence=true`, `acks=all`,
+      `max.in.flight.requests.per.connection=5`, and `key = aggregate_id` mean all events for one
+      entity share a partition, and send order is append order — preserved even across librdkafka's
+      internal retries.
+    - No new table, no migration, no worker, no drain lag.
+    - `publish_ordered` stops at the first failure, so a gappy sequence can never reach the partition.
+
+    **Cons**
+    - **Dual-write gap.** The commit and the publish are not atomic. A crash in between, or an
+      unreachable broker, drops the event.
+
+    **Verdict** — accepted. The ordering guarantee is structural; the durability gap is bounded and
+    recoverable (see Consequences).
+  </Accordion>
+
+  <Accordion title="Option C — Producer-side dead-letter topic">
+    On a failed publish, write the event to a Kafka DLQ topic instead.
+
+    **Cons**
+    - Self-defeating. A publish fails precisely when the broker is unreachable — and the DLQ topic
+      lives on that same broker.
+
+    **Verdict** — rejected as incoherent. The same reasoning rules out a `failed_events` **database**
+    table: that write is itself a network hop, and it fails in a broad class of the same incidents.
+    The local structured log is the only capture path strictly more reliable than the publish it is
+    recording.
+  </Accordion>
+</AccordionGroup>
+
+## Decision
+
+**Publish directly to Kafka, inline, after the transaction commits.**
+
+- One idempotent `rdkafka` producer; `key = aggregate_id` for per-entity partition affinity.
+- Emit sites send sequentially; `publish_ordered` enforces stop-at-first-failure centrally so no call
+  site can emit a gap.
+- Payloads are **rich but PII-free** — ids plus immutable business facts. No name, phone, or email,
+  which is what lets payload encryption stay deferred.
+- On failure the publisher emits one structured log with the frozen sentinel key
+  `alert = "event_publish_failed"` and returns `Err`. **Callers discard the `Err` and continue** — a
+  broker outage degrades downstream reactions, never the user's request.
+- No metric is emitted. The repo's observability stack is Loki + Promtail + Grafana with no metrics
+  recorder or exporter, so a counter would be a runtime no-op; the structured log is the alertable
+  signal.
+
+## Consequences
+
+<CardGroup cols={2}>
+  <Card title="Gained" icon="circle-check" color="#16a34a">
+    - Hard per-entity ordering for multi-event flows.
+    - No outbox table, migration, worker, or drain lag.
+    - Publish failures cannot reach the client.
+    - A dropped event is visible in logs, not silent.
+    - Payload encryption stays deferred (no PII in transit).
+  </Card>
+  <Card title="Trade-offs" icon="triangle-exclamation" color="#f59e0b">
+    - **Dual-write gap** — commit and publish are not atomic.
+    - A crash after commit but before the publish attempt logs nothing; only a future reconciliation
+      sweep would catch it.
+    - Recovery depends on **flow-level idempotency**, which several endpoints lack today.
+    - Ordering holds within a flow, not across concurrent flows on the same entity.
+  </Card>
+</CardGroup>
+
+### The recovery story, stated honestly
+
+A dropped event is recovered by **re-running the originating API call**. Re-publishing the single
+event is not sufficient in general: a publish is not necessarily the last step in a flow, and a flow
+may emit several events, so resending one reconstructs nothing that ran after it. The recovery unit is
+the API call.
+
+Delivery is also at-least-once, so the mirror-image case matters too: a consumer can see the same
+fact twice, from a redelivery or from a client retry that re-runs the whole flow.
+
+Neither makes client-retry idempotency a blanket precondition for emitting. The question to ask per
+emit site is narrower:
+
+> **Does a duplicate event cause a duplicate side effect in some consumer group?**
+
+Usually not — every reacting group carries a `(fact, action)` gate (`orders.goal_credited`, a derived
+sponsor order id, a unique `idempotency_key`, no-op-at-target), and a fact with no consumer at all is
+inert by definition. `POST /goals/{goal_id}/contribution/self/manual` is the worked example: it mints
+a fresh order id per call, so a retry does emit a second `…initiated` — and that is harmless, because
+nothing consumes a *manual* `…initiated` and the duplicate order sits `Initiated` until someone pays
+it. The mandate rail derives its ids from `v5(namespace, idempotency_key)` precisely because a
+duplicate *there* would claim an execution twice.
+
+Where a flow's replay genuinely is unsafe, the consequence is about the **dropped** direction, not the
+duplicate one: that flow has no recovery path for a lost event, and the reconciliation sweep (deferred)
+is the only floor under it.
+
+<Warning>
+Before adding an emit site, check it against the consumer roster in
+`backend/ai-docs/patterns/EVENTS.md` for a group that would act twice. A unique index on a business
+key is not a substitute — it dedupes a natural key, it does not make an arbitrary retry safe.
+</Warning>
+
+## Related
+
+- `backend/ai-docs/patterns/EVENTS.md` — producer usage, ordering contract, payload rules, the
+  forward-compatible enum recipe, and the consumer roster to check an emit site against.
+- [ADR-001: Smithy as API IDL](/decisions/adr-001-smithy) — event schemas are **not** Smithy-generated
+  today; that is deferred.

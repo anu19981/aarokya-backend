@@ -58,17 +58,18 @@ rather than a silent empty list.
 | Endpoint                                | Auth        | Notes                                          |
 | --------------------------------------- | ----------- | ---------------------------------------------- |
 | `POST /users/{user_id}/accounts`        | bearer (self) | User self-create                              |
-| `GET /users/{user_id}/accounts`         | bearer (self) | Filter by `status`, `account_type`            |
-| `GET /users/{user_id}/accounts/{id}`    | bearer (self) |                                                |
-| `GET /accounts`                         | admin       | Filter by `holder`, `holder_kind`, `status`, `account_type` |
-| `GET /accounts/{id}`                    | admin       | Fetch any account by UUID                      |
+| `GET /users/{user_id}/accounts`         | bearer (self) | Filter by `status`, `account_type`, `created_at` window; sortable |
+| `GET /accounts`                         | admin       | Filter by `holder`, `holder_kind`, `status`, `account_type`, `created_at` window; sortable |
+| `GET /accounts/{id}`                    | bearer (self) or admin | Owner resolved from the row's `holder`; **404** (not 403) when the caller may not see it |
 | `PATCH /accounts/{id}`                  | admin       | Update `status`, `external_account_id`, `account_details` |
 | `DELETE /accounts/{id}`                 | admin       | Soft-delete (status → INACTIVE)                |
-| `GET /users/{user_id}/balance`          | bearer (self) | PBA balance proxy                             |
-| `GET /users/{user_id}/ledger`           | bearer (self) | PBA transaction ledger proxy                  |
 
 User-scoped routes return 403 if the path `user_id` does not match `jwt.sub`.
 Admin routes return 403 if the caller is not an admin.
+
+The PBA balance and ledger proxies are **goal-scoped**, not account-scoped —
+`GET /goals/{goal_id}/balance` and `GET /goals/{goal_id}/ledger`. A goal owns its
+HSA pool, so a user holding several goals has a balance per goal.
 
 ---
 
@@ -95,6 +96,8 @@ Soft delete only — rows persist for audit.
 | `holder_kind`  | `user` \| `sponsor`                              | Kind-scan filter; ignored when `holder` is set |
 | `status`       | `ACTIVE` \| `INACTIVE` \| `PENDING`              | |
 | `account_type` | `SAVINGS` \| `HSA` \| `EDUCATION` \| `SPONSOR`   | Returns 400 if combined with a `holder` of an incompatible kind |
+| `start_time` / `end_time` | ISO-8601 timestamps                   | Inclusive `created_at` window |
+| `sort_on` / `sort_by` | `created_at` \| `last_modified_at`, `asc` \| `desc` | default `created_at` / `desc` |
 | `limit`        | `i32`                                            | default 50, max 200 |
 | `offset`       | `i32`                                            | default 0 |
 

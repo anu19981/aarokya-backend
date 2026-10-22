@@ -16,7 +16,7 @@ The external identifier is stored as a JSONB object (`external_mrn`) with two op
 Routes are flat at `/mrns` (no user nesting). The `primary_user_id` is derived server-side from the dependant row — callers never supply it.
 
 <Note>
-  MRN records are also **auto-created** during insurance policy creation — one per covered dependant at the benefit's provider. See the [Insurance Policy module](/modules/insurance_policy) for details.
+  MRN records are also **created by the server**: when an insurance policy, health checkup or consultation is created and Superposition lists `CREATE_MRN` for that benefit. See [ADR-011](/decisions/adr-011-config-selected-benefit-side-effects).
 </Note>
 
 ---
@@ -68,7 +68,7 @@ sequenceDiagram
     Create an MRN linking a dependant to a benefit provider.
   </Card>
   <Card title="GET /mrns" icon="list" color="#3b82f6" href="/api/endpoints/mrns/list">
-    List MRNs. Filter by `dependant_id`, `benefit_provider_id`, `primary_user_id`, `statuses`, or `mrn`.
+    List MRNs. Filter by `dependant_id`, `benefit_provider_id`, `primary_user_id`, `statuses`, `mrn` (exact match on the MRN or temp number), or a `created_at` window.
   </Card>
   <Card title="GET /mrns/{id}" icon="id-card" color="#3b82f6" href="/api/endpoints/mrns/get">
     Fetch a single active MRN by its internal UUID.
@@ -134,7 +134,7 @@ curl -X POST http://localhost:8080/mrns \
 | `temp_number` | string | no | Temporary registration number assigned by the provider |
 | `mrn` | string | no | Final medical record number assigned by the provider |
 
-Both fields are optional. The `external_mrn` field itself is also optional on create — an MRN record can exist without external identifiers (e.g., when auto-created during policy purchase).
+Both fields are optional. The `external_mrn` field itself is also optional on create — an MRN record can exist without external identifiers (e.g., created by an admin before the provider assigns one).
 
 ---
 

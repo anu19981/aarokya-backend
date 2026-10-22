@@ -177,10 +177,11 @@ are deliberately deferred — only the `DONE`/`CLOSED` lifecycle markers are act
 | CN_1610 | 400 | Read receipts not supported by this provider |
 | CN_1611 | 400 | Attachment downloads not supported by this provider |
 | CN_1612 | 400 | More than one file attached (single attachment only) |
-| CN_1613 | 409 | An active consultation already exists for this `(dependant, benefit)` |
+| CN_1613 | 409 | An active consultation already exists for this `(dependant, benefit)`. Under a non-`NO_OP` `benefit.if_availed`, the availability gate answers first with `403 CN_1617` |
 | CN_1614 | 404 | Benefit not found |
 | CN_1615 | 400 | Benefit is not a consultation-type benefit (eligibility endpoint) |
 | CN_1616 | 400 | Consultation row exists but has no upstream thread yet (messaging on `INITIATED` / `FAILED`) |
+| CN_1617 | 403 | The benefit's `benefit.*` availability rules refuse it for this user — see `GET /benefits/available` |
 
 Upstream variants surface as **502 Bad Gateway**, not 500, so monitoring can
 distinguish "we broke" from "Narayana broke".

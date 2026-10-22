@@ -17,14 +17,16 @@ Every error response uses a single nested `error` object:
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `error.type` | string | Category of the failure — `invalid_request` for client errors, `api_error` for server-side failures |
-| `error.message` | string | Human-readable description — safe for developers; may be too technical for end users |
-| `error.code` | string | Machine-readable code — switch on this in app logic |
+| Field           | Type   | Description                                                                                         |
+| --------------- | ------ | --------------------------------------------------------------------------------------------------- |
+| `error.type`    | string | Category of the failure — `invalid_request` for client errors, `api_error` for server-side failures |
+| `error.message` | string | Human-readable description — safe for developers; may be too technical for end users                |
+| `error.code`    | string | Machine-readable code — switch on this in app logic                                                 |
 
 <Note>
-  Switch on `error.code`, not `error.message`. Messages may be reworded for clarity; codes are stable contracts. The HTTP status line tells you the class of failure; `error.code` tells you exactly which one.
+  Switch on `error.code`, not `error.message`. Messages may be reworded for
+  clarity; codes are stable contracts. The HTTP status line tells you the class
+  of failure; `error.code` tells you exactly which one.
 </Note>
 
 ### Code format
@@ -37,21 +39,24 @@ Each code is a per-domain prefix and a numeric identifier joined by an underscor
 
 The status line is derived from the error variant. Codes from any domain map onto this fixed set:
 
-| Status | Meaning | When |
-|--------|---------|------|
-| `400 Bad Request` | Malformed or semantically invalid request | Bad field value, invalid UUID, wrong benefit type |
-| `401 Unauthorized` | Authentication required or token invalid | Missing, expired, or malformed bearer token |
-| `403 Forbidden` | Authenticated but not permitted | Not the resource owner, account not active, admin-only route |
-| `404 Not Found` | Resource does not exist or is not visible to the caller | Unknown id, or an id belonging to another user |
-| `405 Method Not Allowed` | Wrong HTTP verb for the path | e.g. `GET` on a `POST`-only route |
-| `409 Conflict` | Request conflicts with current state | Duplicate record, illegal state transition |
-| `410 Gone` | Resource is no longer available | — |
-| `422 Unprocessable Entity` | Well-formed but cannot be processed | e.g. onboarding already complete |
-| `500 Internal Server Error` | Unexpected backend failure | Bug or infrastructure issue |
-| `502 Bad Gateway` | An upstream provider failed | Payment, insurance, or consultation provider error |
+| Status                      | Meaning                                                 | When                                                         |
+| --------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
+| `400 Bad Request`           | Malformed or semantically invalid request               | Bad field value, invalid UUID, wrong benefit type            |
+| `401 Unauthorized`          | Authentication required or token invalid                | Missing, expired, or malformed bearer token                  |
+| `403 Forbidden`             | Authenticated but not permitted                         | Not the resource owner, account not active, admin-only route |
+| `404 Not Found`             | Resource does not exist or is not visible to the caller | Unknown id, or an id belonging to another user               |
+| `405 Method Not Allowed`    | Wrong HTTP verb for the path                            | e.g. `GET` on a `POST`-only route                            |
+| `409 Conflict`              | Request conflicts with current state                    | Duplicate record, illegal state transition                   |
+| `410 Gone`                  | Resource is no longer available                         | —                                                            |
+| `422 Unprocessable Entity`  | Well-formed but cannot be processed                     | e.g. onboarding already complete                             |
+| `429 Too Many Requests`     | Temporarily refused; the condition clears on its own    | Retrying an order still inside its cooldown                  |
+| `500 Internal Server Error` | Unexpected backend failure                              | Bug or infrastructure issue                                  |
+| `502 Bad Gateway`           | An upstream provider failed                             | Payment, insurance, or consultation provider error           |
 
 <Note>
-  Authentication and ownership failures on a specific resource surface as that domain's own code (for example `MR_1102` for an MRN the caller does not own), not as a single generic forbidden code.
+  Authentication and ownership failures on a specific resource surface as that
+  domain's own code (for example `MR_1102` for an MRN the caller does not own),
+  not as a single generic forbidden code.
 </Note>
 
 ---
@@ -60,30 +65,34 @@ The status line is derived from the error variant. Codes from any domain map ont
 
 Codes are grouped by domain prefix. The table below lists the prefix, the domain it covers, and representative real codes. This is not exhaustive — every domain also has an internal-error code (e.g. `AUE_300`, `UE_100`) for unexpected failures.
 
-| Prefix | Domain | Example codes |
-|--------|--------|---------------|
-| `AE` | App / routing / generic storage | `AE_02` route not found, `AE_03` method not allowed, `AE_07` authentication required, `AE_09` forbidden |
-| `AUE` | Auth | `AUE_301` invalid or expired token, `AUE_302` user account not active, `AUE_304` platform not found, `AUE_306` onboarding already complete |
-| `UE` | User | `UE_101` user not found, `UE_103` duplicate email or phone |
-| `PE` | Platform | `PE_201` platform not found, `PE_202` platform name already exists |
-| `BPE` | Benefit provider | `BPE_401` provider not found, `BPE_402` provider name already exists |
-| `BE` | Benefit | `BE_500` internal error and benefit-specific failures |
-| `DUE` | Dashboard user | `DUE_700` dashboard-user failures |
-| `DE` | Dependant | `DE_601` dependant not found, `DE_602` may only access own dependants, `DE_603` cannot mutate a SELF dependant |
-| `AE` (800s) | Account | `AE_801` account not found, `AE_805` no PBA-backed account for user, `AE_807` account type not allowed for holder kind |
-| `EL` | Event log | `EL_900`, `EL_901` |
-| `IP` | Insurance policy | `IP_1001` policy not found, `IP_1008` active policy already exists, `IP_1012` not permitted, `IP_1014` provider registration failed, `IP_1021` invalid status transition |
-| `MR` | MRN | `MR_1101` MRN not found, `MR_1102` not your dependant's MRN, `MR_1103` MRN already exists |
-| `ME` | Mandate | `ME_1201` mandate not found, `ME_1210` invalid status transition, `ME_1214` mandate setup not completed upstream |
-| `OE` | Order | `OE_1301` order not found, `OE_1305` payment provider error |
-| `SPE` | Sponsor | `SPE_1401` sponsor not found, `SPE_1408` sponsor not active, `SPE_1412` user has no active HSA account |
-| `BPO` | Benefit-provider order | `BPO_1500` and order-flow failures |
-| `MXE` | Mandate execution | `MXE_1600` and execution failures |
-| `CN` | Consultation | `CN_1601` consultation not found, `CN_1602` not the owner, `CN_1608` upstream provider error, `CN_1613` active consultation already exists |
-| `BEE` | Benefit entity | `BEE_1700`, `BEE_1701` |
+| Prefix      | Domain                          | Example codes                                                                                                                                                                                                                                                  |
+| ----------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AE`        | App / routing / generic storage | `AE_02` route not found, `AE_03` method not allowed, `AE_07` authentication required, `AE_09` forbidden                                                                                                                                                        |
+| `AUE`       | Auth                            | `AUE_301` invalid or expired token, `AUE_302` user account not active, `AUE_304` platform not found, `AUE_306` onboarding already complete, `AUE_311`-`AUE_317` OTP login and refresh                                                                                                                     |
+| `UE`        | User                            | `UE_101` user not found, `UE_103` duplicate email or phone                                                                                                                                                                                                     |
+| `PE`        | Platform                        | `PE_201` platform not found, `PE_202` platform name already exists                                                                                                                                                                                             |
+| `BPE`       | Benefit provider                | `BPE_401` provider not found, `BPE_402` provider name already exists                                                                                                                                                                                           |
+| `BE`        | Benefit                         | `BE_500` internal error and benefit-specific failures, `BE_508` invalid requirements spec                                                                                                                                                                      |
+| `DUE`       | Dashboard user                  | `DUE_700` dashboard-user failures                                                                                                                                                                                                                              |
+| `DE`        | Dependant                       | `DE_601` dependant not found, `DE_602` may only access own dependants, `DE_603` cannot mutate a SELF dependant                                                                                                                                                 |
+| `AE` (800s) | Account                         | `AE_801` account not found, `AE_805` no PBA-backed account for user, `AE_807` account type not allowed for holder kind                                                                                                                                         |
+| `EL`        | Event log                       | `EL_900`, `EL_901`                                                                                                                                                                                                                                             |
+| `IP`        | Insurance policy                | `IP_1001` policy not found, `IP_1008` active policy already exists, `IP_1012` not permitted, `IP_1014` provider registration failed, `IP_1021` invalid status transition, `IP_1022` benefit not available to this user, `IP_1023` benefit requirements not met |
+| `MR`        | MRN                             | `MR_1101` MRN not found, `MR_1102` not your dependant's MRN, `MR_1103` MRN already exists                                                                                                                                                                      |
+| `ME`        | Mandate                         | `ME_1201` mandate not found, `ME_1210` invalid status transition, `ME_1214` mandate setup not completed upstream                                                                                                                                               |
+| `OE`        | Order                           | `OE_1301` order not found, `OE_1305` payment provider error                                                                                                                                                                                                    |
+| `SPE`       | Sponsor                         | `SPE_1401` sponsor not found, `SPE_1408` sponsor not active, `SPE_1412` user has no active HSA account                                                                                                                                                         |
+| `BPO`       | Benefit-provider order          | `BPO_1500` and order-flow failures                                                                                                                                                                                                                             |
+| `MXE`       | Mandate execution               | `MXE_1600` and execution failures                                                                                                                                                                                                                              |
+| `CN`        | Consultation                    | `CN_1601` consultation not found, `CN_1602` not the owner, `CN_1608` upstream provider error, `CN_1613` active consultation already exists, `CN_1617` benefit not available to this user                                                                       |
+| `BEE`       | Benefit entity                  | `BEE_1700`, `BEE_1701`, `BEE_1702`, `BEE_1703`, `BEE_1704`, `BEE_1705`, `BEE_1706`, `BEE_1707`, `BEE_1708`, `BEE_1709`                                                                                                                                                                             |
+| `CQE` | Clinic queue | `CQE_1900` internal, `CQE_1901` queue entry not found, `CQE_1902` validation, `CQE_1903` benefit instance not found, `CQE_1904` not permitted for this tenant, `CQE_1905` the front-desk workflow does not permit that transition |
+| `GLE`       | Goal                            | `GLE_1801` goal not found, `GLE_1808` goal already has a linked mandate, `GLE_1813` goal has no live mandate, `GLE_1824` tip exceeds the mandate limit, `GLE_1826` a `specific:` goal names a benefit entity that does not exist                               |
 
 <Note>
-  The numeric identifier carries the HTTP status implicitly via its variant, not via the number itself. Always read the HTTP status line alongside `error.code`.
+  The numeric identifier carries the HTTP status implicitly via its variant, not
+  via the number itself. Always read the HTTP status line alongside
+  `error.code`.
 </Note>
 
 ---
@@ -94,73 +103,97 @@ A few high-traffic codes you will handle in most clients:
 
 ### 400 — Bad Request
 
-| Code | Cause | Resolution |
-|------|-------|------------|
-| `AE_06` | Generic request validation failed | Check `error.message` for the offending field |
-| `UE_102` | User-domain validation failed | Fix the field value per the message |
-| `MR_1106` / `IP_1011` | Invalid UUID in the path or body | Send a well-formed UUID |
-| `AUE_304` / `AUE_305` | Issuing platform not found or inactive | Verify the platform credential used to mint the token |
+| Code                  | Cause                                                                                                    | Resolution                                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `AE_06`               | Generic request validation failed                                                                        | Check `error.message` for the offending field                                              |
+| `UE_102`              | User-domain validation failed                                                                            | Fix the field value per the message                                                        |
+| `MR_1106` / `IP_1011` | Invalid UUID in the path or body                                                                         | Send a well-formed UUID                                                                    |
+| `AUE_304` / `AUE_305` | Issuing platform not found or inactive — on `/auth/platform_token`, also not a member                    | Verify the platform credential; on `/auth/platform_token` pick from `GET /platforms`       |
+| `AUE_302`             | The user account is not active                                                                           | The user cannot transact until activated                                                   |
+| `AUE_310`             | Customer tipping is not enabled for this user                                                            | Enable the `customer_tipping.enabled` flag for the user or platform                        |
+| `AUE_312`             | The OTP is incorrect                                                                                     | Let the user retry; the OTP stays usable until its attempts are spent                      |
+| `AUE_313`             | The OTP expired, was already used, or none is outstanding                                                | Request a new OTP via `POST /auth/otp`                                                     |
+| `IP_1023` / `BEE_1707` | The member's profile is missing data the benefit requires (on policy creation or a status change)        | Collect the fields listed in `error.message` — nested ones name the dependant — then retry |
+| `BE_508`              | A benefit's requirements spec is structurally invalid (bad nesting, or a field a dependant cannot carry) | Fix the spec named in `error.message`                                                      |
+| `IP_1013` / `CN_1605` / `BEE_1708` | The benefit's provider does not support the member's gender | Ask the user to update the member's gender before retrying |
 
 ### 401 — Unauthorized
 
-| Code | Cause | Resolution |
-|------|-------|------------|
-| `AE_07` | No `Authorization` header on a protected route | Attach `Authorization: Bearer <jwt>` |
-| `AUE_301` | Bearer token missing, expired, or malformed | Fetch a fresh token from your backend (`POST /auth/token`) and retry |
+| Code      | Cause                                          | Resolution                                                           |
+| --------- | ---------------------------------------------- | -------------------------------------------------------------------- |
+| `AE_07`   | No `Authorization` header on a protected route | Attach `Authorization: Bearer <jwt>`                                 |
+| `AUE_301` | Bearer token missing, expired, or malformed    | Fetch a fresh token from your backend (`POST /auth/token`) and retry |
+| `AUE_317` | The refresh token is unknown, malformed, or expired | Sign in again — do **not** retry the refresh call                   |
 
 ### 403 — Forbidden
 
-| Code | Cause | Resolution |
-|------|-------|------------|
-| `AUE_302` | The user account is not active | The user cannot transact until activated |
+| Code                                         | Cause                                   | Resolution                                             |
+| -------------------------------------------- | --------------------------------------- | ------------------------------------------------------ |
 | `DE_602` / `MR_1102` / `CN_1602` / `IP_1012` | Caller is not the owner of the resource | Use the `user_id` from the token for user-scoped paths |
+| `IP_1022` / `CN_1617` / `BEE_1706` | The benefit's availability rules refuse it for this user (already availed, blocked, a prerequisite missing, or disabled) | Re-read `GET /benefits/available`; do not retry |
 
 ### 404 — Not Found
 
-| Code | Cause | Resolution |
-|------|-------|------------|
-| `AE_02` | The path matched no registered route | Check the path and method against the API reference |
+| Code                                                                  | Cause                                                 | Resolution                                                                        |
+| --------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `AE_02`                                                               | The path matched no registered route                  | Check the path and method against the API reference                               |
 | `UE_101` / `MR_1101` / `IP_1001` / `CN_1601` / `OE_1301` / `SPE_1401` | The id does not exist or is not visible to the caller | Verify the id; the API does not reveal whether a resource exists for another user |
 
 ### 409 — Conflict
 
-| Code | Cause | Resolution |
-|------|-------|------------|
-| `PE_202` / `BPE_402` | Name already exists | Fetch the existing record instead of creating |
-| `MR_1103` / `IP_1008` / `CN_1613` | A matching active resource already exists | Reuse the existing resource |
-| `ME_1210` / `IP_1021` | Illegal status transition | Re-read the resource state before retrying |
+| Code                               | Cause                                                                                                                    | Resolution                                      |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| `PE_202` / `BPE_402`               | Name already exists                                                                                                      | Fetch the existing record instead of creating   |
+| `MR_1103` / `IP_1008` / `CN_1613`  | A matching active resource already exists                                                                                | Reuse the existing resource                     |
+| `ME_1210` / `IP_1021`              | Illegal status transition                                                                                                | Re-read the resource state before retrying      |
 
 ### 422 — Unprocessable Entity
 
-| Code | Cause | Resolution |
-|------|-------|------------|
+| Code      | Cause                                        | Resolution                             |
+| --------- | -------------------------------------------- | -------------------------------------- |
 | `AUE_306` | Onboarding is already complete for this user | No further onboarding action is needed |
+
+### 429 — Too Many Requests
+
+OTP throttles. `AUE_315` carries a `Retry-After` header in whole seconds — back
+off on the header rather than parsing the message.
+
+| Code      | Cause                                                   | Resolution                                                        |
+| --------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
+| `AUE_314` | Too many incorrect OTP attempts; the OTP is now dead     | Request a new OTP via `POST /auth/otp`                             |
+| `AUE_315` | Another OTP was requested inside the resend cooldown     | Wait the seconds given in `Retry-After`, then resend               |
+| `AUE_316` | The per-user daily send limit is spent                   | Try again tomorrow; there is no way to raise it per request        |
 
 ### 500 / 502 — Server and Upstream
 
-| Code | Cause | Resolution |
-|------|-------|------------|
-| `AE_01` | Unexpected backend error | Retry with exponential back-off; report if persistent |
-| `*_x00` (e.g. `AUE_300`, `UE_100`, `IP_1000`) | Domain-level internal error | Retry with back-off; report if persistent |
-| `CN_1608` / `IP_1014` | An upstream provider failed (502) | Retry later; the failure is on a third-party system |
+| Code                                          | Cause                             | Resolution                                            |
+| --------------------------------------------- | --------------------------------- | ----------------------------------------------------- |
+| `AE_01`                                       | Unexpected backend error          | Retry with exponential back-off; report if persistent |
+| `*_x00` (e.g. `AUE_300`, `UE_100`, `IP_1000`) | Domain-level internal error       | Retry with back-off; report if persistent             |
+| `CN_1608` / `IP_1014` / `BEE_1709`            | An upstream provider failed (502) | Retry later; the failure is on a third-party system   |
+| `AUE_311`                                     | The SMS provider failed to accept the OTP (502) | Retry immediately — the resend cooldown is not spent on this failure |
 
 <Note>
-  `500` errors are logged with full context on the server side. They never expose internal details (stack traces) in the response body. If you hit a persistent `500`, report the failing request to the Aarokya team for log correlation.
+  `500` errors are logged with full context on the server side. They never
+  expose internal details (stack traces) in the response body. If you hit a
+  persistent `500`, report the failing request to the Aarokya team for log
+  correlation.
 </Note>
 
 ---
 
 ## When to Retry vs When to Show the User
 
-| Error class | Retry automatically? | Show user-facing error? | Action |
-|-------------|---------------------|------------------------|--------|
-| `401` (`AUE_301`, `AE_07`) | Yes — fetch a fresh token first | No (unless re-auth fails) | Request a new token from your backend, then retry |
-| `403` (ownership / not active) | No | Yes | The caller cannot perform this action |
-| `400` / `422` validation | No | Developer message only | Fix the request; show a generic message to the end user |
-| `404` not found | No | Depends on context | Show a "not found" screen or navigate back |
-| `409` conflict | No | Sometimes | Re-read state, then decide |
-| `500` internal | Yes — a few times with back-off | After retries exhausted | "Something went wrong. Please try again." |
-| `502` upstream | Yes — with back-off | After retries exhausted | The third-party provider is unavailable |
+| Error class                    | Retry automatically?            | Show user-facing error?   | Action                                                  |
+| ------------------------------ | ------------------------------- | ------------------------- | ------------------------------------------------------- |
+| `401` (`AUE_301`, `AE_07`)     | Yes — fetch a fresh token first | No (unless re-auth fails) | Request a new token from your backend, then retry       |
+| `403` (ownership / not active) | No                              | Yes                       | The caller cannot perform this action                   |
+| `400` / `422` validation       | No                              | Developer message only    | Fix the request; show a generic message to the end user |
+| `404` not found                | No                              | Depends on context        | Show a "not found" screen or navigate back              |
+| `409` conflict                 | No                              | Sometimes                 | Re-read state, then decide                              |
+| `429` too many requests        | Yes — after `Retry-After`       | Only if it keeps recurring | Wait the seconds named in the `Retry-After` header, then retry once |
+| `500` internal                 | Yes — a few times with back-off | After retries exhausted   | "Something went wrong. Please try again."               |
+| `502` upstream                 | Yes — with back-off             | After retries exhausted   | The third-party provider is unavailable                 |
 
 ---
 
@@ -176,13 +209,13 @@ The status code tells you the class of failure (auth, not-found, conflict, serve
 
 ### Step 3: Common misconfigurations
 
-| Symptom | Likely cause |
-|---------|-------------|
-| `401` (`AUE_301`) on every request | Expired token — fetch a fresh one from your backend before each session |
-| `403` (`AUE_302`) after login | User account is not active yet |
-| `403` (`DE_602` / `MR_1102` / `CN_1602`) | Using a `user_id` in the path that is not the token's user |
-| `404` (`AE_02`) | Wrong path or HTTP method |
-| `500` on local | Database not running locally |
+| Symptom                                  | Likely cause                                                            |
+| ---------------------------------------- | ----------------------------------------------------------------------- |
+| `401` (`AUE_301`) on every request       | Expired token — fetch a fresh one from your backend before each session |
+| `400` (`AUE_302`) after login            | User account is not active yet                                          |
+| `403` (`DE_602` / `MR_1102` / `CN_1602`) | Using a `user_id` in the path that is not the token's user              |
+| `404` (`AE_02`)                          | Wrong path or HTTP method                                               |
+| `500` on local                           | Database not running locally                                            |
 
 ---
 
@@ -199,10 +232,10 @@ interface AarokyaError {
 }
 
 async function apiFetch(url: string, options: RequestInit): Promise<any> {
-  const res = await fetch(url, options);
+const res = await fetch(url, options);
 
-  if (!res.ok) {
-    const { error }: AarokyaError = await res.json();
+if (!res.ok) {
+const { error }: AarokyaError = await res.json();
 
     switch (error.code) {
       case "AUE_301": // token missing / expired / malformed
@@ -229,11 +262,13 @@ async function apiFetch(url: string, options: RequestInit): Promise<any> {
         }
         throw new Error(error.message);
     }
-  }
 
-  return res.json();
 }
-```
+
+return res.json();
+}
+
+````
 
 ```kotlin Kotlin (Android)
 data class ApiErrorBody(val error: ApiErrorDetail)
@@ -268,7 +303,7 @@ suspend fun <T> handleApiResponse(
         else -> AarokyaResult.Error(detail.code, detail.message)
     }
 }
-```
+````
 
 ```swift Swift (iOS)
 struct ApiErrorBody: Decodable { let error: ApiErrorDetail }
@@ -299,4 +334,5 @@ func handleAPIError(_ data: Data, statusCode: Int) throws -> Never {
     }
 }
 ```
+
 </CodeGroup>

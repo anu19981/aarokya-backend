@@ -1,15 +1,17 @@
 ---
 title: "Auth Module"
-description: "Platform-driven token issuance. A platform service account calls POST /auth/token with a phone number and id-proof — Aarokya find-or-creates the user and returns an app JWT."
+description: "App token issuance. A platform service account calls POST /auth/token with a phone number and id-proof — Aarokya find-or-creates the user and returns an app JWT. A user signed in by OTP picks a platform at POST /auth/platform_token and gets the same token."
 ---
 
 <Info>
-  **Auth guard:** bearer JWT minted for a platform *service account* (`actor_type: platform_service`). The handler calls `actor.require_platform_service()`, so only a platform service-account token is admitted — admins, dashboard users, and end-user tokens are rejected. The `platform_id` is taken from the token claim, never from the request body.
+  **Auth guard:** `POST /auth/token` takes a bearer JWT minted for a platform *service account* (`actor_type: platform_service`) via `actor.require_platform_service()` — admins, dashboard users, and end-user tokens are rejected, and the `platform_id` is taken from the token claim, never the body. `POST /auth/platform_token` takes only the platform-less token OTP login issues (an `AppUser` with no `platform_id`).
 </Info>
 
 ## Overview
 
-Aarokya does not own user authentication — that belongs to the partner app (e.g. Namma Yatri). The partner backend authenticates as its platform service account, then calls `POST /auth/token` with a verified phone number and id-proof and receives a short-lived app JWT scoped to that user. This is the only token-issuance endpoint, and the app JWT is stateless and self-contained.
+Aarokya does not own user authentication — that belongs to the partner app (e.g. Namma Yatri). The partner backend authenticates as its platform service account, then calls `POST /auth/token` with a verified phone number and id-proof and receives a short-lived app JWT scoped to that user. The app JWT is stateless and self-contained.
+
+The standalone app has no partner backend: the user signs in by OTP, picks one of their platforms, and exchanges the OTP token for the same platform-scoped app JWT at `POST /auth/platform_token` — see OTP Login → Platform Token below.
 
 The platform service-account bearer is obtained out-of-band: an admin provisions a credential via `POST /platforms/{platform_id}/credentials`, which returns a `basic_token`. The platform exchanges that `basic_token` with Keycloak (`client_credentials` grant) for the service-account JWT it presents here. See the [Platform module](/modules/platform) for credential provisioning.
 
@@ -23,7 +25,7 @@ sequenceDiagram
     participant API as Aarokya API
     participant DB as Database
 
-    PartnerBE->>API: POST /auth/token<br/>{phone_number, phone_country_code, id_proof}<br/>Authorization Bearer platform_service JWT
+    PartnerBE->>API: POST /auth/token<br/>{phone_number, phone_country_code, id_proof?}<br/>Authorization Bearer platform_service JWT
     API->>API: require_platform_service<br/>read platform_id from claim
     API->>DB: Validate platform_id is Active
     DB-->>API: platform row
@@ -40,13 +42,43 @@ sequenceDiagram
 
 ---
 
+## OTP Login → Platform Token
+
+```mermaid
+sequenceDiagram
+    participant App as Mobile App
+    participant API as Aarokya API
+    participant DB as Database
+
+    App->>API: POST /auth/otp → POST /auth/otp/verify
+    API-->>App: {user_id, token (no platform), refresh_token}
+    App->>API: GET /platforms<br/>Authorization Bearer token
+    API-->>App: the user's ACTIVE platforms
+    App->>API: POST /auth/platform_token {platform_id}<br/>Authorization Bearer token
+    API->>DB: user, platform, ACTIVE membership
+    API->>API: Sign app JWT (RS256) scoped to platform_id
+    API-->>App: {user_id, access_token}
+```
+
+| Rule | Behaviour |
+|------|-----------|
+| Caller | Only the platform-less OTP token. A platform-scoped app token or a service token is `403` — a platform's backend mints those without an OTP |
+| User deactivated | `403 AUE_302`, whichever platform is named |
+| Not an ACTIVE member, or unknown platform | `400 AUE_304` — the same response, so the endpoint does not reveal which platforms exist |
+| Platform inactive | `400 AUE_305` |
+| Membership | Never created here — only the platform enrols a user |
+| Lifetime | The `/auth/token` lifetime, with no refresh token. On expiry refresh the OTP token at `/auth/otp/refresh` and exchange again |
+
+---
+
 ## Find-or-Create Semantics
 
 | Scenario | Behaviour |
 |----------|-----------|
-| First call for this phone (`phone_country_code` + `phone_number`) | Creates user with `status = ONBOARDING`, persists `id_proof`, returns token |
+| First call for this phone (`phone_country_code` + `phone_number`) | Creates user with `status = ONBOARDING`, persists the optional `id_proof` and profile (incl. `occupation`), returns token |
 | Subsequent calls | Returns fresh token for the existing active user, reflects current `status` |
 | `id_proof` on a repeat call | Ignored — `id_proof` is consumed only on the create path |
+| `id_proof` omitted | Accepted — the user is created without one; `/add_details` or `PATCH` can set it later |
 
 <Note>
   Lookup is by `(phone_country_code, phone_number)` against active users — it is not keyed on `platform_id`. The `platform_id` from the token is validated and embedded in the issued app token's claims.
@@ -81,8 +113,8 @@ The issued `access_token` is an RS256 app token. Its claims flatten an `app` act
 |-------|-------------|
 | `user_info.user_id` | 12-digit numeric user ID — pass in `{user_id}` path params for all user-scoped calls |
 | `status` | `ONBOARDING`, `ACTIVE`, or `DEACTIVATED` — drive onboarding UI from this |
-| `platform_id` | UUID of the issuing platform, carried from the service-account token |
-| `exp` | Configurable via `auth.app.expiry_hours`; call token again when expired |
+| `platform_id` | UUID of the platform — from the service-account token, or the one chosen at `/auth/platform_token` |
+| `exp` | Superposition `auth.app_token.ttl_seconds`; call token again when expired |
 
 ---
 
@@ -91,6 +123,9 @@ The issued `access_token` is an RS256 app token. Its claims flatten an `app` act
 <CardGroup cols={1}>
   <Card title="POST /auth/token" icon="key" color="#16a34a" href="/api/endpoints/auth/generate-token">
     Issue an app JWT for a user. Creates the user on first call. Requires a platform service-account bearer token.
+  </Card>
+  <Card title="POST /auth/platform_token" icon="key" color="#16a34a" href="/api/endpoints/auth/get-token">
+    Exchange the OTP login token for an app JWT scoped to one of the user's platforms.
   </Card>
 </CardGroup>
 
@@ -121,19 +156,47 @@ curl -X POST http://localhost:8080/auth/token \
 ```
 </CodeGroup>
 
-`proof_type` accepts `AADHAAR`, `PAN`, `PASSPORT`, `DRIVING_LICENSE`, or `VOTER_ID`.
+<CodeGroup>
+```bash Get platform token
+curl -X POST http://localhost:8080/auth/platform_token \
+  -H 'Authorization: Bearer <token-from-otp-verify>' \
+  -H 'Content-Type: application/json' \
+  -d '{ "platform_id": "0190b6c2-7e3a-7c6e-9b1d-2f4a8c1e5d33" }'
+```
+
+```json Response 200
+{
+  "user_id": "047382910564",
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+</CodeGroup>
+
+`id_proof` is optional; `proof_type` accepts `AADHAAR`, `PAN`, `PASSPORT`,
+`DRIVING_LICENSE`, or `VOTER_ID`. Alongside it the call takes the optional profile
+fields `first_name`, `last_name`, `email`, `occupation`, `gender`, `dob` and
+`address`, all persisted on the create path only.
+
+<Note>
+  `id_proof` is written by this endpoint (create path only — it is ignored on
+  re-auth), by `PATCH /users/{user_id}`, and optionally by `/add_details`, where
+  a supplied value replaces the stored one. It is stored as a
+  single `users.id_proof` text column encoded `<type>:<number>`.
+</Note>
 
 ---
 
 ## Error Codes
 
-| Code | HTTP | Description |
+| Code | HTTP | Wire message |
 |------|------|-------------|
-| `AUE_300` | 500 | Internal server error |
-| `AUE_301` | 401 | Invalid or expired token |
+| `AUE_300` | 500 | An unexpected error occurred. Please try again later. |
+| `AUE_301` | 401 | Authentication required |
 | `AUE_302` | 403 | User account is not active |
-| `AUE_304` | 400 | Platform not found |
-| `AUE_305` | 400 | Platform is inactive |
-| `AUE_306` | 422 | Onboarding already complete |
-| `AUE_307` | 500 | Dashboard authentication is not configured on this server |
-| `AUE_308` | 500 | OpenID Connect upstream call failed |
+| `AUE_304` | 400 | Platform not found: `{platform_id}` |
+| `AUE_305` | 400 | Platform is inactive: `{platform_id}` |
+| `AUE_306` | 400 | Onboarding already complete |
+| `AUE_307` | 500 | An unexpected error occurred. Please try again later. |
+| `AUE_308` | 500 | An unexpected error occurred. Please try again later. |
+| `AUE_309` | 400 | User not found |
+| `AUE_310` | 400 | Customer tipping is not enabled for this user |

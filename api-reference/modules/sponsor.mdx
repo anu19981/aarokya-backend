@@ -13,6 +13,20 @@ A **sponsor** is a donor entity — an individual person or an organisation (tru
 
 This module covers **registration only** — the contribution / transfer ledger is a separate concern.
 
+<Warning>
+  A sponsor's balance has a **second** drain that is not in this module.
+  [`POST /goals/{goal_id}/contribution/sponsor`](/modules/goal#sponsor-matching) matches a
+  user's goal contribution out of a sponsor's account. It takes no `sponsor_id` — the sponsor
+  is selected server-side from the `insurance.sponsor_slug` Superposition knob for the user's
+  plan. If you are reconciling a sponsor's outflow, you need both surfaces.
+
+  The two now agree on where money lands: both target a **goal**, credit that goal's own
+  pool, and leave a `goal_id`-linked order for `POST /goals/{goal_id}/contribute` to pick up.
+  The difference is who picks the amount — this endpoint takes it from the operator, the goal
+  rail takes it from the plan's sponsor share.
+</Warning>
+
+
 - **Generic discriminant**: `SponsorKind = INDIVIDUAL | ORGANISATION`. Per-kind detail payloads live in a typed JSONB union.
 - **Three-stage lifecycle**: `PENDING → ACTIVE → INACTIVE`. Sponsors are born PENDING and transition to ACTIVE when their PBA normal-account is provisioned and linked.
 - **Account row, not column**: a sponsor's PBA `provider_account_id` lives as a row in the `accounts` table (`holder = sponsor:<sponsor_id>` + `account_type = SPONSOR`). The `sponsors` row itself carries identity and lifecycle only.
@@ -95,7 +109,7 @@ The `sponsor_details` JSON discriminator (`sponsor_kind` key) must match the top
 | `GET /sponsors/{sponsor_id}/balance` | ✓ | PBA proxy. Sponsor must be ACTIVE. |
 | `GET /sponsors/{sponsor_id}/transactions` | ✓ | PBA proxy. Pagination + date range. Sponsor must be ACTIVE. |
 | `POST /sponsors/{sponsor_id}/deposit` | ✓ | Add funds to sponsor's normal account. Sponsor must be ACTIVE. |
-| `POST /sponsors/{sponsor_id}/contribute` | ✓ | Sponsor → user HSA transfer. Targets a specific `insurance_policy_id`; policy must be in `APPROVED` status. |
+| `POST /sponsors/{sponsor_id}/contribute` | ✓ | Sponsor → **goal pool** transfer. Targets a `goal_id`; the goal must be backed by an insurance policy, and that policy must be in an eligible status. |
 
 ---
 
@@ -130,7 +144,7 @@ The `sponsor_details` JSON discriminator (`sponsor_kind` key) must match the top
     Add funds to the sponsor's normal account.
   </Card>
   <Card title="POST /sponsors/{id}/contribute" icon="arrow-right" color="#16a34a" href="/api/endpoints/sponsors/contribute">
-    Sponsor → user HSA transfer for a specific `insurance_policy_id`.
+    Sponsor → goal-pool transfer for a specific `goal_id`.
   </Card>
 </CardGroup>
 

@@ -1,26 +1,35 @@
 ---
 title: "Benefit Entities"
-description: "Append-only ledger of benefits each user has utilized."
+description: "Ledger of the benefits each user has utilized."
 ---
 
-The **benefit entities** module is an append-only **utilization ledger**. One
-row is recorded every time a user utilizes a benefit — when they create an
-**insurance policy** or **initiate a consultation**. It answers "which benefits
-has this user (or every user) utilized, and when?"
+The **benefit entities** module is a **utilization ledger**. One row is recorded
+every time a user utilizes a benefit — an **insurance policy**, a
+**consultation**, or a **health checkup**. It answers "which benefits has this
+user (or every user) utilized, when, and what state is each in?"
 
 <Info>
-  Admin-only. `GET /benefit_entities` requires an admin bearer token. There is
-  **no** write API — ledger rows are minted server-side, in the same database
-  transaction as the policy / consultation they describe, so a utilization can
-  never be recorded without its owning entity (or vice-versa).
+  **How a row is created depends on the benefit type.** A type with an owning
+  table (insurance policy, consultation) has its row minted server-side in the
+  same database transaction as the policy / consultation it describes, so a
+  utilization can never be recorded without its owner. A type with **no** owning
+  table — a health checkup — *is* the row, so it is created directly through
+  `POST /benefit_entities`; the other types are refused there.
+
+  **Reads serve admins and app users.** An app user sees only its own rows: on
+  the list its `user_id` filter is overridden, and on a single read another
+  user's row is indistinguishable from one that does not exist.
+
+  The `status` column is mutable, updated through
+  `PATCH /benefit_entities/{entity_id}/status`.
 </Info>
 
 ## Row shape
 
 | Field | Type | Notes |
 |---|---|---|
-| `entity_id` | `string` (UUID) | The utilized entity's id — the `insurance_policies.id` **or** `consultations.id`. This is the primary key. |
-| `entity_type` | enum | `INSURANCE_POLICY` or `CONSULTATION`. |
+| `entity_id` | `string` (UUID) | The utilized entity's id — the owning row's PK **when there is one** — `insurance_policies.id` or `consultations.id`. A `HEALTH_CHECKUP` entity has no owning table, so its `entity_id` is a server-minted UUID naming no other row. This is the primary key. |
+| `entity_type` | enum | `INSURANCE_POLICY`, `CONSULTATION`, or `HEALTH_CHECKUP`. |
 | `benefit_id` | `string` (UUID) | The benefit that was utilized. |
 | `user_id` | `string` | The user (12-digit id) who utilized the benefit. |
 | `platform_id` | `string` (UUID) | The platform (tenant) the benefit instance was created under. Stamped once at creation, never mutated. |
@@ -28,16 +37,73 @@ has this user (or every user) utilized, and when?"
 
 <Note>
   `entity_id` is polymorphic (it points into two different tables) and so carries
-  no foreign key. Integrity is guaranteed at write time because the ledger row
-  is inserted in the same transaction as its owner.
+  no foreign key. When the type has an owning table, integrity is guaranteed at
+  write time because the ledger row is inserted in the owner's transaction; a
+  type with no owning table has no owner to be orphaned from.
 </Note>
 
-## Immutable history
+## Creating an instance
 
-A utilization is a historical fact: rows are **never updated or deleted**, and
-the table has no status column. Consultations are recorded at **initiation** —
-a consultation that later fails upstream still has a ledger row, because the
-ledger records utilization attempts.
+Most instances are minted server-side, inside the transaction that writes their
+owning row — an insurance policy or a consultation. A benefit type with **no**
+owning table has nothing to be transactional with, so its instance is created
+directly:
+
+```bash
+curl -X POST "$BASE_URL/benefit_entities" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"benefit_id": "0194e0f3-...", "user_id": "000000000001"}'
+```
+
+`HEALTH_CHECKUP` is the only such type today; `INSURANCE_POLICY` and
+`CONSULTATION` are rejected with `BEE_1703`. Creation is **self or admin**: an
+app user may only name itself, an admin may create for anyone, and
+benefit-provider and platform actors are refused (`403`) — they mint their
+instances inside the owning transaction instead. The tenant is taken from the
+caller's token, or an admin's `x-platform-id` header — never from the body.
+
+When Superposition's `benefit.create_side_effects` lists `CREATE_MRN` for the
+benefit, creation first registers the user's SELF dependant at the benefit's
+provider and writes the MRN row in the same transaction as the instance. A
+member gender the provider does not accept returns `400 BEE_1708`, a provider
+failure `502 BEE_1709`, and a user with no active SELF dependant `400 BEE_1701`.
+See [ADR-011](/decisions/adr-011-config-selected-benefit-side-effects).
+
+## Status transitions
+
+`PATCH /benefit_entities/{entity_id}/status` validates the `from -> to` pair
+**only for benefit types that configure a machine** in Superposition
+(one key per `from` status, such as `benefit.status_transition.created = ["COMPLETED"]`, resolved on `benefit_type`, with `benefit_id`, `user_id` and `benefit_availed_date` also in the context for narrower overrides. A pair that is not listed is refused).
+
+Every benefit type configures its rows. `HEALTH_CHECKUP` has no upstream to
+defer to — the ledger row *is* its source of truth — so it configures
+`CREATED -> COMPLETED` and nothing else. `INSURANCE_POLICY` and `CONSULTATION`
+mirror their own upstream machines, coarsened onto these six statuses.
+
+The default for every row is the empty array, so a benefit type whose rows are
+not configured moves nothing at all.
+
+A refused transition returns **`BEE_1705` (400)**.
+
+Creating an instance is also gated by the benefit's `benefit.*` availability rules
+(the same ones behind `GET /benefits/available`); a refusal returns **`BEE_1706` (403)**.
+Setting the status a row already holds stays a no-op `200` and never reaches the
+rule.
+
+## History and the mutable status
+
+A utilization is a historical fact: rows are **never deleted**, and `entity_id`,
+`entity_type`, `benefit_id`, `user_id` and `created_at` are never rewritten.
+Consultations are recorded at **initiation** — a consultation that later fails
+upstream still has a row, because the table records utilization attempts.
+
+The one mutable field is `status`, a benefit-agnostic coarsening of the owner's
+own status (insurance `PolicyStatus` / consultation `ConsultationStatus`), with
+`last_modified_at` alongside it. A freshly minted row starts `CREATED`. It is
+written only via `PATCH /benefit_entities/{entity_id}/status`, which is
+idempotent (a no-op `200` when already at the target) and otherwise validates
+the pair against the configured rows described above.
 
 ## Listing
 
@@ -46,16 +112,18 @@ ledger records utilization attempts.
 
 - `entity_id` — narrow to one benefit instance (the utilized policy / consultation id).
 - `user_id` — scope to a single user (omit to list across all users).
-- `entity_type` — `INSURANCE_POLICY` or `CONSULTATION`.
+- `entity_types` — comma-separated, OR-ed: any of `INSURANCE_POLICY`, `CONSULTATION`, `HEALTH_CHECKUP`
+  (e.g. `entity_types=INSURANCE_POLICY,HEALTH_CHECKUP`). An unknown value is a `400`.
 - `benefit_id` — a specific benefit.
+- `platform_id` — the tenant an instance was created under.
 - `start_time` / `end_time` — bound results by `created_at` (ISO 8601).
 - `sort_on` / `sort_by` — sort (`sort_on=created_at`, `sort_by=asc|desc`; defaults to newest first).
-  This ledger is append-only and has no `last_modified_at` column, so
-  `sort_on=last_modified_at` is accepted but falls back to `created_at` order.
+  `sort_on=last_modified_at` sorts on the real column — the row is mutable and
+  carries one.
 - `limit` / `offset` — pagination (limit capped at 100).
 
 ```bash
-curl -s "$BASE_URL/benefit_entities?entity_type=INSURANCE_POLICY&limit=20" \
+curl -s "$BASE_URL/benefit_entities?entity_types=INSURANCE_POLICY,HEALTH_CHECKUP&limit=20" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 

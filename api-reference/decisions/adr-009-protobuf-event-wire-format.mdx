@@ -1,0 +1,176 @@
+---
+title: "ADR-009: Protobuf on the Event Bus"
+description: "Why domain events are encoded as protobuf rather than JSON, why the payload is google.protobuf.Any, and why there is no Schema Registry yet."
+---
+
+## Context
+
+[ADR-008](/decisions/adr-008-event-producer-direct-publish) settled *how* domain events reach
+Kafka. This one settles *what the bytes are*.
+
+The producer originally encoded the envelope as JSON via serde. Two things changed that:
+
+1. **Non-Rust consumers are expected.** Today the only consumer is our own Rust doorbell binary,
+   which shares a compile-time dependency with the producer. That will not stay true, and a JSON
+   shape defined only by Rust structs is not a contract another language can compile against.
+2. **Forward compatibility was a review discipline, not a property.** A Rust enum hard-fails on an
+   unknown variant, and because a consumer deserializes the whole payload struct, one unrecognised
+   value fails events it does not even read. The mitigation was a hand-written mirror per enum with
+   a catch-all arm. Nothing enforced it — `cargo check` cannot see a missing mirror.
+
+Proto3 enums are open **by specification**: an unrecognised value decodes to its raw number and
+survives a re-encode. That converts the second problem from a rule someone must remember into a
+property of the format.
+
+<Note>
+Nothing had been published to a real topic when this was decided. The topic map ships empty and no
+emit site exists, so the wire format was still free to change. It is not free now.
+</Note>
+
+## The hard part: protobuf has no untyped value
+
+Under JSON the envelope's payload field was `serde_json::Value` — a universal type-erased
+container. That is what let one concrete envelope struct hold any payload, which is what kept the
+publisher trait object-safe. Protobuf is strictly typed and offers no free equivalent.
+
+<AccordionGroup>
+  <Accordion title="Option A — an opaque bytes field">
+    Encode the payload separately and carry the bytes. The envelope does not know what is inside.
+
+    **Pros**
+    - The transport crate stays domain-free. A new event type is a new file.
+
+    **Cons**
+    - The consumer maps the event-type string to a Rust type by hand. Nothing checks that table, so
+      a typo compiles, deploys, and silently skips events.
+    - Unreadable in any message viewer.
+
+    **Verdict** — rejected. The unchecked mapping is the real flaw, not the opacity.
+  </Accordion>
+
+  <Accordion title="Option B — google.protobuf.Any">
+    The same bytes, wrapped in a standard type that also carries a type URL naming the message.
+
+    **Pros**
+    - Self-describing: the type travels with the data, so no hand-maintained table.
+    - A new event type is a new file. Nothing central changes.
+    - Every protobuf library in every language ships pack and unpack helpers for it.
+
+    **Cons**
+    - Decoding is checked at runtime rather than by the compiler.
+    - A viewer needs the inner message's schema to render past the type URL.
+
+    **Verdict** — accepted.
+  </Accordion>
+
+  <Accordion title="Option C — a oneof listing every payload type">
+    Declare inside the envelope, up front, every payload that can ever appear.
+
+    **Pros**
+    - Exhaustive compiler-checked decode: adding a payload and forgetting to handle it is a build
+      error.
+    - Renders end to end in a message viewer with no extra work.
+
+    **Cons**
+    - The envelope names every domain type, so the transport crate stops being a reusable leaf and
+      has to merge with the payload crate.
+    - The envelope becomes a hub: every new event type edits one central file that every team and
+      every language depends on.
+
+    **Verdict** — rejected. Both benefits accrue to the Rust consumer specifically, and they are
+    bought by making the envelope a coordination point for every future language. That trade gets
+    worse as more consumers appear, which is the direction we expect.
+  </Accordion>
+</AccordionGroup>
+
+## Decision
+
+**Protobuf, with the payload packed as `google.protobuf.Any`, in a four-field envelope.**
+
+```protobuf
+message EventEnvelope {
+  string event_id                      = 1;
+  string event_type                    = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Any       payload    = 4;
+}
+```
+
+Schemas live in `backend/proto/`, all together rather than beside the crate that compiles each one,
+because they are one contract and a schema registry would publish them as a unit. Inside the
+workspace rather than at the repo root: their only readers are the producer crate and the future
+consumer binary, both of which live under `backend/`. They are compiled by `protox`, a pure-Rust
+protobuf compiler, so
+building this workspace requires nothing installed outside cargo. That only works because we
+generate messages and no gRPC services — `tonic-build` would reintroduce a `protoc` system
+dependency.
+
+### Why four fields
+
+A Kafka record already carries a key, a timestamp, and headers. The envelope repeats none of that
+without a reason:
+
+| Dropped | Where it lives instead |
+|---|---|
+| aggregate type | resolves the topic producer-side; a consumer knows its own topic |
+| aggregate id | the Kafka record key |
+| schema version | protobuf field numbers are the compatibility mechanism |
+
+`created_at` is the one deliberate duplicate. A topic configured with
+`log.message.timestamp.type=LogAppendTime` silently replaces the record timestamp with
+broker-receipt time, which would rewrite when our events believe they happened. Carrying it in the
+body survives that, and keeps the message meaningful once archived or replayed outside Kafka.
+
+## No Schema Registry, deliberately
+
+A registry stores versioned schemas and rejects an incompatible change at registration time — a
+deployment gate we would not have to build. It also adds a stateful service on the producer's write
+path, and Confluent's implementation is under the Confluent Community License rather than Apache
+2.0.
+
+Today the producer and its only consumer compile against the same generated code, so the compiler
+already provides what a registry would check at runtime. We add one when a second language appears.
+
+**Deferring is cheap, and this is the reasoning that makes it so.** Adopting a registry does not
+change a single schema — only the framing, which gains a leading `0x00` magic byte plus a schema
+id. A bare protobuf message can never begin with `0x00`, because the first byte is a field tag and
+field number 0 is illegal. So a consumer can sniff the two formats apart, and the migration becomes
+a rolling deploy: ship the dual-read shim, stand up the registry, flip producers one at a time,
+delete the shim once bare messages age out of retention.
+
+<Warning>
+That escape hatch depends on one rule: **never prepend a custom framing header to a message**.
+Doing so consumes the `0x00` sentinel and turns a rolling migration into a wire break.
+</Warning>
+
+## Consequences
+
+**What got simpler.** The per-enum forward-compatibility mirrors are gone, along with the class of
+bug where a reviewer misses one. So is a subtle serde lifetime hazard in the envelope: borrowed
+string fields propagated a `'static` bound that made the struct undecodable from a runtime buffer
+while compiling and passing clippy cleanly. Prost generates owned strings, so it cannot recur.
+
+**What got harder.** Money is the notable one. The generated message carrying minor units and a
+currency is *not* `AmountType`, so payload code converts at the boundary and must never let the
+generated type into domain code. `MONEY-TYPES.md` still governs everything Rust-side.
+
+**Debuggability moved from free to configured, and cost more than expected.** JSON was readable in
+any viewer with no setup. Testing against a live broker showed that Kafbat's schema-aware
+`ProtobufFile` serde **cannot render an `Any` payload at all** — it decodes an envelope whose
+payload is unset, then falls back to raw bytes once one is present, because Java's `JsonFormat`
+requires a `TypeRegistry` to resolve `Any` and Kafbat builds none from the schema directory. The
+default value serde is therefore `ProtobufDecodeRaw`, which decodes schema-free and prints the
+whole message, nested payload included, using field numbers instead of names.
+
+That is the concrete, recurring price of choosing `Any` over a `oneof`: readable structure, but
+field numbers rather than names, in the tool people reach for first.
+
+**A third schema language.** The repo now describes shapes in Smithy (HTTP), Diesel (storage), and
+protobuf (events). They describe different boundaries and do not overlap, but keeping the domain
+concepts aligned across them is manual.
+
+## References
+
+- `backend/ai-docs/patterns/EVENTS.md` — the operative rules for emit sites and payloads
+- [ADR-008](/decisions/adr-008-event-producer-direct-publish) — direct publish over an outbox
+- `backend/proto/aarokya/events/v1/envelope.proto` — the frozen envelope

@@ -65,13 +65,13 @@ The current domain set is: `account`, `admin_narayana`, `auth`, `benefit`, `bene
   <Card title="User Profile" icon="user" color="#3b82f6">
     **Tables:** `users` (shared with Auth), `dependant`
 
-    Reads/writes profile fields (`first_name`, `last_name`, `email`, `dob`, `gender`, `address`). `phone_number` and `id_proof` are set at provisioning. PII is encrypted at rest via a per-user key in `user_key_store`.
+    Reads/writes profile fields (`first_name`, `last_name`, `email`, `occupation`, `dob`, `gender`, `address`). `phone_number` is set at provisioning, `id_proof` optionally; `id_proof` can be set or replaced via `PATCH /users/{user_id}`. PII is encrypted at rest via a per-user key in `user_key_store`.
 
   </Card>
   <Card title="Account (PBA)" icon="wallet" color="#16a34a">
     **Tables:** `accounts`, `orders`
 
-    User money lives in a Prepaid Bank Account (PBA) ledger, surfaced via `GET /users/{user_id}/balance` and `GET /users/{user_id}/ledger`. Contributions flow through `orders`; the `holder` column keys each account to a `user:<id>` or `sponsor:<id>`.
+    User money lives in a Prepaid Bank Account (PBA) ledger, surfaced per goal via `GET /goals/{goal_id}/balance` and `GET /goals/{goal_id}/ledger` — a goal owns its pool, so there is no user-wide balance. Contributions flow through `orders`; the `holder` column keys each account to a `user:<id>` or `sponsor:<id>`.
 
   </Card>
   <Card title="Insurance Policy" icon="shield-heart" color="#ec4899">
@@ -86,6 +86,13 @@ The current domain set is: `account`, `admin_narayana`, `auth`, `benefit`, `bene
     Self-contribution and sponsor-funded top-ups create `orders`. Recurring autopay is driven by a Juspay UPI `mandate`; each scheduled debit lands a row in `mandate_executions`.
 
   </Card>
+  <Card title="Clinic Queue" icon="hospital-user" color="#14b8a6">
+    The front desk's working list, spanning every benefit type. Rows are admitted
+    automatically when a benefit instance is created and advanced by clinic staff
+    through `CREATED → IN_PROGRESS → COMPLETED`. Lives in its own `clinic`
+    Postgres schema and tracks the **visit**, not the entitlement.
+  </Card>
+
   <Card title="Consultation" icon="stethoscope" color="#8b5cf6">
     **Tables:** `consultations`, `benefits`
 
@@ -127,15 +134,15 @@ sequenceDiagram
     rect rgba(245, 158, 11, 0.15)
         Note over U,JP: 3. Add Money (self-contribution)
         U->>App: Tap "Add Money" → ₹500
-        App->>API: POST /users/{user_id}/contributions/self
+        App->>API: POST /goals/{goal_id}/contribution/self/manual
         API->>JP: Create order / PBA top-up
         JP-->>API: sdk_payload
         API-->>App: sdk_payload
         App->>JP: HyperCheckout.initiate(sdk_payload)
         JP-->>App: Payment complete
-        App->>API: GET /users/{user_id}/orders/{id}
+        App->>API: POST /orders/{id}/sync
         API-->>App: status = SUCCESS
-        App->>API: GET /users/{user_id}/balance
+        App->>API: GET /goals/{goal_id}/balance
         API-->>App: Updated balance
     end
 
@@ -177,7 +184,9 @@ sequenceDiagram
         JP->>BANK: Debit (existing mandate)
         BANK-->>JP: Debit success
         JP-->>AK: SUCCESS
-        AK->>PBA: Credit account (order)
+        AK->>AK: Settle order + execution (status only)
+        AK->>PBA: Confirm deposit + credit goal (/contribute)
+        AK->>PBA: Match sponsor share (/contribution/sponsor)
         PBA-->>AK: Confirmed
     end
 
@@ -194,14 +203,14 @@ sequenceDiagram
 
 ## Scheduled Autopay (Mandate Execution)
 
-Recurring debits are not driven by an in-process worker. An external scheduler (**Kronos**) fires each due mandate into the backend at `POST /mandate/{mandate_id}/execute`, passing a per-firing `X-Mandate-Execution-Id` (the `job_execution_id`). The handler is idempotent: it claims a `mandate_executions` row via `INSERT ... ON CONFLICT (job_execution_id) DO NOTHING RETURNING *`, so a Kronos retry of the same firing replays rather than double-charges.
+Recurring debits are not driven by an in-process worker. An external scheduler (**Kronos**) fires each due mandate into the backend at `POST /goals/{goal_id}/contribution/self/auto` — the debit is goal-scoped, since every mandate funds a goal — passing a per-firing `X-Idempotency-Key` (the `idempotency_key`). The handler is idempotent: the funding order's id is derived from that header, and it claims a `mandate_executions` row via `INSERT ... ON CONFLICT (idempotency_key) DO NOTHING RETURNING *`, so a Kronos retry of the same firing replays rather than double-charges.
 
 ```mermaid
 stateDiagram-v2
     direction LR
     [*] --> INITIATED : Kronos fires, claim row inserted
     INITIATED --> PENDING : Order minted, /txns sent to Juspay
-    PENDING --> SUCCESS : Debit confirmed, account credited
+    PENDING --> SUCCESS : Debit confirmed (status only — the pool is credited by /contribute)
     PENDING --> FAILED : Provider declined or timed out
     SUCCESS --> [*]
     FAILED --> [*]

@@ -39,7 +39,7 @@ The new row's `previous_version_id` points **back** to the discarded row, so ver
 |----------|----------|-----------|-------|
 | `POST /users/{user_id}/dependants` | ✓ own only | ✓ | `relationship = SELF` not allowed |
 | `POST /users/{user_id}/dependants/bulk` | ✓ own only | ✓ | Atomic batch insert, max 50. `relationship = SELF` not allowed |
-| `GET /users/{user_id}/dependants` | ✓ own only | ✓ | Returns `ACTIVE` rows; filter by `relationship` |
+| `GET /users/{user_id}/dependants` | ✓ own only | ✓ | Returns `ACTIVE` rows; filter by `relationship` and a `created_at` window |
 | `GET /users/{user_id}/dependants/{id}` | ✓ own only | ✓ | 403 if accessing another user's |
 | `PATCH /users/{user_id}/dependants/{id}` | ✓ own only | ✓ | SELF not allowed |
 | `DELETE /users/{user_id}/dependants/{id}` | ✓ own only | ✓ | Sets `status → DISCARDED`. SELF not allowed |
@@ -48,7 +48,7 @@ The new row's `previous_version_id` points **back** to the discarded row, so ver
 
 ## SELF Dependant
 
-Every user has exactly one active `relationship = SELF` dependant. It is created automatically on `POST /users/{user_id}/complete_onboarding` (which takes a **required** `salutation` field) and re-versioned when `PATCH /users/{user_id}` changes `first_name`, `last_name`, `dob`, or `gender`. Attempting to create, update, or delete SELF via the dependants API returns `400 DE_603`.
+Every user has exactly one active `relationship = SELF` dependant. It is created automatically on `POST /users/{user_id}/add_details` (salutation is deduced from `gender`) and re-versioned when `PATCH /users/{user_id}` changes `first_name`, `last_name`, `dob`, or `gender`. Attempting to create, update, or delete SELF via the dependants API returns `400 DE_603`.
 
 ---
 

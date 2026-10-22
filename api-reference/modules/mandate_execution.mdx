@@ -4,62 +4,102 @@ description: "Kronos-driven autopay debit + status reconciliation. Operates on r
 ---
 
 <Note>
-  **Auth guard:** the Kronos-fired routes (`execute`, `status_check`) require the
-  callback-service actor (`actor.require_callback_service()`). The two dashboard
-  read routes (`executions` list + get) use `require_self_or_trusted_backend` —
-  the user themselves or a trusted backend / admin.
+  **Auth guard:** the Kronos-fired routes — the goal-scoped mint, `execute` and
+  the order-scoped reconciliation — require the callback-service actor
+  (`actor.require_callback_service()`). `GET /mandate_executions` is admin /
+  readonly-admin only; the single-execution read uses
+  `require_self_or_trusted_backend`.
 </Note>
 
 ## Overview
 
 Mandate execution is the runtime side of the mandate lifecycle —
 where a registered mandate (from the [Mandate Module](./mandate)) is
-**actually charged**. The mandate must be in the `LIVE` state. Two
-Kronos-fired routes drive it:
+**actually charged**. The mandate must be in the `LIVE` state. Kronos-fired
+routes drive it:
 
-1. **`POST /mandates/{mandate_id}/execute`** — Kronos fires this once
-   per autopay cycle. Each firing claims a `mandate_executions` row
-   (idempotent on the `X-Mandate-Execution-Id` header), creates a linked
-   funding order, calls Juspay's `/txns` to debit, and stamps the txn status.
-2. **`POST /mandates/{mandate_id}/execution/{execution_id}/status_check`**
-   — Kronos fires this **+27h after a non-terminal debit** to
-   reconcile the txn status, then reschedules every 15min up to
-   `status_check.max_attempts` (default 6). If still non-terminal when the
-   Kronos window (`ends_at`) expires, the row sits in its last non-terminal
-   status for operator inspection — no forced terminal state.
+1. **The mint — `POST /goals/{goal_id}/contribution/self/auto`.** Kronos fires
+   this once per autopay cycle, against the **goal**, not the mandate. It mints
+   the funding order on the goal's own HSA pool (with `goal_id` set) and stops
+   there, answering with the order. Documented in the [Goal Module](./goal).
+2. **The charge — `POST /mandates/{mandate_id}/execute`.** Reached from the
+   `goal.contribution_order.initiated` event, not from Kronos. The funding order
+   is named by `order_id` in the request body; the route claims a
+   `mandate_executions` row (idempotent on the `X-Idempotency-Key` header),
+   parks the PBA hold, calls Juspay's `/txns` to debit, and stamps the txn status.
+   Splitting mint from charge means a charge that needs re-driving replays only
+   the charge.
+
+   The order is **checked against the mandate** before anything moves, on both its
+   funding source and its settlement rail. Only mandate-rail orders are chargeable
+   at all: an autopay debit has its id re-derived from the firing key and compared,
+   and an indirect tip — whose id is minted against a ride, not a firing — must
+   belong to a goal linked to this mandate. Everything else is refused, since it
+   never reaches a mandate: a manual top-up and a direct tip are collected at a
+   payment page, and a sponsor leg moves over PBA.
+3. **The reconciliation — `POST /orders/{order_id}/sync`.** There is no separate
+   status-check route: an autopay debit reconciles on the same settlement seam
+   every other order uses. `sync_order`'s `mandate`-medium arm resolves the
+   execution from the order (`mandate_executions.order_id` is `NOT NULL`), polls
+   Juspay, and settles both rows together.
+
+   The order half is **status only** for a goal-linked debit: it advances
+   `OrderStatus` and writes the execution status, and that is all. The PBA hold parked
+   in step 1 is confirmed by `POST /goals/{goal_id}/contribute`, and the sponsor's share
+   is matched by `POST /goals/{goal_id}/contribution/sponsor` — both rung by the consumer
+   reacting to the settle, not by the settle itself. (A **failed** debit is the exception:
+   its hold is released inside the settle, since `/contribute` only ever runs on a settled
+   order.) See [ADR-006](/decisions/adr-006-sponsor-order-anchor).
+
+   It runs on its **own cadence**, though — the shared `order.settlement_poll.*` knobs
+   resolved under `medium = "mandate"`, not the `medium = "payment"` override a manual
+   contribution gets. Same route, same knob names, two sets of values and two
+   kill-switches. If still non-terminal when the Kronos window (`ends_at`) expires, the
+   row sits in its last non-terminal status for operator inspection — no forced terminal
+   state. On a terminal settle the poll job is cancelled and `orders.job_id` cleared.
+
+The debit is **order-first**: the funding order is created before the execution
+claim, and its id is derived from the firing key rather than generated fresh.
+That is what makes a retry resolve the existing order instead of minting a second
+one — see [idempotency](#three-layer-idempotency) below.
 
 There is **no per-firing state in the request body**. Each firing is
-identified by the `X-Mandate-Execution-Id` header (templated by Kronos via
+identified by the `X-Idempotency-Key` header (templated by Kronos via
 `{{execution.execution_id}}`), and the attempt cadence is implicit in Kronos's
 cron schedule — no DB column tracks attempts.
 
-Two **dashboard read routes** (bearer auth, not Kronos) surface those rows:
-`GET …/executions` lists a mandate's attempts (each joined to its order's
-Juspay `external_order_status`), and `GET …/executions/{execution_id}` returns
-one by id (carrying the linked `order_id`). Both fail closed — the mandate must
-belong to `user_id`, and the execution to that mandate — so a guessed id
-returns 404, not another user's row. A cross-user admin list also exists at
-`GET /admin/mandate_executions`.
+Two **read routes** (not Kronos) surface those rows. `GET /mandate_executions` is
+the paginated admin list — filter by `execution_id`, `mandate_id`, `order_id`, `statuses` or a
+`created_at` window — with each row joined to its order's Juspay
+`external_order_status`. There is deliberately **no per-user filter**: `mandate_id`
+is the dimension that matters, and `mandate_executions` carries no `user_id` column
+of its own (the user lives on the parent mandate), so scoping by user would mean a
+join for a lookup nobody needs.
+
+The single-execution read is keyed on `mandate_id` + `execution_id` — no `{user_id}` —
+and fails closed: the caller must own the mandate (asserted against the row, not the
+path) and the execution must belong to that mandate, so a guessed id returns 404 rather
+than another user's row.
 
 ---
 
 ## Endpoints
 
 <CardGroup cols={2}>
-  <Card title="POST /mandates/{mandate_id}/execute" icon="bolt" color="#dc2626" href="/api/endpoints/mandate-execution/execute">
-    Run a single autopay debit. Returns 201 on first claim, 200 on idempotent replay. Callback-service auth.
+  <Card title="POST /goals/{goal_id}/contribution/self/auto" icon="bolt" color="#dc2626" href="/api/endpoints/goals/auto-contribution">
+    Mint the funding order for the goal's autopay cycle. Returns the order; charging it is `execute`'s job. Callback-service auth.
   </Card>
-  <Card title="POST /mandates/{mandate_id}/execution/{execution_id}/status_check" icon="rotate" color="#dc2626" href="/api/endpoints/mandate-execution/status-check">
-    Reconcile a single execution row against Juspay. Callback-service auth.
+  <Card title="POST /mandates/{mandate_id}/execute" icon="bolt-lightning" color="#dc2626" href="/api/endpoints/mandate-execution/execute">
+    Claim the firing and charge the already-minted order. Returns 201 on first claim, 200 on idempotent replay. Callback-service auth.
   </Card>
-  <Card title="GET /users/{user_id}/mandates/{mandate_id}/executions" icon="list" color="#2563eb" href="/api/endpoints/mandate-execution/list">
-    Dashboard list of a mandate's execution attempts, each joined to its order's Juspay `external_order_status`. Bearer auth.
+  <Card title="POST /orders/{order_id}/sync" icon="rotate" color="#dc2626" href="/api/endpoints/orders/sync">
+    Reconcile the debit — the `mandate`-medium arm settles the order and its execution together. Self-or-callback auth.
   </Card>
-  <Card title="GET /users/{user_id}/mandates/{mandate_id}/executions/{execution_id}" icon="magnifying-glass" color="#2563eb" href="/api/endpoints/mandate-execution/get">
+  <Card title="GET /mandate_executions" icon="list" color="#7c3aed" href="/api/endpoints/mandate-execution/list">
+    Paginated execution list, each row joined to its order's Juspay `external_order_status`. Filter by `execution_id` / `mandate_id` / `order_id` / `statuses`. Admin auth.
+  </Card>
+  <Card title="GET /mandates/{mandate_id}/executions/{execution_id}" icon="magnifying-glass" color="#2563eb" href="/api/endpoints/mandate-execution/get">
     Single execution by id, carrying the linked `order_id`. Fails closed on cross-ownership. Bearer auth.
-  </Card>
-  <Card title="GET /admin/mandate_executions" icon="users" color="#7c3aed" href="/api/endpoints/mandate-execution/admin-list">
-    Cross-user, paginated list for the admin dashboard. Admin / readonly-admin auth.
   </Card>
 </CardGroup>
 
@@ -75,49 +115,61 @@ sequenceDiagram
     participant DB
 
     Note over Aarokya: 1. Mandate is in Live state with a Kronos cron job scheduled
-    Kronos->>Aarokya: POST /mandates/{mandate_id}/execute<br/>X-Mandate-Execution-Id firing-key
-    Aarokya->>DB: try_claim row (Initiated) ON CONFLICT (job_execution_id) DO NOTHING
-    Aarokya->>DB: create linked funding order (orders.id)
-    Aarokya->>Kronos: schedule status_check at plus 27h
-    Aarokya->>Juspay: POST /txns (order_id equals orders.id)
+    Kronos->>Aarokya: POST the debit route<br/>X-Idempotency-Key firing-key
+    Aarokya->>DB: create funding order, id derived from the firing key
+    Aarokya->>DB: try_claim row (Initiated, order_id set) ON CONFLICT (idempotency_key) DO NOTHING
+    Aarokya->>Kronos: schedule the order settlement poll on the autopay cadence
+    Aarokya->>Juspay: POST /txns (order_id equals orders.id, amount equals orders.amount)
     Juspay-->>Aarokya: status PENDING_VBV, txn_id
     Aarokya->>DB: execution SetStatus(Pending), order external_status PENDING_VBV
     Aarokya-->>Kronos: 201 Created<br/>id, status PENDING, amount
 
     Note over Kronos: 27 hours later
-    Kronos->>Aarokya: POST /mandates/{mandate_id}/execution/{exec}/status_check
-    Aarokya->>DB: find by execution_id, assert mandate_id matches
+    Kronos->>Aarokya: POST /orders/{order_id}/sync
+    Aarokya->>DB: resolve the execution from mandate_executions.order_id
     Aarokya->>Juspay: GET /orders/{order_id}
     Juspay-->>Aarokya: status CHARGED
-    Aarokya->>DB: execution SetStatus(Success), order Success
-    Aarokya-->>Kronos: 200 OK<br/>status SUCCESS
+    Aarokya->>DB: execution SetStatus(Success), order Success, cancel poll + clear job_id
+    Aarokya-->>Kronos: 200 OK<br/>the settled order
 ```
 
 If Juspay reports a still-non-terminal status on a reconciliation
 firing, the next Kronos firing (15min later) re-checks, up to
-`status_check.max_attempts` firings bounded by the cron window.
+`order.settlement_poll.max_attempts` firings bounded by the cron window.
 
 ---
 
-## Two-layer idempotency
+## Three-layer idempotency
 
 Kronos retries on transient failures, so duplicate firings are
-expected. Two layers prevent double-debits:
+expected. Every layer is anchored on the same value — the
+`X-Idempotency-Key` header — so they cannot disagree about which firing
+they belong to:
 
-1. **DB claim** — `INSERT ... ON CONFLICT (job_execution_id) DO NOTHING
+1. **Order primary key** — the autopay funding order's id is derived from the firing
+   key (a UUIDv5 over it), not generated fresh. A retry derives the **same** id, hits
+   the primary key, and resolves the existing row instead of minting a second
+   order. The resolved row's owner is asserted before it is charged, so a
+   recycled firing key cannot charge somebody else's order.
+2. **DB claim** — `INSERT ... ON CONFLICT (idempotency_key) DO NOTHING
    RETURNING *`. Exactly one concurrent caller wins; the loser reads
-   the winner's row and returns it. The conflict key is `job_execution_id`
-   (the value from the `X-Mandate-Execution-Id` header).
-2. **Juspay-side dedup** — Juspay deduplicates on `order_id`. We pass
+   the winner's row and returns it. The conflict key is `idempotency_key`
+   (the same header value). Because the order is created first, the claim
+   carries its `order_id` from birth — there is no window where a claimed
+   firing has no order for the reconciliation cron to follow.
+3. **Juspay-side dedup** — Juspay deduplicates on `order_id`. We pass
    `order_id =` the linked orders-ledger row id (`orders.id`), stable across
    retries, so a firing-retry that somehow slips past the DB claim still
-   doesn't double-charge. A resumed `Initiated` firing reuses its existing
-   linked order (no duplicate order).
+   doesn't double-charge.
 
-The status_check route adds a third guard: a **terminal-state
-fast-path**. If the row's status is already terminal
-(`Success | Failed`), the handler returns the row as-is without
-hitting Juspay or rescheduling.
+The charge amount comes off the **order**, never a freshly recomputed figure: an
+order that pre-exists from an earlier attempt is the single source of truth, so a
+sponsor-share change between retries can't make the charge, the order row, and
+the execution row disagree.
+
+The reconciliation arm adds a further guard: a **terminal-state fast-path**. If the
+execution's status is already terminal (`Success | Failed`), it returns the order
+as-is without hitting Juspay.
 
 ---
 
@@ -156,18 +208,21 @@ debit = max(0, policy.premium_amounts.daily - sponsor_contribution)
 
 `sponsor_contribution` is resolved from Superposition (`insurance.sponsor_contribution`,
 keyed by `plan_code` / `benefit_id` / purchase date; default `0`). The
-subtraction is exact `MinorUnit` (paise) math, floored at zero. If the computed
-user share is zero (sponsor covers the full premium), `execute_mandate` fails
-with `MXE_1608` (`ZeroDebitAmount`).
+subtraction is exact `MinorUnit` (paise) math, floored at zero. A zero user share
+(sponsor covers the full premium), or a user with zero / multiple `Issued`
+policies, fails the firing — there's no policy linkage on the mandate row today.
 
-If the user has zero or multiple `Issued` policies, `execute_mandate`
-fails with `MXE_1609` (`NoIssuedInsurancePolicyForUser`) or `MXE_1610`
-(`AmbiguousIssuedInsurancePolicies`) respectively — there's no policy linkage
-on the mandate row today.
+Because the debit runs on the goal rail, those failures reach the caller as the
+**goal** module's codes, not the `MXE_16xx` ones below; see
+[Goal Module → Error codes](./goal#error-codes).
 
 ---
 
 ## Error responses
+
+`execute`, the reconciliation route and the read routes raise these. The rows
+marked *retired* moved to the goal rail when order creation did; their numbers
+stay reserved and are never reused.
 
 | Code | Status | Error | Situation |
 |---|---|---|---|
@@ -179,9 +234,9 @@ on the mandate row today.
 | `MXE_1605` | 400 | Mandate not active | Mandate is not in `LIVE` state — cannot execute |
 | `MXE_1606` | 404 | Execution not found | `execution_id` row doesn't exist |
 | `MXE_1607` | 404 | Job execution not found | Claimed row missing (race / DB inconsistency) |
-| `MXE_1608` | 400 | Zero debit amount | Sponsor covers the full premium — user share is 0 |
-| `MXE_1609` | 400 | No issued policy | User has no `Issued` policy for the autopay amount |
-| `MXE_1610` | 400 | Ambiguous policies | User has multiple `Issued` policies |
+| `MXE_1608` | 400 | Zero debit amount | *Retired* — surfaces on the goal rail |
+| `MXE_1609` | 400 | No issued policy | *Retired* — surfaces on the goal rail |
+| `MXE_1610` | 400 | Ambiguous policies | *Retired* — surfaces on the goal rail |
 
 ---
 
@@ -194,16 +249,29 @@ UI without a redeploy.
 
 | Superposition key | Code default | Meaning |
 |-------------------|--------------|---------|
-| `mandate_execution.autopay.endpoint_name` | `aarokya-execute-mandate` | Kronos-registered endpoint for autopay firings |
+| `mandate_execution.autopay.endpoint_name` | `aarokya-goal-auto-self-contribution` | Kronos-registered endpoint for autopay firings |
 | `mandate_execution.autopay.initial_delay_secs` | `3600` | Offset from `Active → Live` for the first autopay firing |
 | `mandate_execution.autopay.interval_minutes_override` | `0` | `0` → daily-IST baseline; `n > 0` → fire every `n` minutes |
 | `mandate_execution.autopay.scheduling_enabled` | `true` | Kill-switch for autopay scheduling |
-| `mandate_execution.status_check.endpoint_name` | `aarokya-mandate-execution-status-check` | Kronos endpoint for the reconciliation cron |
-| `mandate_execution.status_check.initial_delay_secs` | `97200` | 27h — first reconciliation poll |
-| `mandate_execution.status_check.retry_interval_secs` | `900` | 15min between reconciliation polls |
-| `mandate_execution.status_check.max_attempts` | `6` | Caps total reconciliation firings |
-| `mandate_execution.status_check.scheduling_enabled` | `true` | Kill-switch for status-check scheduling |
+| `order.settlement_poll.endpoint_name` | `aarokya-mandate-execution-status-check` | Kronos endpoint for the reconciliation cron. Must be registered against the order-sync URL template (the Kronos job input supplies the order id) — the autopay rail reconciles on the order seam |
+| `order.settlement_poll.initial_delay_secs` | `60` | First reconciliation poll |
+| `order.settlement_poll.retry_interval_secs` | `60` | Between reconciliation polls |
+| `order.settlement_poll.max_attempts` | `6` | Caps total reconciliation firings |
+| `order.settlement_poll.scheduling_enabled` | `true` | Kill-switch for scheduling |
 
+<Note>
+  These are **not** a mandate-specific namespace. `order.settlement_poll.*` is one knob set
+  shared by every settlement rail, told apart by the `medium` dimension (`orders.medium`).
+  The autopay values above are the **base**; the interactive payment rail is the
+  `medium = "payment"` override (`120s` retries, `15` attempts, and the order-sync endpoint).
+
+  Base is deliberately the autopay cadence: it is what resolves when the `medium` dimension
+  is missing, and an autopay order on the payment clock would exhaust its attempts before
+  Juspay settles and never reconcile. A payment order on the autopay clock merely settles
+  slower — and the frontend drives `/sync` for the whole live session regardless.
+
+  Editing a value here without scoping it to `medium` changes it for **every** rail.
+</Note>
 <Note>
   The in-repo `fallback.superposition.toml` carries smaller placeholder values
   for the delay/interval keys; the production defaults are the Superposition

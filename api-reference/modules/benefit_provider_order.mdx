@@ -105,11 +105,13 @@ a `400`.
 2. **Get** — `GET /benefit_provider_orders/{id}`. Reads a single order by its
    globally-unique id.
 3. **List** — `GET /benefit_provider_orders`. Reads from the local DB with
-   optional `benefit_entity_id`, `benefit_provider_id`, `start_time`/`end_time`,
-   and `limit`/`offset` filters; results are further filtered to the providers
-   the actor can access. (`benefit_provider_id` is honoured only for
-   admin/trusted callers — a benefit-provider actor is always force-scoped to
-   its own provider.) Paginated: returns `data`, `total`, `limit`, `offset`.
+   optional `user_id`, `benefit_entity_id`, `benefit_provider_id`,
+   `start_time`/`end_time`, and `limit`/`offset` filters; results are further
+   filtered to the providers the actor can access. (`benefit_provider_id` is
+   honoured only for admin/trusted callers — a benefit-provider actor is always
+   force-scoped to its own provider.) `user_id` must be a complete 12-digit user
+   id; a partial value is rejected with a 400 rather than returning an empty
+   page. Paginated: returns `data`, `total`, `limit`, `offset`.
 4. **Sync** — `PATCH /benefit_provider_orders/{id}/sync`. Recovery endpoint —
    re-attempts the PBA payment for an order whose create-time payment failed or
    never reached PBA. The order id is the PBA idempotency key, so this is
@@ -150,7 +152,7 @@ is no standalone wallet surface. The debit always hits the user's PBA-backed
 | `benefit_provider_id` | UUID | Provider derived from the policy. |
 | `benefit_entity_id` | UUID | Bare id of the purchased entity. No type discriminator — only insurance policies are payable today, so this is an insurance policy id. |
 | `external_order_id` | string | Provider's external order id. |
-| `amount` | `AmountResponse` | `{ value, currency }` — major-unit float + currency. |
+| `amount` | `AmountResponse` | `{ value, currency }` — major-unit float. **Legacy shape**: this is the one endpoint still on it, because its callers live outside this repo. Every other module uses minor-unit `AmountType`. |
 | `from_self` | `AmountResponse` \| null | Portion of `amount` drawn from the self-contribution pool (PBA-reported). `null` until the payment settles or the split backfill fills it. |
 | `from_others` | `AmountResponse` \| null | Portion drawn from the others (trust/sponsor) pool. With `from_self`, sums to `amount`. Same `null` semantics. |
 | `wallet_txn_data` | object | `{ status, detail }` — see above. |

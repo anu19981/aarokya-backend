@@ -1,0 +1,159 @@
+---
+title: "ADR-007: Config-Driven Action Engine"
+description: "Move an outbound integration's endpoint, request shape and response interpretation out of Rust and into Superposition, so adding an integration is a config change rather than a release."
+---
+
+<Note>
+  **Status:** Accepted · **Date:** 2026-08 · **Deciders:** Aarokya Engineering ·
+  **Affects:** platform integrations, Superposition config plane, goal tipping
+</Note>
+
+## Context
+
+Aarokya needs to ask a tenant platform a question about something that happened on
+its own surface — for tipping, "did this ride carry a tip, and how much?" — and act
+on the answer.
+
+The obvious build is the one every other outbound integration here already uses: a
+crate with a typed client, response structs, an interface trait and a mock. That is
+how `euler`, `pba`, `narayana` and `namma_yatri` are built, and it works well when
+the upstream is a fixed partner with a stable contract.
+
+It works badly here. The integration is **per-tenant**, and the whole point of the
+platform model is that tenants are added without a release. A typed client per
+platform means every new tenant ships Rust: a crate, a config block, a dispatch arm
+and a deploy. It also means the codebase accumulates one platform's vocabulary —
+`RideStatus`, `fareBreakup`, `BUYER_ADDITIONAL_AMOUNT` — as a permanent dependency,
+where that vocabulary is really one tenant's private detail.
+
+A first attempt built exactly that typed client. It was discarded before merge.
+
+## Options Considered
+
+<AccordionGroup>
+  <Accordion title="A — Typed client per platform (the incumbent pattern)">
+    **Pros:** compile-time safety on the response; familiar; mock story identical to
+    every other provider crate; a rename upstream is a compile error.
+
+    **Cons:** every new tenant is a code change and a deploy. Platform-specific
+    vocabulary becomes a permanent part of the codebase. The dispatch grows an arm
+    per tenant. Directly contradicts the goal that tenants are onboarded by config.
+
+    **Verdict:** rejected — correct shape for a fixed partner, wrong shape for a
+    tenant.
+  </Accordion>
+
+  <Accordion title="B — One neutral response shape all platforms map onto">
+    **Pros:** one type in code; no per-platform branches.
+
+    **Cons:** something still has to do the mapping, and that something is
+    per-platform code — the problem relocated, not solved. The neutral shape also has
+    to be guessed before the second platform exists, which is when it would be wrong.
+
+    **Verdict:** rejected. This is ADR-005's approach, which is right when *we* own
+    the shape end to end; here the input shape is the tenant's.
+  </Accordion>
+
+  <Accordion title="C — Config-driven engine (chosen)">
+    **Pros:** adding a platform is a Superposition block. No platform vocabulary in
+    the codebase at all. Endpoint, headers, body and *interpretation* are all
+    runtime-tunable, so an upstream change is a config edit rather than a release.
+
+    **Cons:** a DSL with no compile step — a bad config edit is a production change
+    the codebase cannot gate. Debuggability drops: failures become "the rule returned
+    a shape that will not deserialise." Testing splits into engine correctness (easy)
+    and config correctness (needs a recorded real payload per platform).
+
+    **Verdict:** accepted, with the mitigations below.
+  </Accordion>
+</AccordionGroup>
+
+## Decision
+
+Superposition serves, per owner and action, the complete definition of one outbound
+call: `enabled`, `http_method`, `url`, `headers`, `body`, and an `evaluation_rule`.
+Keys are owner-scoped and carry the action name — `platform_config.ACTION.*`,
+targeted by `platform_slug`, with a `common` tier per owner for what every action
+shares. Platforms are the only owner kind shipped; a second gets its own prefix and
+its own dimension.
+The engine renders the templated values against a typed context, sends the request,
+and evaluates the rule against the response — stopping at a `serde_json::Value`.
+
+```text
+owner+action ─SP─> { enabled, http_method, url, headers, body, evaluation_rule }
+                       │  handlebars render
+                       ▼
+                 HTTP request ──> serde_json::Value
+                       │  JSONLogic (evaluation_rule)
+                       ▼
+                 serde_json::Value        ← engine stops here, action-agnostic
+                       │
+                       ▼
+                 TipPollOutcome           ← per-action adapter, typed
+```
+
+**Two layers, deliberately.** The engine is action-agnostic; turning its output into
+a decision is a per-action adapter. A tip poll answers "was it collected and how
+much"; a future poll answers something else, and one outcome type serving both would
+grow optional fields until it is a god-object. Adding an action is a new outcome type
+and a new call site — **the engine does not change.**
+
+**JSONLogic, via `datalogic-rs`** — chosen over `juspay_jsonlogic` (which Superposition
+already ships, and which therefore stays in the build regardless) for a maintained
+release line and typed errors. Debuggability is the weakest point of a config-driven
+design, and "the rule returned a shape that will not deserialise" is far more tractable
+with a typed error than a bare string.
+
+**Everything undecidable is a no-op.** A poll is driven by a scheduled firing that
+runs again, so "I could not tell" must never become a permanent answer. Disabled
+config, unusable config, transport failure, an unevaluable rule and a malformed
+outcome all collapse at a single validation site. This is a conscious exception to
+the house rule against swallowing errors, paid for with a `warn` carrying the rule
+and its input.
+
+**Money never leaves the rule engine as money.** JSONLogic arithmetic is `f64`
+throughout. The amount crosses into Rust as a float and is normalised through
+`rust_decimal` against the **order's** currency — the one that will actually be
+debited.
+
+**The amount's unit is reported by the rule, and is mandatory.** Platforms differ:
+one quotes rupees, the next quotes paise. The rule is what selects the response
+field, so only the rule knows that field's unit — which is why the unit travels
+next to the value rather than sitting in a separate config key that could silently
+disagree after a rule edit. An absent or unrecognised unit is undecidable, never a
+default: guessing is a 100× error on a real debit.
+
+## Consequences
+
+<CardGroup cols={2}>
+  <Card title="Gained">
+    - A new platform is a config block, not a release.
+    - No platform-specific vocabulary anywhere on the call path.
+    - An upstream field rename is fixed by editing config.
+    - Kill switch per platform, effective immediately — including for firings already
+      scheduled, since it is read at poll time rather than schedule time.
+  </Card>
+  <Card title="Trade-offs">
+    - **A DSL with no compile step.** Mitigated by validating a block before any
+      request is sent, and by tests that read the *shipped* rule out of the committed
+      fallback rather than restating it.
+    - **Silence is the failure mode.** A permanently-wrong rule looks exactly like an
+      unfinished ride. Whichever change wires a call site owes an age check or metric
+      on stuck orders.
+    - **The outcome contract is positional.** JSONLogic cannot build an object with a
+      computed field, so the rule returns `["CONFIRMED", amount, unit, currency]`
+      rather than a named shape.
+    - **Two JSONLogic engines in the build.** `juspay_jsonlogic` arrives via
+      Superposition regardless; `datalogic-rs` is ours.
+    - **Config authoring has sharp edges.** Superposition overrides deep-merge onto
+      defaults, so every object-valued default must be an empty object.
+  </Card>
+</CardGroup>
+
+## Related
+
+- **ADR-005** — the neutral-shape approach, which remains right where Aarokya owns
+  the shape on both sides. This ADR is the case where it does not.
+- `backend/ai-docs/domains/action/AGENT-NOTES.md` — engine gotchas.
+- `backend/ai-docs/CRITICAL-PATHS.md` — Superposition object-valued knobs and the
+  deep-merge rule.

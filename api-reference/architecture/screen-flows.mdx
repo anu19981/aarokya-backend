@@ -42,7 +42,7 @@ flowchart LR
 
 ### 1. Onboarding (Profile Setup)
 
-The driver enters Aarokya from the host platform for the first time. The platform service account has already exchanged the driver's `{phone_number, phone_country_code, id_proof}` for a `user_id` + app JWT via `POST /auth/token`, so the user row already exists in `onboarding` status. The app fills in the remaining profile fields and completes onboarding.
+The driver enters Aarokya from the host platform for the first time. The platform service account has already exchanged the driver's `{phone_number, phone_country_code, id_proof}` (plus any optional profile it holds — `occupation`, name, dob, gender, address) for a `user_id` + app JWT via `POST /auth/token`, so the user row already exists in `onboarding` status. The app submits the remaining profile fields through `add_details`, which completes onboarding.
 
 ```mermaid
 sequenceDiagram
@@ -53,10 +53,8 @@ sequenceDiagram
     Note over Driver,App: First-time entry — user already provisioned via POST /auth/token
     Driver->>App: Enters Name, DOB, Gender, Email
     Driver->>App: Taps "Submit"
-    App->>API: PATCH /users/{user_id} (Bearer app JWT)
-    API-->>App: 200 OK (profile updated)
-    App->>API: POST /users/{user_id}/complete_onboarding
-    API-->>App: 200 OK (status → active)
+    App->>API: POST /users/{user_id}/add_details (Bearer app JWT)
+    API-->>App: 200 OK (status → active, fresh JWT)
     App->>Driver: Navigate to Add Dependants
 ```
 
@@ -71,8 +69,7 @@ sequenceDiagram
 
 | API | Method | Purpose |
 |-----|--------|---------|
-| `PATCH /users/{user_id}` | Update | Fill in onboarding profile fields |
-| `POST /users/{user_id}/complete_onboarding` | Create | Transition user status to `active` |
+| `POST /users/{user_id}/add_details` | Create | Submit profile fields and transition user status to `active` |
 
 ---
 
@@ -229,7 +226,7 @@ sequenceDiagram
     Driver->>UPI: Authorizes payment
     UPI-->>PG: Payment success
     PG-->>App: Payment callback (success)
-    App->>API: POST /users/{user_id}/mandates/register
+    App->>API: POST /goals/{goal_id}/mandate/register
     API-->>App: Mandate created
     App->>Driver: Show success screen
 ```
@@ -244,8 +241,8 @@ sequenceDiagram
 
 | API | Method | Purpose |
 |-----|--------|---------|
-| `POST /users/{user_id}/mandates/register` | Create | Create autopay mandate for recurring deductions |
-| `GET /users/{user_id}/mandates/{mandate_id}/status` | Read | Poll mandate registration status |
+| `POST /goals/{goal_id}/mandate/register` | Create | Create autopay mandate for recurring deductions |
+| `POST /mandates/{mandate_id}/sync` | Sync | Poll mandate registration status |
 
 ---
 
@@ -297,9 +294,9 @@ sequenceDiagram
     participant App as Aarokya SDK
     participant API as Aarokya Backend
 
-    App->>API: GET /users/{user_id}/balance
-    API-->>App: Current balance (AmountResponse)
-    App->>API: GET /users/{user_id}/ledger
+    App->>API: GET /goals/{goal_id}/balance
+    API-->>App: Current balance (AmountType)
+    App->>API: GET /goals/{goal_id}/ledger
     API-->>App: Transaction ledger from PBA
     Driver->>App: Views balance and ledger
 ```
@@ -307,16 +304,16 @@ sequenceDiagram
 **Screen layout:**
 - Balance display (prominent)
 - Transaction ledger list
-- "Add Money" button → `POST /users/{user_id}/contributions/self`
-- Each entry: amount (`AmountResponse`), status, date, description
+- "Add Money" button → `POST /goals/{goal_id}/contribution/self/manual`
+- Each entry: amount (`AmountType`), status, date, description
 
 **APIs called:**
 
 | API | Method | Purpose |
 |-----|--------|---------|
-| `GET /users/{user_id}/balance` | Read | Fetch live balance from the PBA |
-| `GET /users/{user_id}/ledger` | Read | Fetch the account transaction ledger |
-| `POST /users/{user_id}/contributions/self` | Create | Self-contribution top-up |
+| `GET /goals/{goal_id}/balance` | Read | Fetch the goal pool's live balance from the PBA |
+| `GET /goals/{goal_id}/ledger` | Read | Fetch the goal pool's transaction ledger |
+| `POST /goals/{goal_id}/contribution/self/manual` | Create | Self-contribution top-up |
 
 ---
 
@@ -377,15 +374,15 @@ View active insurance policy details and coverage.
 
 | # | Screen | APIs |
 |---|--------|------|
-| 1 | Onboarding | `PATCH /users/{user_id}`, `POST /users/{user_id}/complete_onboarding` |
+| 1 | Onboarding | `POST /users/{user_id}/add_details` |
 | 2 | Add Dependants | `POST /users/{user_id}/dependants/bulk` |
-| 3 | Available Benefits | `GET /benefits` |
+| 3 | Available Benefits | `GET /benefits/available` |
 | 4 | Benefit Detail | `GET /benefits/{benefit_id}` |
 | 5 | Insurance Enrollment | `GET /users/{user_id}/dependants`, `POST /users/{user_id}/insurance_policies/preview`, `POST /users/{user_id}/insurance_policies` |
-| 6 | Payments | `POST /users/{user_id}/mandates/register` |
+| 6 | Payments | `POST /goals/{goal_id}/mandate/register` |
 | 7 | Success | (no API call) |
 | 8 | Account Setup | `POST /users/{user_id}/accounts`, `GET /users/{user_id}/accounts` |
-| 9 | Balance & Ledger | `GET /users/{user_id}/balance`, `GET /users/{user_id}/ledger`, `POST /users/{user_id}/contributions/self` |
+| 9 | Balance & Ledger | `GET /goals/{goal_id}/balance`, `GET /goals/{goal_id}/ledger`, `POST /goals/{goal_id}/contribution/self/manual` |
 | 10 | Consultations | `GET /users/{user_id}/consultations`, `POST /users/{user_id}/consultations`, `GET /users/{user_id}/consultations/{consultation_id}/messages` |
 | 11 | Policy Page | `GET /users/{user_id}/insurance_policies/{insurance_policy_id}` |
 
@@ -395,14 +392,14 @@ View active insurance policy details and coverage.
 
 ```mermaid
 flowchart TD
-    A[Platform Entry<br/>POST /auth/token] --> B[Onboarding<br/>PATCH /users/user_id<br/>complete_onboarding]
+    A[Platform Entry<br/>POST /auth/token] --> B[Onboarding<br/>POST /users/user_id/add_details]
     B --> C{First time?}
     C -->|Yes| D[Add Dependants<br/>POST dependants/bulk]
     C -->|No| E[Home]
-    D -->|Submit or Skip| F[Available Benefits<br/>GET /benefits]
+    D -->|Submit or Skip| F[Available Benefits<br/>GET /benefits/available]
     F --> G[Benefit Detail<br/>GET /benefits/benefit_id]
     G --> H[Insurance Enrollment<br/>POST insurance_policies/preview<br/>POST insurance_policies]
-    H --> I[Hyper PG Payment<br/>POST mandates/register]
+    H --> I[Hyper PG Payment<br/>POST goals mandate register]
     I -->|Success| J[Account Setup<br/>POST /users/user_id/accounts]
     J --> E
 

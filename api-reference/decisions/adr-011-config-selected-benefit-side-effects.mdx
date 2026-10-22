@@ -1,0 +1,107 @@
+---
+title: "ADR-011: Config-Selected Benefit Create Side Effects"
+description: "Superposition decides, per benefit, which steps creating a benefit instance performs; each step stays typed Rust. Creating the MRN at Narayana is the first."
+---
+
+<Note>
+  **Status:** Accepted · **Date:** 2026-09 · **Deciders:** Aarokya Engineering ·
+  **Affects:** insurance policy create, health checkup create, consultation create, Superposition config plane
+</Note>
+
+## Context
+
+Creating an insurance policy registered every member at Narayana and stored their MRNs — hardcoded,
+for every insurance benefit, whatever its provider. Creating a health checkup registered nobody.
+Consultation carried its own copy of the registration, which skipped Narayana's patient lookup and
+could register the same person twice.
+
+Whether a benefit needs an MRN is a property of the benefit — its provider's integration — not of its
+type or of the code path that creates it. More steps of this kind are expected.
+
+## Options Considered
+
+<AccordionGroup>
+  <Accordion title="A — Keep the step inline, gated in code">
+    **Pros:** no new moving parts.
+
+    **Cons:** every benefit that needs, or must skip, the step is a release, and the gate grows a
+    branch per benefit.
+
+    **Verdict:** rejected.
+  </Accordion>
+
+  <Accordion title="B — Express the step in the action engine (ADR-007)">
+    **Pros:** fully config-driven, no Rust per step.
+
+    **Cons:** the engine is one templated request and one rule. MRN creation is a token exchange, a
+    patient lookup, a register call per missing member and database writes — chaining, secrets and
+    persistence the engine does not have.
+
+    **Verdict:** rejected. Growing the engine into a workflow runtime is a larger decision than this one.
+  </Accordion>
+
+  <Accordion title="C — Run the step asynchronously from a Kafka consumer">
+    **Pros:** decoupled from the request, with retries and a dead-letter queue.
+
+    **Cons:** the MRN is not there when the create returns, a provider rejection no longer blocks the
+    purchase, and it reverses the fail-loud insurance contract.
+
+    **Verdict:** rejected.
+  </Accordion>
+
+  <Accordion title="D — Config selects named steps; steps are typed Rust, run inline (chosen)">
+    **Pros:** per-benefit targeting without a release. Each step keeps compile-time types, the owner's
+    transaction and the owner's error codes. One MRN path for every flow.
+
+    **Cons:** absent or unresolvable config silently runs nothing, and a new step still needs code.
+
+    **Verdict:** accepted.
+  </Accordion>
+</AccordionGroup>
+
+## Decision
+
+Superposition's `benefit.create_side_effects` is an array of step names, default empty, resolved on
+`benefit_type`, `benefit_id`, `user_id` and `benefit_availed_date`. Each name is a `BenefitSideEffect`
+variant with an exhaustive Rust arm. `CREATE_MRN` is the first.
+
+```text
+create request ─> validate ─> Superposition: benefit.create_side_effects ─> [CREATE_MRN, ...]
+                                   │ each step prepares rows and never writes
+                                   ▼
+                        owner's transaction: benefit instance + MRN rows
+```
+
+**Steps prepare, owners persist.** A step returns rows for the owning create's transaction, so a
+failed create leaves nothing behind.
+
+**Errors stay per domain.** The runner is generic over the caller's error, so insurance keeps
+`IP_1013` / `IP_1014` and health checkup reports `BEE_1708` / `BEE_1709`.
+
+**Consultation is gated too.** A provider other than Narayana may not need an MRN, so consultation
+reads the same key; unconfigured, the Narayana adapter refuses to open a thread. Configured, it also
+gains Narayana's patient lookup before registering.
+
+## Consequences
+
+<CardGroup cols={2}>
+  <Card title="Gained">
+    - A benefit gains or drops MRN creation by config.
+    - Health checkups can register the member at the provider.
+    - One MRN path: consultation no longer registers a patient Narayana already knows.
+  </Card>
+  <Card title="Trade-offs">
+    - **Silence on missing config.** No client, a failed resolution or an unknown step name all run
+      nothing — and for a Narayana consultation benefit that means every create fails (`CN_1600`).
+      The live override must exist before the release that reads it.
+    - **Benefit ids differ per environment**, so the committed fallback targets `benefit_type`
+      while each live workspace targets `benefit_id`.
+    - **A step is still a release.** Config chooses among steps; it cannot define one.
+    - `CREATE_MRN` on a non-Narayana benefit still calls Narayana until provider dispatch lands.
+  </Card>
+</CardGroup>
+
+## Related
+
+- **ADR-007** — the action engine, for single-request integrations config can fully describe.
+- `backend/ai-docs/domains/benefit_side_effect/AGENT-NOTES.md` — config, testing and gotchas.

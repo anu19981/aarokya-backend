@@ -1,0 +1,145 @@
+---
+title: "ADR-010: The Clinic Queue Gets Its Own Postgres Schema"
+description: "Model the clinic front desk as a separate table in a separate schema rather than a new status on the benefit ledger, so an operational workflow cannot collide with the entitlement lifecycle that gates money."
+---
+
+<Note>
+  **Status:** Accepted · **Date:** 2026-09 · **Deciders:** Aarokya Engineering ·
+  **Affects:** `clinic` Postgres schema, `benefit_entities`, `PolicyStatus`,
+  verification-operator auth
+</Note>
+
+## Context
+
+Narayana runs a clinic queue. That queue was an insurance projection:
+`GET /insurance_policies/verification_queue` listed every policy in `Pending` or
+`Verification`, and an operator toggled between those two states. Narayana now
+also offers a **health checkup** as a benefit in its own right, whose instance is
+a `benefit_entities` row with no owning table — so it had no queue at all.
+
+The queue has to serve both, and every future benefit type, without the clinic's
+day-to-day operations reaching into the tables that decide whether a member is
+covered.
+
+## Options Considered
+
+<AccordionGroup>
+  <Accordion title="Widen BenefitEntityStatus with an in-progress variant">
+    **Pros:** one status column for everything; the existing status endpoint and
+    its Superposition transition table are reused verbatim; no new table.
+
+    **Cons:** three, and the first is fatal.
+
+    *Cardinality is not 1:1.* One entitlement can produce several visits — a
+    member who no-shows and returns next week. As a status, the first visit is
+    overwritten and "no-showed, then returned" is unrepresentable.
+
+    *The distinction the queue exists to make does not survive.*
+    `PolicyStatus::Pending` and `::Verification` both coarsen to
+    `BenefitEntityStatus::Created`, so the ledger cannot tell "waiting" from "at
+    the clinic".
+
+    *It puts a front-desk click on a column that moves money.* A benefit instance
+    reaching `ACTIVE` is one of two preconditions for autopay, read by
+    `core::mandate::update_mandate` and the Auto Mandate Starter consumer. It
+    would also mean re-authoring the `benefit.status_transition.*` rows for every
+    benefit type in every environment, with a live consumer parking events in the
+    DLQ on any edge missed.
+
+    **Verdict:** rejected.
+  </Accordion>
+
+  <Accordion title="A separate deployable service with its own database">
+    **Pros:** hard isolation; clinic staff never touch the admin origin; failures
+    cannot reach the benefit pipeline.
+
+    **Cons:** admission has to validate the benefit instance it queues, which
+    becomes a cross-service call that can succeed while the local insert fails.
+    Per-operator authorization has to be re-implemented in the new service, or it
+    calls the API with a single service identity and becomes a confused deputy —
+    losing the per-tenant guarantee `require_verification_operator_strict`
+    provides today.
+
+    **Verdict:** rejected for now. The isolation is real but the price is a
+    distributed-consistency problem and a second security boundary, for a
+    workflow that reads and writes four tables in one database.
+  </Accordion>
+
+  <Accordion title="A new table in the public schema">
+    **Pros:** joins to `users`, `mrns` and `benefits` work normally; no tooling
+    changes.
+
+    **Cons:** nothing separates the clinic's operational data from the benefit
+    pipeline's beyond naming. The requirement was explicitly not to "mess the main
+    tables"; a table sitting beside them satisfies the letter and not the intent.
+
+    **Verdict:** rejected.
+  </Accordion>
+
+  <Accordion title="A separate table in a separate `clinic` schema (chosen)">
+    **Pros:** the boundary is enforceable by a database role rather than
+    convention — the service can be granted `ALL` on `clinic.*` and `SELECT` on
+    only the `public` tables it reads. The queue's own status enum cannot collide
+    with or constrain the benefit statuses. Nothing in `public` references it, so
+    it can be moved to its own database later by relocating the schema.
+
+    **Cons:** it is the first non-`public` schema in the repo, and Diesel's
+    tooling is per-schema in two ways that are easy to miss.
+
+    **Verdict:** accepted.
+  </Accordion>
+</AccordionGroup>
+
+## Decision
+
+`clinic.clinic_queue`, in a new `clinic` schema, keyed by `benefit_entity_id` —
+the benefit instance's own id is the row's primary key.
+
+The queue tracks the **visit**; `benefit_entities.status` tracks the
+**entitlement**. Neither writes the other.
+
+Three consequences follow from the schema boundary, all of them load-bearing:
+
+1. **`diesel print-schema` is per-schema.** A bare run emits `public` only, so a
+   non-`public` table is silently absent from `schema.rs` — no error, just a
+   missing table. `just db-schema-update` carries a second `-s clinic` line
+   writing `clinic_schema.rs`.
+
+2. **There are no cross-schema joins, and there cannot be.**
+   `allow_tables_to_appear_in_same_query!` is emitted per schema, so pairing
+   `clinic.clinic_queue` with any `public` table needs cross-pair `TableNotEqual`
+   impls neither generated file will ever emit — it does not compile, and
+   patching a `@generated` file is clobbered on the next regen. So
+   `benefit_provider_id` is denormalised onto the row for tenant scoping, and
+   member details are resolved by separate queries.
+
+3. **The primary key is the idempotency mechanism.** Admission posts to a
+   caller-known key, so a redelivered event from an at-least-once consumer trips
+   the PK instead of queueing a member twice — no conflict handling, no
+   idempotency key, and an already-queued row is returned untouched rather than
+   reset.
+
+## Consequences
+
+<CardGroup cols={2}>
+  <Card title="Gained" icon="circle-check" color="#16a34a">
+    - A benefit-agnostic queue: insurance and health checkup queue identically, and future types come for free
+    - `PolicyStatus`, `BenefitEntityStatus` and the autopay preconditions are untouched
+    - Adding a workflow step costs one enum label, not a config migration across environments
+    - The clinic's data can be split to its own database later without a rewrite
+    - Idempotent admission with no bespoke machinery
+    - The schema owns its audit trail: `clinic.event_log` mirrors `public.event_log` and `clinic.event_logger()` writes to it, so the history travels with the schema when it moves, and a clinic row is never confused with a future `public.clinic_queue` row — the table it landed in *is* the schema
+  </Card>
+  <Card title="Trade-offs" icon="scale-balanced" color="#f59e0b">
+    - One queue entry per benefit instance **ever** — re-admitting after `COMPLETED` needs a delete or a third status
+    - The list is N+1 on the member lookup, bounded by the page limit
+    - A Superposition outage collapses the transition table to empty, which refuses every status write
+    - Reading the audit trail takes an explicit `?schema=` on `GET /admin/event_logs`: there is no single view over both tables, because a cross-schema union would undo the relocatability the separate table buys
+  </Card>
+</CardGroup>
+
+## Related
+
+- [Clinic Queue module](/modules/clinic_queue)
+- [Benefit Entities module](/modules/benefit_entity) — the entitlement ledger this deliberately does not extend
+- [ADR-007: Config-Driven Action Engine](/decisions/adr-007-config-driven-action-engine) — the Superposition traps that shaped the transition table's defaults

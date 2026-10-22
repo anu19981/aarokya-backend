@@ -19,7 +19,7 @@ The purchase flow has three steps:
 2. **Preview enrollment form** _(optional)_ — render the prospective enrollment-form PDF for in-app confirmation; read-only
 3. **Create** — purchase the policy; status starts as `PENDING`
 
-At creation time, the server also **auto-creates MRN records** for each covered dependant at the benefit's provider. The resulting mapping is stored in the policy's `metadata.dependant_mrn_map`.
+At creation time, when Superposition lists `CREATE_MRN` for the benefit, the server also **creates MRN records** for each covered member at the benefit's provider (see [MRN Creation](#mrn-creation)).
 
 After purchase, an admin reviews the policy (`PENDING → APPROVED`, or `PENDING → REJECTED`) and, once the external insurer issues a policy number, records issuance (`APPROVED → ISSUED`, supplying `external_policy_id` + `start_date` + `end_date`). The live in-force lifecycle (grace, renewal, reissuance, expiry) is then driven by the insurer's webhooks.
 
@@ -46,9 +46,11 @@ sequenceDiagram
         DB-->>API: UniqueViolation
         API-->>C: 409 IP_1008
     else First purchase
-        API->>DB: INSERT insurance_policy (status=PENDING)
-        API->>DB: CREATE MRN per dependant at benefit provider
-        DB-->>API: policy row + MRN map
+        opt CREATE_MRN configured for the benefit
+            API->>API: Resolve member MRNs at the benefit provider
+        end
+        API->>DB: INSERT MRN rows + insurance_policy (status=PENDING) in one transaction
+        DB-->>API: policy row
         API-->>C: 201 InsurancePolicyResponse
     end
 ```
@@ -94,18 +96,18 @@ The benefit's `benefit_details.plans` map is a free-form dictionary of `plan_cod
 
 Each `PlanVariant` carries:
 
-On the API surface each money field is an `AmountResponse` (`{ value, currency }`, major-unit float). They are stored in minor units (`MinorUnit`) and converted at the boundary.
+On the API surface each money field is an `AmountType` (`{ value, currency }`) carrying **exact minor units** — the same integer the database stores, so nothing is converted at the boundary.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `description` | string (optional) | Variant copy (e.g. "Self + Spouse + 1 Child") |
-| `daily_premium_amount` | AmountResponse | Daily premium |
-| `annual_premium_amount` | AmountResponse | Annual premium |
-| `coverage_amount` | AmountResponse | Sum insured |
+| `daily_premium_amount` | AmountType | Daily premium |
+| `annual_premium_amount` | AmountType | Annual premium |
+| `coverage_amount` | AmountType | Sum insured |
 | `grace_period_days` | integer (optional) | Days after expiry during which renewal is still possible |
 | `nominee_required` | boolean | Whether a nominee must be supplied to purchase this variant |
 
-On every response, `premium_amounts` is serialized with each money field as an `AmountResponse` (`{ value, currency }`, major-unit float) — `{ daily, annual, sponsor_contribution }`. The `sponsor_contribution` is resolved at preview/create time (a sponsored subsidy; `0` when there is none). Coverage and grace period are not part of `premium_amounts`; they are re-derived from the matched variant when needed (e.g. by the document renderer).
+On every response, `premium_amounts` is serialized with each money field as an `AmountType` (`{ value, currency }`, exact minor units) — `{ daily, annual, sponsor_contribution }`. The `sponsor_contribution` is resolved at preview/create time (a sponsored subsidy; `0` when there is none). Coverage and grace period are not part of `premium_amounts`; they are re-derived from the matched variant when needed (e.g. by the document renderer).
 
 ### Policy Status Lifecycle
 
@@ -203,7 +205,7 @@ sequenceDiagram
 - Validates the nominee per plan: required when the matched variant's `nominee_required` flag is `true` (surfaced as `nominee_required` in the premium-preview response — do not infer it from the plan code). Missing returns **400 `IP_1015 NomineeRequiredForPlan`**. When a nominee is present — on any plan — it must be the policyholder's spouse (`relationship = SPOUSE`), else **400 `IP_1010`**.
 - Reads `daily_premium_amount` / `annual_premium_amount` / `coverage_amount` / `currency` / `grace_period_days` from the matched variant (no on-the-fly bracket calc).
 - Renders the enrollment-form PDF directly from the resolved data.
-- **No** `INSERT` / `UPDATE` against `insurance_policies` or `mrns`. **No** Narayana `find_or_register_patients` call.
+- **No** `INSERT` / `UPDATE` against `insurance_policies` or `mrns`. **No** Narayana patient lookup or registration.
 
 **Request body**
 
@@ -449,12 +451,7 @@ curl -X POST http://localhost:8080/users/USER_ID/insurance_policies \
       { "question": "Have you ever been diagnosed with cancer?", "answer": false }
     ]
   },
-  "metadata": {
-    "dependant_mrn_map": {
-      "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60099": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60020",
-      "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60001": "01926b3a-7c2e-7d4f-a1b2-c3d4e5f60021"
-    }
-  },
+  "metadata": null,
   "status": "PENDING",
   "created_at": "2026-04-13T10:00:00",
   "last_modified_at": "2026-04-13T10:00:00",
@@ -536,11 +533,11 @@ The preview response returns a unified `members` array of `MemberDetail` objects
 | `gender` | enum | `MALE`, `FEMALE`, `OTHER` |
 | `relationship` | enum | Relationship to the primary user: `SELF`, `SPOUSE`, `MOTHER`, `FATHER`, `CHILD`, `FATHER_IN_LAW`, `MOTHER_IN_LAW`, `SIBLING` |
 
-### MRN Auto-Creation
+### MRN Creation
 
-When a policy is created, the server automatically creates one MRN record per covered dependant at the benefit's provider. The `metadata.dependant_mrn_map` field maps each dependant ID to its newly created MRN ID.
+MRN creation is a **config-selected create side effect**: it runs only when Superposition's `benefit.create_side_effects` lists `CREATE_MRN` for the benefit. Unconfigured, the policy is created with no MRN rows. See [ADR-011](/decisions/adr-011-config-selected-benefit-side-effects).
 
-For each member without an existing MRN at this provider, the server calls the upstream insurance provider (currently **Narayana Health**) to look up the patient by name + DOB; if not found, it registers a new patient under the primary user's phone. The returned `external_mrn` (`temp_number` and/or `mrn`) is persisted on the new MRN row. If a member already has an MRN row at this provider it is reused as-is, with no upstream call.
+When configured, a member with an active MRN row at this provider reuses it, with no upstream call. The rest go to the provider (currently **Narayana Health**) in one batch under the primary user's phone: an existing patient is matched on name (date of birth breaks ties), otherwise a new patient is registered with the primary user's pincode. The returned `external_mrn` (`temp_number` and/or `mrn`) is written in the same transaction as the policy.
 
 <Warning>
   Narayana only accepts `MALE` / `FEMALE` for patient gender. Members with `gender = OTHER` cause policy creation to fail with **400 IP_1013** — update the dependant's gender before retrying. Upstream registration failures (timeout, 5xx) surface as **502 IP_1014** and the entire policy creation is rolled back.
@@ -560,7 +557,7 @@ For each member without an existing MRN at this provider, the server calls the u
 | `IP_1005` | 404 | Dependant not found or inactive |
 | `IP_1006` | 400 | Dependant does not belong to the requesting user |
 | `IP_1007` | 404 | Nominee dependant not found or inactive |
-| `IP_1008` | 409 | User already has an active policy for this benefit |
+| `IP_1008` | 409 | User already has an active policy for this benefit. Under a non-`NO_OP` `benefit.if_availed`, the availability gate answers first with `403 IP_1022` |
 | `IP_1009` | 400 | Plan variant not available — the derived `plan_code` is not a sellable combination for this benefit |
 | `IP_1010` | 400 | Validation error (e.g. nominee is not a `SPOUSE`) |
 | `IP_1011` | 400 | Invalid UUID in request |
@@ -574,3 +571,4 @@ For each member without an existing MRN at this provider, the server calls the u
 | `IP_1019` | 400 | Policy documents are not available for this policy yet (e.g. still `PENDING`/`REJECTED`) |
 | `IP_1020` | 400 | Reserved — no longer emitted (CIS is now a static download); kept for the error-code contract |
 | `IP_1021` | 400 | Invalid status transition on `PATCH .../status` — the `from`/`to` pair is not allowed |
+| `IP_1022` | 403 | The benefit's `benefit.*` availability rules refuse it for this user — see `GET /benefits/available` |

@@ -4,21 +4,27 @@ description: "Recurring-debit mandate registration and lifecycle via Juspay/Eule
 ---
 
 <Info>
-  **Auth guards** are per-route. User-facing routes (register, status, list,
-  active, pause, resume, revoke) use `require_self_or_trusted_backend` — the
-  user themselves (`jwt.sub == user_id`) or a trusted backend / admin. The
-  admin-pinned lifecycle routes (`update`, `start`) and the cross-user list
-  (`/admin/mandates`) require an admin actor.
+  **Auth guards** are per-route. User-facing routes (register, status, active,
+  pause, resume, revoke) use `require_self_or_trusted_backend` — the user
+  themselves (`jwt.sub == user_id`) or a trusted backend / admin. `update`
+  requires an admin actor. `start` requires a **callback service or an admin**:
+  autopay is started automatically once the mandate is registered and the benefit
+  it funds is active, so the mandate's own holder is still refused.
+  `GET /mandates` serves both audiences: an app token has its own `user_id`
+  injected into the filter server-side and can only ever see its own rows;
+  everyone else is admin-gated and may filter freely.
 </Info>
 
 <Note>
-  **One live mandate per user.** A user may hold **at most one** *live* mandate
+  **One live mandate per goal.** A goal may hold **at most one** *live* mandate
   at a time — `PENDING`, `CREATED`, `ACTIVE`, `LIVE`, `PAUSED`, or
   `EXTERNALLY_PAUSED`. This is enforced by an application-level check before
-  insert (no DB constraint). `INITIATED` rows (a registration started but never
-  completed on the payment page) and terminal `FAILED` / `CANCELLED` /
-  `COMPLETED` rows do **not** count and can stack freely. A second `register`
-  while a live mandate exists returns `409 ME_1207`.
+  insert (no DB constraint), scoped to the goal's own HSA pool since goal↔HSA is
+  1:1 — so a user with several goals holds one live mandate per goal.
+  `INITIATED` rows (a registration started but never completed on the payment
+  page) and terminal `FAILED` / `CANCELLED` / `COMPLETED` rows do **not** count
+  and can stack freely. Registering again while the goal already has a live
+  mandate returns that mandate as-is (200), not a conflict.
 </Note>
 
 ## Overview
@@ -48,55 +54,37 @@ Autopay execution itself (the `/txns` debit + reconciliation) lives in the
 ## Endpoints
 
 <CardGroup cols={2}>
-  <Card title="POST /users/{user_id}/mandate/register" icon="plus" color="#16a34a" href="/api/endpoints/mandate/register">
-    Open a Juspay session (legacy, flat-rupee amounts). Returns `payload` for the frontend SDK / redirect.
+  <Card title="POST /mandates/{mandate_id}/sync" icon="magnifying-glass" color="#16a34a" href="/api/endpoints/mandate/sync">
+    Re-poll Juspay and write the refreshed row back. The mandate UUID resolves the row.
   </Card>
-  <Card title="POST /users/{user_id}/mandates/register" icon="plus" color="#16a34a" href="/api/endpoints/mandate/register-v2">
-    Same flow as register, but the response carries `AmountResponse` (value + currency) instead of flat rupees.
+  <Card title="GET /mandates" icon="list" color="#16a34a" href="/api/endpoints/mandate/list">
+    Paginated, currency-aware mandate list. App tokens are scoped to self; admins may filter by `user_id`, `mandate_id` (the internal `id`, not the Juspay reference in the response's `mandate_id`), `statuses`, `frequency` and a `created_at` window.
   </Card>
-  <Card title="GET /users/{user_id}/mandate/order_status/{id}" icon="magnifying-glass" color="#16a34a" href="/api/endpoints/mandate/order-status">
-    Poll a mandate's status by its UUID `id`. Always queries Juspay (legacy flat-amount shape).
-  </Card>
-  <Card title="POST /users/{user_id}/mandates/{mandate_id}/status" icon="magnifying-glass" color="#16a34a" href="/api/endpoints/mandate/check-status">
-    Refresh a mandate from Juspay, currency-aware `MandateResponse`.
-  </Card>
-  <Card title="GET /users/{user_id}/mandates/active" icon="circle-check" color="#16a34a" href="/api/endpoints/mandate/active">
-    Fetch the user's single live mandate. DB-only, no Juspay round-trip. `404 ME_1208` when there is none.
-  </Card>
-  <Card title="GET /users/{user_id}/mandates" icon="list" color="#16a34a" href="/api/endpoints/mandate/list">
-    Paginated, currency-aware list of the user's mandates.
-  </Card>
-  <Card title="GET /users/{user_id}/mandate_orders" icon="list" color="#16a34a" href="/api/endpoints/mandate/list-orders">
-    Legacy list — no pagination, flat-amount items.
-  </Card>
-  <Card title="POST /users/{user_id}/mandates/{mandate_id}" icon="pen" color="#7c3aed" href="/api/endpoints/mandate/update">
+  <Card title="POST /mandates/{mandate_id}" icon="pen" color="#7c3aed" href="/api/endpoints/mandate/update">
     Admin: set `mandate_status` directly (validated against the state machine).
   </Card>
-  <Card title="POST /users/{user_id}/mandates/{mandate_id}/start" icon="play" color="#7c3aed" href="/api/endpoints/mandate/start">
+  <Card title="POST /mandates/{mandate_id}/start" icon="play" color="#7c3aed" href="/api/endpoints/mandate/start">
     Admin: activate autopay — `→ LIVE`, schedules the Kronos job, stamps `job_id`.
   </Card>
-  <Card title="POST /users/{user_id}/mandates/{mandate_id}/pause" icon="pause" color="#16a34a" href="/api/endpoints/mandate/pause">
+  <Card title="POST /mandates/{mandate_id}/pause" icon="pause" color="#16a34a" href="/api/endpoints/mandate/pause">
     Pause a live mandate — cancels the Kronos job, `→ PAUSED`.
   </Card>
-  <Card title="POST /users/{user_id}/mandates/{mandate_id}/resume" icon="play" color="#16a34a" href="/api/endpoints/mandate/resume">
+  <Card title="POST /mandates/{mandate_id}/resume" icon="play" color="#16a34a" href="/api/endpoints/mandate/resume">
     Resume a paused mandate — schedules a fresh Kronos job, `→ LIVE`.
   </Card>
-  <Card title="POST /users/{user_id}/mandates/{mandate_id}/revoke" icon="ban" color="#16a34a" href="/api/endpoints/mandate/revoke">
+  <Card title="POST /mandates/{mandate_id}/revoke" icon="ban" color="#16a34a" href="/api/endpoints/mandate/revoke">
     Revoke at Juspay then re-sync — `→ CANCELLED`, tears down the Kronos job.
-  </Card>
-  <Card title="GET /admin/mandates" icon="users" color="#7c3aed" href="/api/endpoints/mandate/admin-list">
-    Admin cross-user list. `user_id` is an optional query filter, not a path label.
   </Card>
 </CardGroup>
 
 <Note>
-  Two register endpoints exist. **Legacy** `POST /users/{user_id}/mandate/register`
-  returns flat `i64` rupee amounts (no currency envelope). **V2**
-  `POST /users/{user_id}/mandates/register` returns the same flow with
-  `AmountResponse` (value + currency). Likewise the **legacy** status poll
-  `GET …/mandate/order_status/{id}` and list `GET …/mandate_orders` return
-  flat-amount shapes; new integrations should use `POST …/mandates/{id}/status`
-  and `GET …/mandates` for the paginated, currency-aware shapes.
+  Every mandate route is keyed on the mandate UUID alone — no `{user_id}` in the path.
+  Ownership is asserted server-side against the mandate row, so a caller cannot reach
+  another user's mandate by guessing an id. Mandate **registration** and
+  **active-mandate discovery** are the exception: they are goal-scoped, see `POST /goals/{goal_id}/mandate/register` and
+  `GET /goals/{goal_id}/mandate/active` in the [Goal Module](./goal). A mandate
+  binds to the goal's own HSA pool, so a user with several goals holds one live
+  mandate per goal.
 </Note>
 
 ---
@@ -105,18 +93,16 @@ Autopay execution itself (the `/txns` debit + reconciliation) lives in the
 
 | Identifier | Shape | Where it comes from | Where it's used |
 |---|---|---|---|
-| `id` (primary key) | UUID v7 | Generated server-side on register | The mandate's id. **Also** the value sent to Juspay as their `order_id`, and the path param for the legacy status poll. |
+| `id` (primary key) | UUID v7 | Generated server-side on register | The mandate's id. **Also** the value sent to Juspay as their `order_id`, and the path param for the status poll. |
 | `mandate_id` | Juspay-issued string | Returned by Juspay after the user completes the SDK flow | Stored on the row once known. Required for autopay execution and provider-side revoke. |
-| `account_id` | UUID | Looked up server-side (user's active PBA account) | The HSA account the autopay debit draws from. |
+| `account_id` | UUID | The goal's own HSA pool (goal↔HSA is 1:1) | The HSA account the autopay debit draws from. |
 | `job_id` | Kronos job id | Stamped on a successful `start`/`resume` | Cleared on `pause`/`revoke`. Null until the mandate is `LIVE`. |
 | `start_date` / `end_date` | ISO-8601 string (nullable) | Populated by Juspay after the mandate is active | Null until Juspay returns them. |
 
 <Warning>
-  The path routes are split: the **status-poll** routes are keyed on the
-  internal UUID `id` (the legacy route's `{id}`, or the V2 route's
-  `{mandate_id}` which is also the internal UUID `mandates.id`), **not** the
-  Juspay-issued `mandate_id` string. The internal `id` is the value sent to
-  Juspay as `order_id`.
+  Every route's `{mandate_id}` is the internal UUID `mandates.id`, **not** the
+  Juspay-issued `mandate_id` string carried in the response body. The internal
+  id is also the value sent to Juspay as `order_id`.
 </Warning>
 
 ---
@@ -127,9 +113,8 @@ Autopay execution itself (the `/txns` debit + reconciliation) lives in the
   order amount comes from config (`mandate.order_amount`, in paise) and the
   per-debit ceiling (`mandate_max_amount`) and `frequency` come from Superposition
   (overridable per user via a targeting key).
-- The **legacy** register/status/list shapes return flat `i64` rupee amounts.
-  The **V2 / currency-aware** shapes return `AmountResponse` — `{ value, currency }`,
-  where `value` is a major-unit float.
+- Every amount is an `AmountType` — `{ value, currency }`, where `value` is an
+  **exact integer in minor units** (paise). `{ "value": 9999 }` is ₹99.99.
 - Juspay's wire format is a decimal rupee string — the backend converts at the
   Juspay client boundary.
 
@@ -198,7 +183,7 @@ sequenceDiagram
     participant Aarokya as Aarokya API
     participant Juspay as Juspay
 
-    App->>Aarokya: POST /mandates/register (no body)
+    App->>Aarokya: POST /goals/{goal_id}/mandate/register (no body)
     Aarokya->>Juspay: POST /session (amount + max_amount + frequency from config)
     Juspay-->>Aarokya: sdk_payload, payment_links, ...
     Aarokya-->>App: 201 id, payload, mandate_status INITIATED
@@ -206,15 +191,21 @@ sequenceDiagram
     Note over App,Juspay: User authorizes mandate on Juspay's payment page
 
     loop Poll until terminal
-        App->>Aarokya: POST /mandates/{id}/status
+        App->>Aarokya: POST /mandates/{id}/sync
         Aarokya->>Juspay: GET /orders/{id}
         Juspay-->>Aarokya: status, mandate mandate_id mandate_status ...
         Aarokya-->>App: 200 mandate_status, mandate_id, external_*_status, ...
     end
 ```
 
-Once `mandate_status` reaches `ACTIVE`/`CREATED`, an operator calls `start` to
-activate autopay.
+Once `mandate_status` reaches `CREATED`, `start` activates autopay. It is normally
+called for you: the Auto Mandate Starter fires it as soon as both preconditions hold —
+the mandate is `CREATED`, and the benefit entity its goal funds is `ACTIVE`. Whichever
+of the two happens second triggers the call. An operator can also call it directly.
+
+`start` refuses a `→ LIVE` transition while that benefit entity is not `ACTIVE`
+(400, `BenefitEntityNotActive`). The guard applies to `resume` and `update` too, since
+all three target `LIVE`.
 
 ---
 
@@ -223,43 +214,51 @@ activate autopay.
 | Field | Rule |
 |---|---|
 | path `user_id` | Must equal `jwt.sub` for self-auth, or carry a trusted-backend/admin actor. |
-| path `id` (legacy status) | The mandate UUID (also the value sent to Juspay as `order_id`), not the Juspay-issued `mandate_id` string. |
+| path `mandate_id` (status) | The mandate UUID (also the value sent to Juspay as `order_id`), not the Juspay-issued `mandate_id` string. |
 | `update` body `mandate_status` | Required. Validated against the state machine. |
 
-Also: the user must have an active PBA-backed (HSA) account (else `400 ME_1204`)
-and a non-null `email` (the Juspay session needs it; else `400 ME_1205`).
+Also: the user must have a non-null `email` (the Juspay session needs it; else
+`400 ME_1205`).
 
 ---
 
 ## Error responses
 
+<Note>
+  These `ME_*` numbers are **internal identifiers**, not the `code` on the wire.
+  Routes return `AarokyaAppError`, so the response `code` is the generic `AE_*`
+  class code and the `ME_*` number reaches you only inside the message. Match on
+  status and message, never on `code`.
+</Note>
+
 | Code | Status | Error | Situation |
 |---|---|---|---|
 | `ME_1200` | 500 | Internal error | Unexpected failure |
-| `ME_1201` | 404 | Mandate not found | Mandate `id` doesn't exist or doesn't belong to `user_id` |
-| `ME_1202` | 404 | User not found | JWT valid but user row deleted |
-| `ME_1203` | 404 | Account not found | `account_id` doesn't exist |
-| `ME_1204` | 400 | HSA account required | User has no PBA-backed (HSA) account — onboarding incomplete |
+| `ME_1201` | 404 | Mandate not found | Mandate `id` doesn't exist |
+| `ME_1202` | 404 | User not found | *Reserved — no longer emitted.* |
+| `ME_1203` | 404 | Account not found | *Reserved — no longer emitted.* |
+| `ME_1204` | 400 | HSA account required | *Reserved — no longer emitted.* |
 | `ME_1205` | 400 | Validation error | Bad input (e.g. missing user email for the Juspay session) |
 | `ME_1206` | 500 | Provider unavailable | Juspay returned 5xx or timed out |
-| `ME_1207` | 409 | Mandate already exists | User already has a live mandate; only one is allowed |
-| `ME_1208` | 404 | No active mandate | `GET /mandates/active` — user has no live mandate |
+| `ME_1207` | 409 | Mandate already exists | *Reserved — no longer emitted.* The goal rail returns the existing mandate instead. |
+| `ME_1208` | 404 | No active mandate | *Reserved — no longer emitted.* The goal rail raises its own not-found. |
 | `ME_1209` | 404 | Mandate not found by mandate_id | Juspay `mandate_id` lookup miss |
 | `ME_1210` | 400 | Invalid status transition | The requested `from → to` transition isn't allowed |
 | `ME_1211` | 400 | Unknown provider status | Mandate is in `OTHER` — reconcile at the provider first |
 | `ME_1212` | 500 | Missing mandate block | Order-status response lacked the mandate block |
 | `ME_1213` | 500 | Invalid Juspay datetime | Malformed datetime in the Juspay response |
 | `ME_1214` | 400 | Mandate not completed | Setup not completed on the payment provider (caller-recoverable) |
+| `ME_1215` | 400 | Goal not active | *Reserved — no longer emitted.* The `→ LIVE` precondition moved onto the benefit entity. |
+| `ME_1216` | 400 | Benefit entity not active | A `→ LIVE` target (`start` / `resume` / `update`) whose funded benefit entity is not `ACTIVE` |
 
 ---
 
 ## Gotchas
 
 <Warning>
-  The status-poll routes **always** hit Juspay. There is no server-side
+  The status-poll route **always** hits Juspay. There is no server-side
   short-circuit once `mandate_status` becomes `ACTIVE`/`LIVE`. The frontend is
-  responsible for stopping polling at a terminal status. (`GET /mandates/active`
-  is the exception — it is DB-only.)
+  responsible for stopping polling at a terminal status.
 </Warning>
 
 <Info>

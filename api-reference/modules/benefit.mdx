@@ -21,11 +21,12 @@ Responses always include `provider_name` via a JOIN — callers never need a sep
 |----------------|--------------------------|-------------|
 | `CONSULTATION` | `CONSULTATION { description? }` | Teleconsultation or in-person doctor consultation |
 | `INSURANCE_POLICY` | `INSURANCE_POLICY { description?, duration, plans, questionnaire? }` | Health, life, or accident insurance |
+| `HEALTH_CHECKUP` | `HEALTH_CHECKUP { description? }` | Free health checkup. Shares its details shape with `CONSULTATION` — neither has terms of its own. |
 
 Type and details must be consistent at create time — a mismatch returns `BE_503`. (`update_benefit` does not re-validate this consistency.)
 
 <Note>
-  `benefit_details` is a serde-tagged enum. The discriminator key is `benefit_type` and its value is the SCREAMING_SNAKE_CASE variant name (`CONSULTATION` / `INSURANCE_POLICY`) — the same value as the sibling `benefit_type` column.
+  `benefit_details` is a serde-tagged enum. The discriminator key is `benefit_type` and its value is the SCREAMING_SNAKE_CASE variant name (`CONSULTATION` / `INSURANCE_POLICY` / `HEALTH_CHECKUP`) — the same value as the sibling `benefit_type` column. `CONSULTATION` and `HEALTH_CHECKUP` share one details shape (`BasicBenefitDetails`) but stay distinct variants — the tag is what tells them apart.
 </Note>
 
 ### Insurance policy details
@@ -56,6 +57,7 @@ flowchart LR
 |----------|-------|-------|
 | `POST /benefits` | `require_benefit_provider_strict(false, provider_id)` | Admin, or BP scoped to the payload's provider; provider must be active |
 | `GET /benefits` | none (any authenticated actor) | App users forced to active-only |
+| `GET /benefits/available` | none (any authenticated actor) | Admins and app users both; no `user_id` on the wire |
 | `GET /benefits/{benefit_id}` | none (any authenticated actor) | App users get 404 for inactive |
 | `PATCH /benefits/{benefit_id}` | `require_benefit_provider(false)` then strict on the resolved provider | Admin or benefit provider |
 | `DELETE /benefits/{benefit_id}` | `require_benefit_provider(false)` then strict on the resolved provider | Sets `status → INACTIVE` |
@@ -66,10 +68,13 @@ flowchart LR
 
 <CardGroup cols={2}>
   <Card title="POST /benefits" icon="plus" color="#16a34a" href="/api/endpoints/benefits/create">
-    Create a benefit. Provider must exist and be active.
+    Create a benefit. Provider must exist and be active. `requirements` is required; send `[]` for none.
   </Card>
   <Card title="GET /benefits" icon="list" color="#3b82f6" href="/api/endpoints/benefits/list">
     List benefits. App users see only `ACTIVE` ones. Filter by `provider_id`, `benefit_type`, `status`.
+  </Card>
+  <Card title="GET /benefits/available" icon="circle-check" color="#3b82f6" href="/api/endpoints/benefits/available">
+    Benefits the caller can avail right now. Unpaginated.
   </Card>
   <Card title="GET /benefits/{benefit_id}" icon="stethoscope" color="#3b82f6" href="/api/endpoints/benefits/get">
     Fetch a benefit by UUID. App users receive 404 for inactive benefits.
@@ -84,9 +89,65 @@ flowchart LR
 
 ---
 
+## Availability vs. the catalogue
+
+`GET /benefits` is the catalogue: it answers what *exists*. `GET /benefits/available`
+answers what the calling user can *act on*. The two are adjacent and the word
+"available" does double duty — for an app user the catalogue is already forced to
+`status = ACTIVE` — so read them as **exists** vs **can avail**.
+
+<Warning>
+`total` on this endpoint is the count of benefits **returned**, not the size of the
+catalogue. The endpoint is unpaginated: the availability filter runs after the read,
+so a page would be ragged and its `total` wrong. The read is capped well above any
+realistic catalogue size, and the server logs a warning if that cap is ever reached.
+</Warning>
+
+### How availability is decided
+
+Every benefit carries five Superposition keys, overridable per `benefit_type` or `benefit_id`:
+
+| Key | Default | Effect |
+|---|---|---|
+| `benefit.enabled` | `true` | `false` removes the benefit from the list |
+| `benefit.availed_statuses` | `CREATED`, `APPROVED`, `ACTIVE`, `COMPLETED`, `REJECTED` | Benefit-entity statuses that count as availed |
+| `benefit.if_availed` | `NO_OP` | Once availed: `FILTER` removes it, `GREY_OUT` lists it as not available again, `NO_OP` lists it as available |
+| `benefit.blocks` | `[]` | Once this benefit is availed, every listed benefit id is removed |
+| `benefit.requires` | `[]` | Listed only when every one of these benefit ids is availed |
+
+For an app user they apply in that order against the user's own benefit entities.
+An admin names the user in the `x-user-id` header and sees that user's availability; without it the request is rejected with `400`. Other callers with no user of their own are rejected with `400`.
+
+Each entry wraps the benefit and adds the caller's relationship to it:
+
+```jsonc
+{
+  "benefit": { "id": "...", "name": "...", "benefit_type": "INSURANCE_POLICY" },
+  "is_availed": true,
+  "can_be_availed": false
+}
+```
+
+<Note>
+The same rules gate creation — `POST /users/{user_id}/insurance_policies` (`IP_1022`),
+`POST /users/{user_id}/consultations` (`CN_1617`) and `POST /benefit_entities`
+(`BEE_1706`): a benefit the list would not offer as available is refused with `403`.
+`benefit.enabled = false` blocks creation too.
+</Note>
+
+An empty result is a `200` with `data: []`, never a `404` — "you can avail nothing
+right now" is an answer, not an error.
+
+---
+
 ## Request / Response Examples
 
 <CodeGroup>
+```bash List available benefits
+curl http://localhost:8080/benefits/available \
+  -H 'Authorization: Bearer eyJhbGci...token...'
+```
+
 ```bash Create a benefit
 curl -X POST http://localhost:8080/benefits \
   -H 'Authorization: Bearer eyJhbGci...oidc-token...' \
@@ -99,7 +160,8 @@ curl -X POST http://localhost:8080/benefits \
     "benefit_details": {
       "benefit_type": "CONSULTATION",
       "description": "One free general physician consultation per month"
-    }
+    },
+    "requirements": []
   }'
 ```
 

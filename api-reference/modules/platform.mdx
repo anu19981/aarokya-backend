@@ -4,16 +4,17 @@ description: "Tenant management — each platform represents a partner integrati
 ---
 
 <Info>
-  **Auth guard:** bearer JWT (`Authorization: Bearer <jwt>`). Platform CRUD requires an admin actor; per-tenant credential and dashboard-user sub-resources also admit a platform user scoped to the same `platform_id`.
+  **Auth guard:** bearer JWT (`Authorization: Bearer <jwt>`). Platform CRUD requires an admin actor; `GET /platforms` also admits an app token, scoped to its own platforms. Per-tenant credential and dashboard-user sub-resources also admit a platform user scoped to the same `platform_id`.
 </Info>
 
 ## Overview
 
-A **platform** is a logical tenant — it represents a partner app integrated with Aarokya (e.g. Namma Yatri, a hospital chain). Each platform can hold one or more service-account *credentials* (used by the partner backend to mint tokens) and one or more dashboard *users* (humans who manage the tenant). End-users authenticated via [`POST /auth/token`](/modules/auth) carry the issuing `platform_id` in their token.
+A **platform** is a logical tenant — it represents a partner app integrated with Aarokya (e.g. Namma Yatri, a hospital chain). Each platform can hold one or more service-account *credentials* (used by the partner backend to mint tokens) and one or more dashboard *users* (humans who manage the tenant). End-users authenticated via [`POST /auth/token`](/modules/auth) carry the issuing `platform_id` in their token. One user can belong to several platforms — each login writes a [`platform_users`](/modules/platform_user) row for that pair.
 
 - **Name uniqueness is scoped to active platforms.** A deleted platform's name can be reused.
 - **`slug` is immutable.** Set at creation, lowercase `[a-z0-9-]{2,40}`, used to build the Keycloak service-account `clientId`.
 - **`address` is required on create.** A **structured** address object (`line1`, `line2`, `city`, `state`, `pincode`, `country`). It is the tenant-level **fallback address** printed on insurance documents when a user under this platform has no address of their own — because it is mandatory, an insurance address always resolves. Required on `POST /platforms`; optional on `PATCH` (omitting it leaves the stored value unchanged).
+- **`bank_details` is required on create.** The platform's origin bank (`ifsc_code` + `account_number`). It is persisted as the platform's own `accounts` row (`holder = platform:<id>`, `account_type = SAVINGS`) in the same transaction as the platform, and quoted as the source bank of a customer-tip deposit — which is what makes the ledger book that money to a user's *others* pool rather than their own. Not echoed on `PlatformResponse` and not updatable; read it from `GET /accounts?holder=platform:<id>`.
 - **Soft delete via status.** Deleting a platform sets `status → INACTIVE`; it does not remove the row.
 
 ---
@@ -36,8 +37,8 @@ A platform is created with no credentials. An admin (or a platform user scoped t
 
 | Endpoint | Guard | Notes |
 |----------|-------|-------|
-| `POST /platforms` | Admin | Name must be unique among active platforms |
-| `GET /platforms` | Admin (read-only admin OK) | Filter by `status` |
+| `POST /platforms` | Admin | Name must be unique among active platforms; also mints the platform's origin-bank account |
+| `GET /platforms` | Admin (read-only admin OK), or app user | Filter by `status`, `platform_ids`. An app token sees only its own platforms, narrowed to the token's platform; `platform_ids` cannot widen that |
 | `GET /platforms/{id}` | Admin, or platform actor for this `id` | |
 | `PATCH /platforms/{id}` | Admin | `name` and/or `address` updatable |
 | `DELETE /platforms/{id}` | Admin | Sets `status → INACTIVE` |
@@ -59,7 +60,7 @@ A platform is created with no credentials. An admin (or a platform user scoped t
     Create a new platform (`name` + `slug`). Returns 201. No credentials are minted yet.
   </Card>
   <Card title="GET /platforms" icon="list" color="#3b82f6" href="/api/endpoints/platforms/list">
-    Paginated list. Filter by `status`.
+    Paginated list. Filter by `status` and `platform_ids`. An app token sees only its own platforms.
   </Card>
   <Card title="GET /platforms/{id}" icon="server" color="#3b82f6" href="/api/endpoints/platforms/get">
     Fetch a single platform by UUID.
@@ -119,6 +120,10 @@ curl -X POST http://localhost:8080/platforms \
           "state": "Karnataka",
           "pincode": "560103",
           "country": "IN"
+        },
+        "bank_details": {
+          "ifsc_code": "HDFC0000001",
+          "account_number": "50123456789"
         }
       }'
 ```
@@ -153,7 +158,17 @@ curl -X POST http://localhost:8080/platforms/0190b6c2-7e3a-7c6e-9b1d-2f4a8c1e5d3
   "basic_token": "cGxhdGZvcm0tbmFtbWEteWF0cmkt..."
 }
 ```
+
+```bash List an app user's platforms
+curl "http://localhost:8080/platforms?platform_ids=0190b6c2-7e3a-7c6e-9b1d-2f4a8c1e5d33" \
+  -H 'Authorization: Bearer <app-jwt>'
+```
+
 </CodeGroup>
+
+<Note>
+  An app token sees a platform only while it has an `ACTIVE` `platform_users` row there, and only the platform its token was issued for. The token's platform wins over `platform_ids`: naming another platform does not widen the list.
+</Note>
 
 <Warning>
   `basic_token` is returned **only** by `POST /credentials` and is never retrievable again. `GET /credentials` returns `credential_id`s only — no secrets.

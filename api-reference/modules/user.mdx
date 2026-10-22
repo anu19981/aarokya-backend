@@ -15,19 +15,19 @@ User rows are **created by the Auth module** on first `POST /auth/token`. This m
 
 ## Onboarding Flow
 
-New users start with `status = ONBOARDING`. Calling `POST /users/{user_id}/complete_onboarding` transitions them to `ACTIVE` and returns a fresh JWT.
+New users start with `status = ONBOARDING`. Calling `POST /users/{user_id}/add_details` transitions them to `ACTIVE` and returns a fresh JWT.
 
 ```mermaid
 flowchart LR
     A[POST /auth/token<br/>first call] --> B[status = ONBOARDING]
-    B --> C[POST /users/id/complete_onboarding<br/>submit required fields]
+    B --> C[POST /users/id/add_details<br/>submit remaining fields]
     C --> D[status = ACTIVE<br/>fresh JWT returned]
 ```
 
-Required fields for `complete_onboarding`: `salutation`, `first_name`, `last_name`, `dob`, `gender`, `address`, and `bank_details` (`ifsc_code` + `account_number`). `email` is optional. Submitting these also seeds the user's accounts and creates the system-managed `SELF` dependant.
+Every `add_details` field is optional and is merged over what `POST /auth/token` already stored. Onboarding completes once `first_name`, `gender` and `dob` are all present; until then the call returns `400` naming the missing fields and writes nothing, so the client can re-submit. `last_name`, `email`, `occupation`, `id_proof`, `address` and `bank_details` (`ifsc_code` + `account_number`) are optional — `bank_details` also creates the user's SAVINGS account. Salutation is deduced from `gender`, never sent. Completing onboarding also creates the system-managed `SELF` dependant.
 
 <Note>
-`PATCH /users/{user_id}` is **not** part of the onboarding path — an app user can only `PATCH` once they are `ACTIVE`. While `ONBOARDING`, profile fields are submitted through `complete_onboarding`.
+`PATCH /users/{user_id}` is **not** part of the onboarding path — an app user can only `PATCH` once they are `ACTIVE`. While `ONBOARDING`, profile fields are submitted through `add_details`.
 </Note>
 
 ---
@@ -37,9 +37,10 @@ Required fields for `complete_onboarding`: `salutation`, `first_name`, `last_nam
 | Endpoint | JWT user | Admin key | Notes |
 |----------|----------|-----------|-------|
 | `GET /users` | — | ✓ | Admin only (`require_admin`, readonly admin allowed) |
+| `GET /users/details/basic` | ✓ own only | ✓ | Admin, contributor, app user, dashboard user or platform service — filters pinned to the token (below) |
 | `GET /users/{user_id}` | ✓ | ✓ | No per-handler owner check — see note below |
 | `PATCH /users/{user_id}` | ✓ own only | ✓ | App user must be `ACTIVE` and own the record |
-| `POST /users/{user_id}/complete_onboarding` | ✓ own only | — | App user must own the record and be `ONBOARDING`; caller must be platform-associated |
+| `POST /users/{user_id}/add_details` | ✓ own only | — | App user must own the record and be `ONBOARDING`; caller must be platform-associated |
 | `DELETE /users/{user_id}` | — | ✓ | Admin only (non-readonly) |
 
 <Note>
@@ -58,6 +59,7 @@ filters are **case-insensitive prefix** matches (`starts-with`), not substring.
 | `name` | Prefix of the **first name**, **last name**, or **full name** (`first last`), case-insensitive | `?name=ravi`, `?name=ravi%20kumar` |
 | `phone` | Phone number prefix (local number, no country code) | `?phone=9876` |
 | `user_id` | 12-digit user-id prefix (partial ids accepted) | `?user_id=0123` |
+| `platform_id` | Users with an **ACTIVE** membership on this platform (exact UUID) | `?platform_id=0194e0f3-4b2a-7123-8f4a-9d5e2c8b1a3d` |
 | `statuses` | Comma-separated `UserStatus` (`IN (...)`) | `?statuses=ACTIVE,ONBOARDING` |
 | `start_time` / `end_time` | `created_at` range | `?start_time=2026-01-01T00:00:00` |
 | `sort_on` / `sort_by` | Sort column / direction (default `created_at` / `desc`) | `?sort_on=created_at&sort_by=asc` |
@@ -72,6 +74,49 @@ least 3 alphanumeric characters** — shorter or symbol-only terms (e.g. a blank
 
 ---
 
+## Basic details for a platform's users
+
+`GET /users/details/basic` is the `GET /users` search above (same parameters, minus `phone`,
+`platform_id` — the platform comes from the token — and `statuses` — `DEACTIVATED` users are always left out) over **one platform's** users, returning only `user_id`, `first_name`, `last_name`, `occupation`, `gender`
+and `status`. A contributor uses it to find a user, then opens their goals.
+
+The token decides what the caller can see; its values replace any `x-platform-id` or `user_id`
+that names something else:
+
+| Token | Platform | Also pinned |
+|-------|----------|-------------|
+| Admin | **must** be named in the `x-platform-id` header — `400` without it | — |
+| Contributor | its token's platform | `user_id` when bound to a beneficiary |
+| App user | its token's platform | its own `user_id` — returns the caller only |
+| Dashboard user / platform service | its token's platform | — |
+
+A user appears for a platform only while their `platform_users` row there is `ACTIVE`.
+
+```bash Contributor — search the platform's users by name
+curl "$BASE_URL/users/details/basic?name=ravi&limit=20" \
+  -H "Authorization: Bearer $CONTRIBUTOR_TOKEN"
+```
+
+```json Response 200
+{
+  "data": [
+    {
+      "user_id": "430664769979",
+      "first_name": "Ravi",
+      "last_name": "Kumar",
+      "occupation": "DRIVER",
+      "gender": "MALE",
+      "status": "ACTIVE"
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+---
+
 ## Endpoints
 
 <CardGroup cols={2}>
@@ -79,14 +124,23 @@ least 3 alphanumeric characters** — shorter or symbol-only terms (e.g. a blank
     **Admin only.** Paginated list of users. Filter by `statuses`, creation
     `time_range`, and search by `name` / `phone` / `user_id`.
   </Card>
+  <Card title="GET /users/details/basic" icon="users" color="#f59e0b" href="/api/endpoints/users/basic-details">
+    Search users with basic details only, scoped by the caller's token.
+  </Card>
   <Card title="GET /users/{user_id}" icon="user" color="#3b82f6" href="/api/endpoints/users/get">
     Fetch a user profile. JWT users can only fetch their own record.
   </Card>
   <Card title="PATCH /users/{user_id}" icon="pen" color="#8b5cf6" href="/api/endpoints/users/update">
-    Partial profile update. Send only changed fields (`first_name`, `last_name`, `email`, `dob`, `gender`, `address`). App user must be `ACTIVE`.
+    Partial profile update. Send only changed fields (`first_name`, `last_name`, `email`, `occupation`, `id_proof`, `dob`, `gender`, `address`). App user must be `ACTIVE`.
+
+    `id_proof` is write-only — it is accepted here but never returned in any response. Supplying it sets or replaces the stored one.
+
+    `occupation` is one of `DRIVER`, `HOUSEKEEPING_STAFF` or `SECURITY`; any other value is a 400. Omitting a field leaves it
+    untouched — as with every other profile field, there is no way to clear one
+    back to null once set.
   </Card>
-  <Card title="POST /users/{user_id}/complete_onboarding" icon="circle-check" color="#16a34a" href="/api/endpoints/users/complete-onboarding">
-    Submit required fields and transition `status → ACTIVE`. Returns fresh JWT.
+  <Card title="POST /users/{user_id}/add_details" icon="circle-check" color="#16a34a" href="/api/endpoints/users/add-details">
+    Merge the remaining profile fields and transition `status → ACTIVE` once `first_name`, `gender` and `dob` are present. Returns fresh JWT.
   </Card>
   <Card title="DELETE /users/{user_id}" icon="trash" color="#dc2626" href="/api/endpoints/users/delete">
     **Admin only.** Soft-delete a user (`status → DEACTIVATED`).
@@ -98,12 +152,11 @@ least 3 alphanumeric characters** — shorter or symbol-only terms (e.g. a blank
 ## Request / Response Examples
 
 <CodeGroup>
-```bash Complete onboarding
-curl -X POST http://localhost:8080/users/047382910564/complete_onboarding \
+```bash Add details
+curl -X POST http://localhost:8080/users/047382910564/add_details \
   -H 'Authorization: Bearer eyJhbGci...' \
   -H 'Content-Type: application/json' \
   -d '{
-    "salutation": "MR",
     "first_name": "Ravi",
     "last_name": "Kumar",
     "dob": "1990-05-15",

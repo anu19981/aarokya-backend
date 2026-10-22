@@ -4,10 +4,18 @@ description: "Universal orders table — one row per funding event into a user's
 ---
 
 <Info>
-  **Auth:** the user-facing routes (`POST /users/{user_id}/contributions/self`,
-  `GET /users/{user_id}/orders/{id}`) use bearer JWT with self-scope —
-  `jwt.sub == user_id` on the path. The admin cross-user list
-  (`GET /admin/orders`) requires an admin JWT.
+  **Auth:** orders are keyed by their own id, with no `{user_id}` path label —
+  ownership is resolved from the row. `GET /orders/{id}` and
+  `POST /orders/{id}/sync` admit the owning app user, or an admin. Sync also admits
+  a `DIRECT` contributor token, for its own platform's payment-rail tips to its
+  beneficiary only — any other order answers 403. `GET /orders`
+  injects an app token's own `user_id` into the filter (so a user only ever sees
+  their own orders) and requires a trusted-backend identity — admin,
+  readonly-admin, benefit-provider or platform — for the unfiltered cross-user
+  list.
+
+  Orders are **created** by the goal rail — `POST /goals/{goal_id}/contribution/self/manual`,
+  `.../self/auto` and `.../contribution/sponsor` — not by this module.
 </Info>
 
 ## Overview
@@ -16,9 +24,12 @@ An order is a single **funding event** crediting a user's PBA-backed
 (HSA) account. The `orders` table is universal across funding flavours;
 a `source` URN column on every row identifies the funding leg.
 
-Today only the **self contribution** flow is exposed through the public API. Sponsor
-contributions (PBA-to-PBA transfers from a sponsor's account) share the same table shape
-but settle through a separate, internal flow.
+Both the **self contribution** and **sponsor** legs are exposed through the public API —
+the self legs via `POST /goals/{goal_id}/contribution/self/{manual,auto}` and the sponsor
+match via [`POST /goals/{goal_id}/contribution/sponsor`](/modules/goal#sponsor-matching).
+They share this table shape; they differ in how the money moves (a two-phase deposit from
+the user's bank vs. a one-shot PBA-to-PBA transfer from the sponsor's account) and therefore
+in how they settle.
 
 ---
 
@@ -29,7 +40,16 @@ Every order carries a `source` field on the response, URN-encoded:
 | `source` value                              | Meaning                                                                                  |
 | ------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `self_contribution`                         | One-time user contribution. The funding leg debits the TigerBeetle sentinel account.     |
-| `sponsor:<account-uuid>`                    | Sponsor PBA transfer. The payload is the `accounts.id` of the sponsor's PBA account.     |
+| `sponsor:account-uuid`                      | Sponsor PBA transfer. The payload is the `accounts.id` of the sponsor's PBA account.     |
+| `tip:platform-uuid`                         | Customer tip. The payload is the `platforms.id` whose tipping arrangement the order belongs to; its bank is what the PBA deposit quotes as origin. |
+
+The payload always names a **party**, never a kind — direct vs indirect tipping is the
+settlement rail and lives on `medium`.
+
+The payload decides which bank the PBA deposit quotes as its **origin**, and PBA books a
+remittance to the goal's *self* or *others* pool by whether that bank matches the pool's
+own origin. So a self contribution quotes the user's SAVINGS and lands in `self`; a tip
+quotes its platform's and lands in `others`.
 
 Validation runs at every entry point — JSON deserialization and DB row reads. A malformed
 URN is a 400 with the parse error.
@@ -38,30 +58,71 @@ URN is a 400 with the parse error.
 
 ## Order lifecycle (self contribution)
 
-1. **Create** — `POST /users/{user_id}/contributions/self` takes `{ amount, currency }`
-   (`amount` in major units, `currency` an ISO-4217 code controlling the major→minor
-   conversion), opens a Juspay session, and inserts an `orders` row with
-   `source = "self_contribution"`, internal `status = INITIATED`, and a null
-   `external_status`. The Juspay `/session` response is returned verbatim as `payload`
-   (the frontend uses `payload.sdk_payload` to render the payment page).
-2. **Poll** — `GET /users/{user_id}/orders/{id}` calls Juspay `/orders/{id}` on every
-   invocation, merges the latest `external_status` (`CHARGED` / `PENDING_VBV` / `FAILED` / verbatim
-   `Other(...)` for unknown values) and payment-method fields into the row, and returns
-   the refreshed snapshot. Frontend controls polling cadence — there is no server-side
-   short-circuit.
-3. **Settle on CHARGED** — the first poll observing `CHARGED` confirms the PBA hold and
-   credits the user's HSA, advancing the internal `status` to `SUCCESS` and
-   `wallet_txn_data.status` to `SUCCESS`. Once `wallet_txn_data.status` is terminal,
-   subsequent polls do nothing. PBA's `idempotency_key = order.id` guards against
-   double-deposits even if the gate is bypassed.
+1. **Create** — `POST /goals/{goal_id}/contribution/self/manual` takes
+   `{ amount, currency }` (`amount` in **minor units** — an exact integer, so there is no
+   major→minor float conversion at the boundary), opens a Juspay session, and inserts an
+   `orders` row against the goal's own HSA pool with `source = "self_contribution"`,
+   `medium = PAYMENT`, internal `status = INITIATED`, and a null `external_status`. The
+   Juspay `/session` response is returned verbatim as `payload` (the frontend uses
+   `payload.sdk_payload` to render the payment page).
+2. **Sync** — `POST /orders/{id}/sync` calls Juspay `/orders/{id}`, merges the latest
+   `external_status` (`CHARGED` / `PENDING_VBV` / `FAILED` / verbatim `Other(...)` for
+   unknown values) and payment-method fields into the row, and returns the refreshed
+   snapshot. Both the frontend and the Kronos settlement-poll ring it; there is no
+   server-side short-circuit. Use `GET /orders/{id}` for a **read-only** snapshot that
+   makes no provider call.
+3. **Settle on CHARGED — status only.** The first poll observing `CHARGED` advances the
+   internal `status` to `SUCCESS`. It does **not** credit the pool: `wallet_txn_data` is
+   left as-is, because confirming the deposit has to be atomic with moving the goal's
+   counters, and that is step 4's job. The one exception is failure — a `FAILED` (or
+   reversed) order has its parked hold **released** here, since step 4 only ever runs on a
+   settled order and nothing else would free it.
+4. **Credit** — `POST /goals/{goal_id}/contribute` confirms the PBA deposit, flips
+   `wallet_txn_data.status` to `SUCCESS`, and credits the goal, gated once-only so a
+   re-delivery is a no-op. PBA's `idempotency_key = order.id` guards against
+   double-deposits even if that gate is bypassed.
+5. **Match** — for a self contribution,
+   [`POST /goals/{goal_id}/contribution/sponsor`](/modules/goal#sponsor-matching) mints the
+   sponsor order and transfers the sponsor's share in; step 4 is then rung again with that
+   order to credit the sponsor leg.
 
-Sponsor-funded orders **do not** transit `GET /users/{user_id}/orders/{id}` — they settle
-synchronously at create time through the sponsor flow and are read via their own surface.
+Steps 4 and 5 are driven by the consumer reacting to the settle in step 3 — they are not
+side effects of it.
 
-`GET /admin/orders` is a cross-user, paginated admin list of funding orders (for the
-dashboard Orders tab). It returns lean rows straight off the `orders` table (no Juspay
-poll) and filters by `user_id`, `source_kind` (`self_contribution` / `sponsor`),
-`statuses` (comma-separated `OrderStatus`), and a `created_at` time range.
+**Sponsor-funded orders have nothing to poll** — they are marked `SUCCESS` by the transfer
+that creates them. `POST /orders/{id}/sync` on one is a **no-op**: it returns the row
+unchanged rather than erroring, so a caller polling every order it knows about does not have
+to special-case the rail.
+
+`GET /orders` is a paginated list of funding orders, backing both a user's own history
+and the dashboard Orders tab. It returns lean rows straight off the `orders` table (no
+Juspay poll) and filters by `user_id`, `order_id` (exact match), `initial_order_id` (every
+attempt of one retry chain), `is_retry`, `sources`, `mediums`, `statuses` (comma-separated
+`OrderStatus`), and a `created_at` time range.
+
+`is_retry` is three-way: omit it for every attempt, `false` keeps first attempts only
+(`retry_count = 0`), `true` keeps retries only. A first-attempt view shows that attempt's own
+status, not the chain's outcome — a chain that failed and then succeeded on retry still
+lists its first attempt as `FAILED`.
+
+`sources` and `mediums` are two independent axes — whose money, and which rail moved it.
+Both are comma-separated and OR-ed internally; the two are AND-ed with each other.
+
+| `sources` | Selects |
+|---|---|
+| `self_contribution` | the user's own money |
+| `sponsor` | a sponsor subsidy |
+| `tip` | a customer tip collected on a platform's behalf |
+
+| `mediums` | Selects |
+|---|---|
+| `PAYMENT` | collected at a payment page |
+| `MANDATE` | debited through a mandate |
+| `SPONSOR` | moved by a sponsor transfer over PBA |
+
+So `sources=tip` is every tip, and `sources=tip&mediums=MANDATE` is only those recovered
+through the driver's mandate. Some pairings are simply empty rather than invalid — sponsor
+legs settle over PBA exclusively, so `sources=sponsor&mediums=PAYMENT` returns nothing.
 
 ---
 
@@ -69,11 +130,11 @@ poll) and filters by `user_id`, `source_kind` (`self_contribution` / `sponsor`),
 
 | Field                | Type        | Notes                                                                          |
 | -------------------- | ----------- | ------------------------------------------------------------------------------ |
-| `id`                 | UUID v7     | Also the value sent to Juspay as `order_id`.                                   |
+| `id`                 | UUID        | Also the value sent to Juspay as `order_id` — for the manual self rail, where it is a v7. The **autopay** and **sponsor** rails derive theirs deterministically (UUID v5) so a replay resolves the same row instead of minting a second one; a sponsor order id never reaches Juspay at all. |
 | `user_id`            | string      | 12-digit user id (`UserId`).                                                   |
 | `account_id`         | UUID        | Destination PBA account (HSA today).                                           |
-| `amount`             | AmountResponse | `{ value: <major-unit float>, currency }` — e.g. `{ "value": 99.99, "currency": "INR" }`. |
-| `external_status`    | string?     | Raw Juspay (external) status. `null` until the first `GetOrderStatus` poll completes. |
+| `amount`             | AmountType | `{ value: <minor-unit integer>, currency }` — e.g. `{ "value": 9999, "currency": "INR" }` is ₹99.99. |
+| `external_status`    | string?     | Raw Juspay (external) status. `null` until the first `POST /orders/{id}/sync` (or webhook) applies one. |
 | `wallet_txn_data`    | object      | Status poll / admin only — `{ status, detail }`. `status` is `PENDING` / `SUCCESS` / `FAILED`; `detail` carries the wallet payment id when `SUCCESS`. |
 | `source`             | string      | Funding URN — see table above.                                                 |
 | `status`             | enum        | Status poll / admin only — internal lifecycle `INITIATED` / `PENDING` / `SUCCESS` / `FAILED`. |
@@ -81,10 +142,11 @@ poll) and filters by `user_id`, `source_kind` (`self_contribution` / `sponsor`),
 | `created_at`         | ISO-8601    | Never `updated_at`.                                                             |
 | `last_modified_at`   | ISO-8601    |                                                                                |
 
-The `SelfContribution` create response carries `payload` (the Juspay SDK blob) but
-**not** `status` / `wallet_txn_data`. The `GetOrderStatus` poll and `GET /admin/orders`
-rows carry `status` and `wallet_txn_data` but **not** `payload`. All three share the
-remaining fields.
+Every order route returns the same `OrderResponse`. The only field that varies is
+`payload` (the verbatim Juspay SDK blob): the create
+(`POST /goals/{goal_id}/contribution/self/manual`) populates it so the frontend can
+render the payment page; reads, syncs and list rows leave it `null` rather than echo a
+large provider blob per item.
 
 ---
 

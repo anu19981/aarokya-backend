@@ -307,7 +307,17 @@ sequenceDiagram
 
 ## Flow ⑦ — Settlement & Ledger Completion
 
-Payment Servers fire an ORDER webhook once the debit settles. Aarokya Backend updates the txn and closes the ledger entry with PBA.
+Payment Servers fire an ORDER webhook once the debit settles. Aarokya Backend updates the txn.
+
+<Warning>
+  **For a goal-linked order this flow now stops at the status write.** The settle no longer
+  closes the ledger entry — confirming the deposit and crediting the goal moved to
+  `POST /goals/{goal_id}/contribute`, and the sponsor share to
+  `POST /goals/{goal_id}/contribution/sponsor`, both rung by the consumer that reacts to the
+  settle rather than by the settle itself. The **failure** half below is unchanged: a failed
+  charge still releases its hold inside the settle, because nothing downstream ever would.
+  See [ADR-006](/decisions/adr-006-sponsor-order-anchor).
+</Warning>
 
 ```mermaid
 sequenceDiagram
@@ -324,9 +334,10 @@ sequenceDiagram
 <Info>
   **Why two ledger calls?** The `PENDING` call (Flow ⑥) gives the partner a
   real-time hold on funds the moment we dispatch to Payment Servers. The
-  `COMPLETED` call only fires after the ORDER webhook confirms money has moved.
-  If the webhook reports a failure, Aarokya Backend calls PBA with `FAILED`
-  instead — the partner never sees a phantom settlement.
+  `COMPLETED` call fires only once money has actually moved — for a legacy order that is
+  when the ORDER webhook confirms it, and for a goal order it is when `/contribute` is rung.
+  If the webhook reports a failure, Aarokya Backend releases the hold immediately on either
+  rail — the partner never sees a phantom settlement.
 </Info>
 
 ---
@@ -393,5 +404,5 @@ stateDiagram-v2
 
 - [System Architecture](./system-overview) — broader system context across all Aarokya modules.
 - [Mandate Module](../modules/mandate) — schema and endpoint details.
-- [Register Mandate API](../api/endpoints/mandate/register) — request / response shape.
-- [Mandate Order Status API](../api/endpoints/mandate/order-status) — polling contract.
+- [Register Goal Mandate API](../api/endpoints/goals/register-mandate) — request / response shape.
+- [Check Mandate Status API](../api/endpoints/mandate/sync) — polling contract.

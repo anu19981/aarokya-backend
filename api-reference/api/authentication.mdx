@@ -1,6 +1,6 @@
 ---
 title: "Authentication"
-description: "Aarokya uses bearer JWTs end to end — app-user tokens are issued by POST /auth/token, admin and service tokens by OIDC."
+description: "Aarokya uses bearer JWTs end to end — app-user tokens are issued by POST /auth/token or, after OTP login, POST /auth/platform_token; admin and service tokens by OIDC."
 ---
 
 ## Overview
@@ -9,7 +9,7 @@ Every Aarokya endpoint is authenticated with a JSON Web Token passed as `Authori
 
 <CardGroup cols={2}>
   <Card title="App-user token" icon="phone" color="#16a34a" href="/modules/auth">
-    Issued by `POST /auth/token`. A partner platform's backend exchanges a worker's phone number and id-proof for a short-lived app JWT. This is the token mobile apps use.
+    Issued by `POST /auth/token`: a partner platform's backend exchanges a worker's phone number and id-proof for a short-lived app JWT. The standalone app gets the same token from `POST /auth/platform_token` after OTP login. This is the token mobile apps use.
   </Card>
   <Card title="OIDC token" icon="building-lock" color="#3b82f6" href="/modules/platform">
     Minted by Keycloak. Platform and benefit-provider **service accounts** (via `client_credentials`), and admin / dashboard **users** (via login) authenticate this way.
@@ -57,7 +57,9 @@ A partner backend authenticates as its **platform service account** and calls `P
 </Steps>
 
 <Note>
-  `id_proof.proof_type` accepts `AADHAAR`, `PAN`, `PASSPORT`, `DRIVING_LICENSE`, or `VOTER_ID`. `id_proof` is consumed only when the user is first created; on repeat calls it is ignored.
+  `id_proof` is optional here, and can be set or replaced later via `POST /users/{user_id}/add_details` or `PATCH /users/{user_id}`. `id_proof.proof_type` accepts `AADHAAR`, `PAN`, `PASSPORT`, `DRIVING_LICENSE`, or `VOTER_ID`. It is consumed only when the user is first created; on repeat calls it is ignored.
+
+  The optional profile fields `first_name`, `last_name`, `email`, `occupation`, `gender`, `dob` and `address` may be sent alongside it and follow the same create-path-only rule.
 </Note>
 
 ---
@@ -79,7 +81,7 @@ A partner backend authenticates as its **platform service account** and calls `P
   </Card>
 </CardGroup>
 
-The `status` claim (`ONBOARDING`, `ACTIVE`, or `DEACTIVATED`) drives the client's onboarding UI. A freshly created user is `ONBOARDING` until `POST /users/{user_id}/complete_onboarding` succeeds.
+The `status` claim (`ONBOARDING`, `ACTIVE`, or `DEACTIVATED`) drives the client's onboarding UI. A freshly created user is `ONBOARDING` until `POST /users/{user_id}/add_details` completes onboarding.
 
 ---
 

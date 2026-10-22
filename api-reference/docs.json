@@ -38,7 +38,13 @@
               "decisions/adr-002-rust-stack",
               "decisions/adr-003-auth-design",
               "decisions/adr-004-provider-keyed-consultation-messages",
-              "decisions/adr-005-neutral-consultation-message-shape"
+              "decisions/adr-005-neutral-consultation-message-shape",
+              "decisions/adr-006-sponsor-order-anchor",
+              "decisions/adr-007-config-driven-action-engine",
+              "decisions/adr-008-event-producer-direct-publish",
+              "decisions/adr-009-protobuf-event-wire-format",
+                "decisions/adr-010-clinic-queue-own-schema",
+                "decisions/adr-011-config-selected-benefit-side-effects"
             ]
           },
           {
@@ -48,9 +54,11 @@
               "modules/auth",
               "modules/platform",
               "modules/user",
+              "modules/platform_user",
               "modules/benefit_provider",
               "modules/benefit",
               "modules/benefit_entity",
+              "modules/clinic_queue",
               "modules/dependant",
               "modules/account",
               "modules/mrn",
@@ -60,6 +68,7 @@
               "modules/order",
               "modules/benefit_provider_order",
               "modules/sponsor",
+              "modules/goal",
               "modules/consultation"
             ]
           }
@@ -83,7 +92,8 @@
                 "group": "Auth",
                 "pages": [
                   "api/endpoints/auth/generate-token",
-                  "api/endpoints/auth/generate-contributor-token"
+                  "api/endpoints/auth/generate-contributor-token",
+                  "api/endpoints/auth/get-token"
                 ]
               },
               {
@@ -106,9 +116,9 @@
                 "group": "Users",
                 "pages": [
                   "api/endpoints/users/list",
+                  "api/endpoints/users/basic-details",
                   "api/endpoints/users/get",
                   "api/endpoints/users/update",
-                  "api/endpoints/users/complete-onboarding",
                   "api/endpoints/users/add-details",
                   "api/endpoints/users/delete"
                 ]
@@ -134,6 +144,7 @@
                 "pages": [
                   "api/endpoints/benefits/create",
                   "api/endpoints/benefits/list",
+                  "api/endpoints/benefits/available",
                   "api/endpoints/benefits/get",
                   "api/endpoints/benefits/update",
                   "api/endpoints/benefits/delete"
@@ -142,7 +153,10 @@
               {
                 "group": "Benefit Entities",
                 "pages": [
-                  "api/endpoints/benefit_entities/list"
+                  "api/endpoints/benefit_entities/create",
+                  "api/endpoints/benefit_entities/list",
+                  "api/endpoints/benefit_entities/get",
+                  "api/endpoints/benefit_entities/set-status"
                 ]
               },
               {
@@ -162,10 +176,7 @@
                   "api/endpoints/accounts/create",
                   "api/endpoints/accounts/list",
                   "api/endpoints/accounts/get",
-                  "api/endpoints/accounts/balance",
-                  "api/endpoints/accounts/ledger",
                   "api/endpoints/accounts/admin_list",
-                  "api/endpoints/accounts/admin_get",
                   "api/endpoints/accounts/update",
                   "api/endpoints/accounts/delete"
                 ]
@@ -194,7 +205,6 @@
                   "api/endpoints/insurance_policies/admin_list",
                   "api/endpoints/insurance_policies/admin_update",
                   "api/endpoints/insurance_policies/list_with_benefit_details",
-                  "api/endpoints/insurance_policies/admin_update_status",
                   "api/endpoints/insurance_policies/admin_bulk_update",
                   "api/endpoints/insurance_policies/admin_export"
                 ]
@@ -212,37 +222,29 @@
               {
                 "group": "Mandate",
                 "pages": [
-                  "api/endpoints/mandate/register",
-                  "api/endpoints/mandate/register-v2",
-                  "api/endpoints/mandate/order-status",
-                  "api/endpoints/mandate/active",
-                  "api/endpoints/mandate/list-orders",
                   "api/endpoints/mandate/list",
-                  "api/endpoints/mandate/check-status",
+                  "api/endpoints/mandate/sync",
                   "api/endpoints/mandate/update",
                   "api/endpoints/mandate/start",
                   "api/endpoints/mandate/pause",
                   "api/endpoints/mandate/resume",
-                  "api/endpoints/mandate/revoke",
-                  "api/endpoints/mandate/admin-list"
+                  "api/endpoints/mandate/revoke"
                 ]
               },
               {
                 "group": "Mandate Execution",
                 "pages": [
                   "api/endpoints/mandate-execution/execute",
-                  "api/endpoints/mandate-execution/status-check",
                   "api/endpoints/mandate-execution/list",
-                  "api/endpoints/mandate-execution/get",
-                  "api/endpoints/mandate-execution/admin-list"
+                  "api/endpoints/mandate-execution/get"
                 ]
               },
               {
                 "group": "Orders",
                 "pages": [
-                  "api/endpoints/orders/self-contribution",
-                  "api/endpoints/orders/order-status",
-                  "api/endpoints/orders/admin-list"
+                  "api/endpoints/orders/get",
+                  "api/endpoints/orders/sync",
+                  "api/endpoints/orders/list"
                 ]
               },
               {
@@ -261,6 +263,28 @@
                 ]
               },
               {
+                "group": "Goals",
+                "pages": [
+                  "api/endpoints/goals/get",
+                  "api/endpoints/goals/balance",
+                  "api/endpoints/goals/ledger",
+                  "api/endpoints/goals/list",
+                  "api/endpoints/goals/contributable",
+                  "api/endpoints/goals/register-mandate",
+                  "api/endpoints/goals/active-mandate",
+                  "api/endpoints/goals/set-mandate",
+                  "api/endpoints/goals/unlink-mandate",
+                  "api/endpoints/goals/create-contribution",
+                  "api/endpoints/goals/auto-contribution",
+                  "api/endpoints/goals/sponsor-contribution",
+                  "api/endpoints/goals/indirect-tip-contribution",
+                  "api/endpoints/goals/direct-tip-contribution",
+                  "api/endpoints/goals/contribute",
+                  "api/endpoints/goals/spend",
+                  "api/endpoints/goals/backfill"
+                ]
+              },
+              {
                 "group": "Consultations",
                 "pages": [
                   "api/endpoints/consultations/list_eligible_dependants",
@@ -273,6 +297,15 @@
                   "api/endpoints/consultations/send_message",
                   "api/endpoints/consultations/read_receipt",
                   "api/endpoints/consultations/attachment"
+                ]
+              },
+              {
+                "group": "Clinic Queue",
+                "pages": [
+                  "api/endpoints/clinic_queue/admit",
+                  "api/endpoints/clinic_queue/list",
+                  "api/endpoints/clinic_queue/get",
+                  "api/endpoints/clinic_queue/set_status"
                 ]
               },
               {

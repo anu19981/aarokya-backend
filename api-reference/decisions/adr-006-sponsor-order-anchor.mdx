@@ -1,0 +1,115 @@
+---
+title: "ADR-006: Sponsor Order Anchor + Decomposing the Sponsor Leg"
+description: "Make the sponsor match an explicit endpoint instead of a side effect of settling, and re-key its deterministic order id from the mandate execution to the self order it matches."
+---
+
+<Note>
+  **Status:** Accepted · **Date:** 2026-07 · **Deciders:** Aarokya Engineering ·
+  **Affects:** goal contributions, autopay reconciliation, `orders` id derivation
+</Note>
+
+## Context
+
+A goal contribution has three legs — the user's own money, the sponsor's match, and the
+credit that moves the goal's counters. Two of them followed the same lifecycle:
+**create → settle → credit**, with `POST /goals/{goal_id}/contribute` as the credit
+doorbell.
+
+The sponsor leg did not. It fired **inline inside the autopay reconciliation**, on every
+observed `Charged`, which produced three separate problems:
+
+- **The credit doorbell never ran.** The autopay settle confirmed its own PBA deposit, so
+  `/contribute` had nothing left to do — meaning `goals.self_accumulated_amount` never
+  moved and `orders.goal_credited` stayed `false`. The doorbell was, in the code's own
+  words, "a doorbell nobody rings."
+- **The leg was owned by whoever observed the status.** The poll and the Juspay webhook
+  both reached the reconcile, so which path fired the sponsor transfer was incidental. The
+  reconcile has no terminal guard, so a **re-delivered webhook re-fired it every time** —
+  safe only because the transfer happened to be idempotent.
+- **It could only ever work for autopay.** The sponsor order id was
+  `UUIDv5(namespace, execution_id)`. A **manual** contribution has no `mandate_executions`
+  row, so manual sponsor matching had no anchor at all.
+
+## Decision
+
+**1. The sponsor match becomes an endpoint.**
+`POST /goals/{goal_id}/contribution/sponsor`, body `{ order_id }` = the settled **self**
+order to match. Callback-service auth, consumer-driven, exactly like `/contribute`. The
+autopay reconcile is reduced to two writes: sync the order, write the execution status.
+
+**2. Goal-linked orders settle status-only on every path.**
+The decision moves *into* `apply_order_snapshot`, read off the row rather than chosen by
+the caller. It previously sat in one caller's arm, so the same goal order settled by the
+webhook silently took the two-phase PBA path.
+
+**3. The sponsor order id is re-keyed on the self order.**
+
+```
+sponsor_order_id = UUIDv5(SPONSOR_CONTRIBUTION_NAMESPACE, self_order_id)
+```
+
+The self order is the only anchor both contribution rails have. Autopay loses nothing:
+its order id is itself `UUIDv5(CONTRIBUTION_ORDER_NAMESPACE, idempotency_key)`, so a
+firing remains deterministic end to end — the sponsor order is a v5 of a v5.
+
+**4. The sponsor backfill is removed.**
+`POST /admin/mandate_executions/backfill_sponsor_contribution` used to re-derive the sponsor
+id from `execution_id` itself — a second live anchor for the same row. Rather than re-point
+it at the new derivation, it is deleted: the endpoint is the only way a sponsor leg settles,
+so there is exactly one caller and one anchor.
+
+---
+
+## Why re-keying was safe, and why it usually is not
+
+Changing a derivation **input** is as dangerous as changing the namespace: rows written
+under the old input become invisible to the new derivation, so any path that re-derives
+mints a *second* row and re-runs its side effect. Here that side effect is a real PBA
+transfer, and the PBA `idempotency_key` **is** the derived order id — so it offers no
+protection across an anchor change.
+
+It is safe because **no caller derives the id independently any more**. The inline call in
+the reconcile is gone (decision 1) and the admin backfill is gone (decision 4), leaving
+`settle_goal_sponsor_contribution` as the single caller. The derivation lives in exactly one
+function.
+
+### The rule this makes concrete
+
+**Two live anchors for one row is the failure mode, not "an old anchor".** Had the backfill
+been kept deriving `v5(ns, execution_id)` while the endpoint derived `v5(ns, self_order_id)`, a
+leg already matched by one would be invisible to the other — a second sponsor order and a
+**second PBA transfer**. Giving it the *new* derivation as its own copy is no better: the copy
+drifts the next time the anchor is touched. Removing the second caller removes the question.
+
+Legacy production sponsor orders were written under `execution_id` and are invisible to the
+new derivation. They are protected structurally rather than by a probe: the settle is
+goal-scoped, every pre-goals order carries `goal_id = NULL`, and the endpoint's
+`order.goal_id == Some(goal_id)` guard rejects them. Nothing can re-transfer against a
+pre-goals row.
+
+---
+
+## Consequences
+
+<CardGroup cols={2}>
+  <Card title="Gained">
+    - One uniform lifecycle per leg: create → settle → credit. Nothing moves a goal's money as a side effect of settling something else.
+    - `/contribute` is now the only thing that commits a goal order's PBA deposit, on either self rail.
+    - The sponsor module no longer needs to know mandates exist — no execution lookup on the sponsor path.
+    - Manual sponsor matching becomes a pure addition later, not a migration.
+    - A re-delivered webhook can no longer re-fire a sponsor transfer, guard or no guard.
+  </Card>
+  <Card title="Trade-offs">
+    - Legacy (pre-goals) unmatched sponsor legs are `SKIPPED` by both paths and accepted as unremediated — a one-off script against the old derivation is the escape hatch if one is ever found.
+    - Two doorbells must now be rung per contribution instead of one, and the consumer that rings them does not exist yet — so a settled contribution stays uncredited until it does. Same state the manual goal rail was already in.
+    - `SKIPPED` is a 200 outcome rather than an error, so callers must branch on `outcome` instead of on the status code.
+  </Card>
+</CardGroup>
+
+---
+
+## Related
+
+- Goal module: [modules/goal](/modules/goal)
+- Backend agent notes: `backend/ai-docs/domains/goal/AGENT-NOTES.md` ("Sponsor matching"), `backend/ai-docs/domains/order/AGENT-NOTES.md` (the settle tail)
+- Id-derivation carve-out: `backend/ai-docs/RULES.md` (Entity ID scheme)
